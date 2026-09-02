@@ -39,6 +39,22 @@ test('перетаскивание подсвечивает зону, уход �
   assert.equal(s.drop.className, 'drop');
 });
 
+test('уход внутри зоны не гасит подсветку, уход из зоны гасит', function () {
+  /* Внутри зоны несколько элементов; dragleave возникает на границе каждого.
+     Подсветку нельзя снимать на всех пересечениях — будет мигать. Только
+     когда указатель покидает саму зону. */
+  var s = setup();
+  s.dom.fire(s.drop, 'dragover', { dataTransfer: dragging() });
+  assert.equal(s.drop.className, 'drop over');
+  /* Уход на дочерний узел: подсветка живёт. */
+  s.dom.fire(s.drop, 'dragleave',
+             { dataTransfer: dragging(), relatedTarget: s.drop.children[0] });
+  assert.equal(s.drop.className, 'drop over');
+  /* Уход полностью из зоны: подсветка гасится. */
+  s.dom.fire(s.drop, 'dragleave', { dataTransfer: dragging() });
+  assert.equal(s.drop.className, 'drop');
+});
+
 test('xlsx принят: имя показано и сказано, что он не прочитан', function () {
   var s = setup();
   s.dom.fire(s.drop, 'drop', { dataTransfer: dropping('cve-2026.xlsx') });

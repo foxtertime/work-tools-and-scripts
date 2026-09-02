@@ -65,12 +65,29 @@
     drop.addEventListener('dragover', (e) => {
       if (!hasFiles(e)) return;
       e.preventDefault();
+      /* Зона обрабатывает свои переносы полностью и не отпускает их на
+         слушателя по документу, который читал бы файл, который это модуль
+         намеренно не читает. */
+      e.stopPropagation();
       markOver(true);
     });
-    drop.addEventListener('dragleave', () => markOver(false));
+    drop.addEventListener('dragleave', (e) => {
+      /* Dragleave возникает на каждой границе дочерних узлов; проверяем, что
+         указатель вышел из зоны целиком, а не прошёл между её детьми. */
+      if (e.relatedTarget) {
+        var at = e.relatedTarget;
+        while (at) {
+          if (at === drop) return;
+          at = at.parentNode;
+        }
+      }
+      e.stopPropagation();
+      markOver(false);
+    });
     drop.addEventListener('drop', (e) => {
       if (!hasFiles(e)) return;
       e.preventDefault();
+      e.stopPropagation();
       markOver(false);
       accept(e.dataTransfer.files);
     });
