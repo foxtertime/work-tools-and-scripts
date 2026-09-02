@@ -1,0 +1,19 @@
+# секреты и локальное окружение
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# node
+node_modules/
+
+# ос и редакторы
+.DS_Store
+*.swp
+
+# рабочие и результирующие каталоги тулз, создаются при запуске
