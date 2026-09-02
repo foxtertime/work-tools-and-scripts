@@ -2015,11 +2015,17 @@ test('на разделе CVE брошенный файл не уезжает в
                     files: [domstub.file('таблица.xlsx', 'не json')] } });
   assert.strictEqual(event.defaultPrevented, true,
     'бросок на разделе CVE обязан быть отменён, иначе браузер уходит с страницы');
-  var text = noteText(dom);
-  assert.ok(text.indexOf('таблица.xlsx') !== -1, text);
-  assert.ok(text.indexOf('не прочитано') !== -1, text);
-  assert.ok(text.indexOf('не разбирается как JSON') === -1,
-    'ответил files.js, а не раздел CVE: ' + text);
+  /* Сообщение от files.js, если бы оно случилось, приехало бы только
+     после FileReader.onload — а тот стаб доставляет макрозадачей через
+     setTimeout. Проверка сразу после fire() не заметила бы даже
+     регрессию: сообщение появится позже, чем эта строка выполнится. */
+  return dom.tick().then(function () {
+    var text = noteText(dom);
+    assert.ok(text.indexOf('таблица.xlsx') !== -1, text);
+    assert.ok(text.indexOf('не прочитано') !== -1, text);
+    assert.ok(text.indexOf('не разбирается как JSON') === -1,
+      'ответил files.js, а не раздел CVE: ' + text);
+  });
 });
 
 test('на разделе билдов бросок на страницу работает по-прежнему', function () {
