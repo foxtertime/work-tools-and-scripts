@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-02
+
 ### Добавлено
 
 - `dashboard` (3.5.1): дашборд патчей koji и GitLab — собирает по koji-тегам
@@ -37,5 +39,6 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/foxtertime/work-tools-and-scripts/releases/tag/v0.1.0
