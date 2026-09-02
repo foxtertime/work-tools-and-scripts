@@ -72,6 +72,8 @@
       markOver(true);
     });
     drop.addEventListener('dragleave', (e) => {
+      /* Зона обрабатывает все события перетаскивания, включая уход. */
+      e.stopPropagation();
       /* Dragleave возникает на каждой границе дочерних узлов; проверяем, что
          указатель вышел из зоны целиком, а не прошёл между её детьми. */
       if (e.relatedTarget) {
@@ -81,7 +83,6 @@
           at = at.parentNode;
         }
       }
-      e.stopPropagation();
       markOver(false);
     });
     drop.addEventListener('drop', (e) => {
