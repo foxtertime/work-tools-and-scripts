@@ -8,8 +8,9 @@ var assert = require('node:assert');
 var domstub = require('./domstub.js');
 var screensmod = require('../../dashboard/assets/js/screens.js');
 
-function setup() {
+function setup(perturb) {
   var dom = domstub.install();
+  if (perturb) perturb(dom);
   var screens = screensmod.create({
     isle: dom.id('isle'),
     sections: { builds: dom.id('screen-builds'), cve: dom.id('screen-cve') } });
@@ -28,7 +29,12 @@ function button(dom, name) {
 }
 
 test('страница открывается на билдах', function () {
-  var s = setup();
+  var s = setup(function(dom) {
+    /* Разметка уже содержит правильное состояние; проверяем, что модуль
+       сам его устанавливает, а не просто полагается на HTML. */
+    dom.id('screen-builds').hidden = true;
+    dom.id('screen-cve').hidden = false;
+  });
   assert.equal(s.screens.current(), 'builds');
   assert.equal(s.builds.hidden, false);
   assert.equal(s.cve.hidden, true);
@@ -45,7 +51,12 @@ test('клик по кнопке меняет раздел', function () {
 test('активная кнопка помечена, неактивная теряет отметку', function () {
   /* Атрибут снимается целиком, а не ставится в false: aria-current="false"
      читается вслух как признак, а не как его отсутствие. */
-  var s = setup();
+  var s = setup(function(dom) {
+    /* Разметка уже содержит правильное состояние; проверяем, что модуль
+       сам его устанавливает, а не просто полагается на HTML. */
+    button(dom, 'builds').removeAttribute('aria-current');
+    button(dom, 'cve').setAttribute('aria-current', 'page');
+  });
   assert.equal(button(s.dom, 'builds').getAttribute('aria-current'), 'page');
   assert.equal(button(s.dom, 'cve').getAttribute('aria-current'), null);
   button(s.dom, 'cve').click();
