@@ -16,7 +16,8 @@
                              require('./toasts.js'), require('./filters.js'),
                              require('./search.js'), require('./copy.js'),
                              require('./viewport.js'), require('./notices.js'),
-                             require('./query.js'));
+                             require('./query.js'), require('./screens.js'),
+                             require('./cve.js'));
   } else {
     root.KP = root.KP || {};
     root.KP.ui = factory(root.KP.viewmodel, root.KP.store, root.KP.diff,
@@ -25,12 +26,13 @@
                          root.KP.rail, root.KP.files, root.KP.tips,
                          root.KP.toasts, root.KP.filters, root.KP.search,
                          root.KP.copy, root.KP.viewport, root.KP.notices,
-                         root.KP.query);
+                         root.KP.query, root.KP.screens, root.KP.cve);
   }
 }(typeof globalThis !== 'undefined' ? globalThis : this,
   function (viewmodel, store, diffmod, text, labels, markup, tables, cards,
             pagemod, railmod, filesmod, tipsmod, toastsmod, filtersmod,
-            searchmod, copymod, viewportmod, noticesmod, querymod) {
+            searchmod, copymod, viewportmod, noticesmod, querymod,
+            screensmod, cvemod) {
   'use strict';
 
   /* Состояние страницы живёт в page.js: там же и всё, что из него
@@ -423,7 +425,20 @@
   let rail = railmod.create({ box: chainBox, page: page, store: store,
                               text: text, app: app, hideTip: hideTip });
   let files = filesmod.create({ store: store, toasts: toasts,
-    dom: { input: fileInput, drop: dropZone, pick: pickBtn } });
+    dom: { input: fileInput, drop: dropZone, pick: pickBtn,
+           screen: document.getElementById('screen-builds') } });
+  /* Разделы и заглушка CVE держат свои узлы сами; здесь про них известно
+     только то, чем их зовут. Ссылку не храним: звать их отсюда неоткуда —
+     островок слушает себя сам. */
+  screensmod.create({
+    isle: document.getElementById('isle'),
+    sections: { builds: document.getElementById('screen-builds'),
+                cve: document.getElementById('screen-cve') } });
+  cvemod.create({ toasts: toasts,
+    dom: { drop: document.getElementById('cve-drop'),
+           input: document.getElementById('cve-input'),
+           pick: document.getElementById('cve-pick'),
+           name: document.getElementById('cve-file') } });
   const notices = noticesmod.create({ store: store, toasts: toasts });
   const filters = filtersmod.create({
     box: document.getElementById('filtermenu'),

@@ -1952,3 +1952,69 @@ test('data-tip у q-bad появляется и пропадает вместе 
                          'подсказка обязана уйти вместе с сообщением');
     });
   });
+
+/* ---------- разделы ---------- */
+
+function isleButton(dom, name) {
+  var all = dom.id('isle').querySelectorAll('[data-screen]'), i;
+  for (i = 0; i < all.length; i++) {
+    if (all[i].getAttribute('data-screen') === name) return all[i];
+  }
+  throw new Error('в островке нет кнопки ' + name);
+}
+
+test('страница поднимается на разделе билдов', function () {
+  var dom = load();
+  assert.equal(dom.id('screen-builds').hidden, false);
+  assert.equal(dom.id('screen-cve').hidden, true);
+  /* Островок виден и на пустой странице: syncEmpty прячет вкладки и
+     секции, но до него не дотягивается. У CVE свой источник данных, и
+     требовать сначала подгрузить снапшоты билдов было бы бессмыслицей. */
+  assert.equal(dom.id('isle').hidden, false);
+});
+
+test('островок переключает разделы и возвращает обратно', function () {
+  var dom = load();
+  isleButton(dom, 'cve').click();
+  assert.equal(dom.id('screen-builds').hidden, true);
+  assert.equal(dom.id('screen-cve').hidden, false);
+  isleButton(dom, 'builds').click();
+  assert.equal(dom.id('screen-builds').hidden, false);
+  assert.equal(dom.id('screen-cve').hidden, true);
+});
+
+test('на разделе CVE брошенный файл не уезжает в разбор снапшотов', function () {
+  /* files.js слушает бросок на всём документе — иначе браузер открыл бы
+     файл вместо страницы. Пока показан чужой раздел, отвечать на это
+     нельзя: xlsx получил бы отказ «не JSON», то есть сообщение про
+     формат, которого человек не называл. */
+  var dom = load();
+  isleButton(dom, 'cve').click();
+  dom.fire(dom.document, 'drop', {
+    dataTransfer: { types: ['Files'],
+                    files: [domstub.file('таблица.xlsx', 'не json')] } });
+  return dom.tick().then(function () {
+    assert.equal(noteText(dom), '');
+  });
+});
+
+test('на разделе билдов бросок на страницу работает по-прежнему', function () {
+  var dom = load();
+  dom.fire(dom.document, 'drop', {
+    dataTransfer: { types: ['Files'],
+                    files: [domstub.file('a.json',
+                      JSON.stringify(snap('os-9.1', '2026-07-01T00:00:00+03:00')))] } });
+  return dom.tick().then(function () {
+    assert.equal(store.list().length, 1);
+  });
+});
+
+test('заглушка CVE принимает xlsx и говорит, что не прочитала', function () {
+  var dom = load();
+  isleButton(dom, 'cve').click();
+  dom.fire(dom.id('cve-drop'), 'drop', {
+    dataTransfer: { types: ['Files'], files: [{ name: 'таблица.xlsx' }] } });
+  assert.equal(dom.id('cve-file').hidden, false);
+  assert.equal(dom.id('cve-file').textContent, 'таблица.xlsx');
+  assert.ok(noteText(dom).indexOf('не прочитано') !== -1, noteText(dom));
+});
