@@ -1952,3 +1952,99 @@ test('data-tip у q-bad появляется и пропадает вместе 
                          'подсказка обязана уйти вместе с сообщением');
     });
   });
+
+/* ---------- разделы ---------- */
+
+function isleButton(dom, name) {
+  var all = dom.id('isle').querySelectorAll('[data-screen]'), i;
+  for (i = 0; i < all.length; i++) {
+    if (all[i].getAttribute('data-screen') === name) return all[i];
+  }
+  throw new Error('в островке нет кнопки ' + name);
+}
+
+test('страница поднимается на разделе билдов', function () {
+  var dom = load();
+  assert.equal(dom.id('screen-builds').hidden, false);
+  assert.equal(dom.id('screen-cve').hidden, true);
+  /* Островок виден и на пустой странице: syncEmpty прячет вкладки и
+     секции, но до него не дотягивается. У CVE свой источник данных, и
+     требовать сначала подгрузить снапшоты билдов было бы бессмыслицей. */
+  assert.equal(dom.id('isle').hidden, false);
+});
+
+test('островок переключает разделы и возвращает обратно', function () {
+  var dom = load();
+  isleButton(dom, 'cve').click();
+  assert.equal(dom.id('screen-builds').hidden, true);
+  assert.equal(dom.id('screen-cve').hidden, false);
+  isleButton(dom, 'builds').click();
+  assert.equal(dom.id('screen-builds').hidden, false);
+  assert.equal(dom.id('screen-cve').hidden, true);
+});
+
+/* Заглушка не умеет браузерной навигации по брошенному файлу — этого
+   события у неё просто нет. Но preventDefault на dragover ровно то, чем
+   страница у настоящего браузера её отменяет: без него окно уехало бы
+   смотреть JSON вместо дашборда, и все загруженные снапшоты, которые
+   живут только в памяти страницы, исчезли бы. Проверяем оба раздела: у
+   каждого документный обработчик свой. */
+test('дашборд не отдаёт бросок браузеру ни на билдах, ни на CVE', function () {
+  var dom = load();
+  var data = { types: ['Files'], files: [domstub.file('a.json', '{}')] };
+  var onBuilds = dom.fire(dom.document, 'dragover', { dataTransfer: data });
+  assert.strictEqual(onBuilds.defaultPrevented, true,
+    'билды: ' + onBuilds.defaultPrevented);
+  isleButton(dom, 'cve').click();
+  var onCve = dom.fire(dom.document, 'dragover', { dataTransfer: data });
+  assert.strictEqual(onCve.defaultPrevented, true,
+    'cve: ' + onCve.defaultPrevented);
+});
+
+test('на разделе CVE брошенный файл не уезжает в разбор снапшотов', function () {
+  /* files.js слушает бросок на всём документе, и без mine() xlsx уехал бы
+     в parseText и получил бы отказ «не разбирается как JSON» — сообщение
+     от чужого модуля про формат, которого человек не называл. Ответить
+     обязан раздел CVE, а не files.js: и отменить бросок (иначе браузер
+     уходит со страницы — тот же Critical, что и в соседнем тесте), и
+     сказать что-то от своего имени, а не промолчать. */
+  var dom = load();
+  isleButton(dom, 'cve').click();
+  var event = dom.fire(dom.document, 'drop', {
+    dataTransfer: { types: ['Files'],
+                    files: [domstub.file('таблица.xlsx', 'не json')] } });
+  assert.strictEqual(event.defaultPrevented, true,
+    'бросок на разделе CVE обязан быть отменён, иначе браузер уходит с страницы');
+  /* Сообщение от files.js, если бы оно случилось, приехало бы только
+     после FileReader.onload — а тот стаб доставляет макрозадачей через
+     setTimeout. Проверка сразу после fire() не заметила бы даже
+     регрессию: сообщение появится позже, чем эта строка выполнится. */
+  return dom.tick().then(function () {
+    var text = noteText(dom);
+    assert.ok(text.indexOf('таблица.xlsx') !== -1, text);
+    assert.ok(text.indexOf('не прочитано') !== -1, text);
+    assert.ok(text.indexOf('не разбирается как JSON') === -1,
+      'ответил files.js, а не раздел CVE: ' + text);
+  });
+});
+
+test('на разделе билдов бросок на страницу работает по-прежнему', function () {
+  var dom = load();
+  dom.fire(dom.document, 'drop', {
+    dataTransfer: { types: ['Files'],
+                    files: [domstub.file('a.json',
+                      JSON.stringify(snap('os-9.1', '2026-07-01T00:00:00+03:00')))] } });
+  return dom.tick().then(function () {
+    assert.equal(store.list().length, 1);
+  });
+});
+
+test('заглушка CVE принимает xlsx и говорит, что не прочитала', function () {
+  var dom = load();
+  isleButton(dom, 'cve').click();
+  dom.fire(dom.id('cve-drop'), 'drop', {
+    dataTransfer: { types: ['Files'], files: [{ name: 'таблица.xlsx' }] } });
+  assert.equal(dom.id('cve-file').hidden, false);
+  assert.equal(dom.id('cve-file').textContent, 'таблица.xlsx');
+  assert.ok(noteText(dom).indexOf('не прочитано') !== -1, noteText(dom));
+});

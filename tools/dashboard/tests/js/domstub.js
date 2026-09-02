@@ -161,11 +161,18 @@ Node.prototype.querySelector = function (selector) {
 };
 
 /* Событие поднимается от узла к document — на этом держатся все
-   делегированные обработчики страницы. */
+   делегированные обработчики страницы. stopPropagation останавливает
+   именно это восхождение: обработчики самого узла, на котором её
+   позвали, всё равно доходят до конца (это stopImmediatePropagation
+   останавливал бы и их, а его в разметке никто не зовёт), но выше узла
+   событие не поднимается. Без этого зона броска и документный слушатель
+   поверх неё (cve.js, files.js) не были бы различимы тестом — оба
+   получили бы каждый бросок. */
 function dispatch(node, type, extra) {
+  var propagationStopped = false;
   var event = { type: type, target: node, defaultPrevented: false,
                 preventDefault: function () { this.defaultPrevented = true; },
-                stopPropagation: function () {} };
+                stopPropagation: function () { propagationStopped = true; } };
   var key;
   for (key in extra) {
     if (Object.prototype.hasOwnProperty.call(extra, key)) event[key] = extra[key];
@@ -177,6 +184,7 @@ function dispatch(node, type, extra) {
       event.currentTarget = at;
       for (i = 0; i < list.length; i++) list[i].call(at, event);
     }
+    if (propagationStopped) break;
     at = at.parentNode;
   }
   return event;
