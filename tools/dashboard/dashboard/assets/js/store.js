@@ -1,0 +1,305 @@
+/* Загруженные снапшоты: разбор, порядок, дубликаты, предупреждения.
+   Хранилище ничего не рисует и не знает про DOM — ровно поэтому его
+   поведение проверяется в node, а не глазами в браузере. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else { root.KP = root.KP || {}; root.KP.store = factory(); }
+}(typeof globalThis !== 'undefined' ? globalThis : this, () => {
+  'use strict';
+
+  let items = [];        /* {snapshot, file} в порядке цепочки */
+  let warns = [];
+  let manual = false;    /* человек переставил руками — не пересортировывать */
+  let listeners = [];
+
+  function isArray(value) {
+    return Object.prototype.toString.call(value) === '[object Array]';
+  }
+
+  /* Схемы снапшота, которые страница читает. Их две: в первой проблема
+     билда — строка без уровня, во второй — объект с уровнем, и разбирает
+     обе viewmodel. Отказаться от первой значило бы обесценить всё, что
+     собрано раньше, — а сравнение с прошлым месяцем и есть то, ради чего
+     снапшоты хранят. */
+  const SCHEMAS = [1, 2];
+
+  function knownSchema(value) {
+    return SCHEMAS.indexOf(value) !== -1;
+  }
+
+  /* Минимум, при котором снапшот вообще можно показать. Глубже не лезем:
+     модель почти все поля билда объявляет необязательными, и отказ от
+     целого файла из-за одного билда потерял бы все остальные. */
+  function isSnapshot(value) {
+    return Boolean(value) && typeof value === 'object' && !isArray(value)
+        && knownSchema(value.schema) && typeof value.tag === 'string'
+        && typeof value.generated === 'string' && isArray(value.builds);
+  }
+
+  /* Время сбора для сортировки. Нечитаемая дата остаётся строкой: выдать её
+     за ноль эпохи значило бы поставить такой снапшот первым в цепочке. */
+  function stamp(value) {
+    const ms = Date.parse(value);
+    return isNaN(ms) ? String(value) : ms;
+  }
+
+  function compareItems(a, b) {
+    const x = stamp(a.snapshot.generated), y = stamp(b.snapshot.generated);
+    /* Читаемое время и нечитаемая строка несравнимы. Ставим непонятное в
+       конец, а не туда, куда его случайно уронит сравнение разных типов. */
+    if (typeof x !== typeof y) return typeof x === 'number' ? -1 : 1;
+    if (x < y) return -1;
+    if (x > y) return 1;
+    return a.snapshot.tag < b.snapshot.tag
+      ? -1 : (a.snapshot.tag > b.snapshot.tag ? 1 : 0);
+  }
+
+  function fire() { for (const listener of listeners) listener(); }
+
+  /* Любое изменение состава — целиком или никак.
+
+     Проверка снапшота при загрузке нарочно неглубокая (иначе одна кривая
+     билд отменял бы файл на восемьсот годных), поэтому негодное внутри
+     доезжает до отрисовки и роняет её: builds: [null] — это массив, значит
+     «снапшот». Если такой снапшот останется в хранилище, страница застынет
+     недорисованной, а каждое следующее действие будет падать на нём же —
+     убрать его будет нечем. Поэтому подписчиков зовём под try: упали —
+     возвращаем прежний состав и зовём ещё раз, уже на нём.
+
+     Причину возвращаем строкой, а не бросаем дальше: она нужна человеку на
+     экране, а не в консоли, которую он не открывал. У add для неё есть свой
+     ответ, у remove и move ответа нет — им передают note, и причина уезжает
+     в предупреждения, которые страница показывает всегда. Живёт она до
+     следующей попытки что-либо изменить: предупреждения каждый раз
+     считаются заново от текущего состава, поэтому строка про откат не
+     переживёт ни удачную перестановку (иначе она врала бы про новый,
+     правильный порядок), ни второй такой же отказ.
+
+     change() возвращает, изменилось ли что-нибудь: на пустом изменении
+     подписчиков звать незачем, а перерисовка тега — это тысячи строк. */
+  function commit(change, note) {
+    let prevItems = items.slice(), prevManual = manual, message;
+    if (!change()) return null;
+    try {
+      fire();
+    } catch (e) {
+      items = prevItems;
+      manual = prevManual;
+      /* Предупреждения — от восстановленного состава, а не те, что были до
+         попытки: старая строка про откат относилась бы к порядку, которого
+         на странице нет. */
+      recheck();
+      message = e && e.message ? String(e.message) : String(e);
+      if (note) warns.push(note + ' ' + message);
+      /* Прежний состав уже был отрисован — на нём подписчик не падал.
+         Если и он теперь падает, страница сломана не этим изменением, и
+         скрыть это хранилище не может: исключение уходит наружу. */
+      fire();
+      return message;
+    }
+    return null;
+  }
+
+  /* Хаб у снапшотов разный — сравнивать их обычно бессмысленно, но бывает
+     и наоборот (переезд хаба, зеркало), поэтому это предупреждение, а не
+     отказ. Считаем заново от текущего состава: после удаления снапшота
+     старое предупреждение могло стать неправдой. */
+  function checkHubs() {
+    let base = null, i, hub;
+    warns = [];
+    for (i = 0; i < items.length; i++) {
+      hub = items[i].snapshot.koji_hub;
+      if (!hub) continue;
+      if (base === null) { base = hub; continue; }
+      if (hub !== base) {
+        warns.push(items[i].file + ': снапшот ' + items[i].snapshot.tag
+                 + ' собран с другого хаба (' + hub + '), сравнение с '
+                 + base + ' может ничего не значить');
+      }
+    }
+  }
+
+  /* Билды, собранные до перехода на коммит сборки (и билды без известного
+     хеша — они по сей день читаются так же), сняты с вершины ветки, а
+     билды с известным хешем — с коммита сборки. Сравнивать их можно, но
+     часть разницы патчей в такой паре — след смены смысла, а не событие в
+     репозитории. Это предупреждение, а не отказ: пары разных лет всё равно
+     смотрят, и молчаливое искажение хуже лишней строки. */
+  function checkPatchRefs() {
+    let kinds = {}, i, j, builds, ref, source;
+    for (i = 0; i < items.length; i++) {
+      builds = items[i].snapshot.builds || [];
+      for (j = 0; j < builds.length; j++) {
+        /* Проверка снапшота при загрузке неглубокая: builds: [null] уже
+           внутри items, а рисовать его будет отрисовка, а не эта функция —
+           падать здесь раньше неё нельзя. */
+        if (!builds[j]) continue;
+        ref = builds[j].patches_ref;
+        if (ref === undefined || ref === null) continue;
+        /* source отсутствует целиком — сравнивать patches_ref не с чем,
+           режим билда так же неизвестен, как при отсутствующем
+           patches_ref: угадывать «коммит» по умолчанию значило бы то же
+           самое молчаливое искажение, от которого защищает эта функция. */
+        source = builds[j].source;
+        if (!source) continue;
+        /* «Ветка» — это ref_kind: 'branch' И patches_ref, совпавший с
+           именем ветки (хеша не было, читали вершину, как до этой работы).
+           Одного совпадения ref === source.ref мало: у билда, собранного
+           прямо с коммита (ref_kind: 'commit'), source.ref — тот же самый
+           коммит, что и в patches_ref, — они обязаны совпасть, и это самый
+           точный источник патчей, какой вообще бывает, а не старая
+           семантика вершины ветки. source.ref, в свою очередь, бывает null
+           осмысленно — source URL без фрагмента, — и тогда сравнение
+           состоятельно само по себе: ref (реальное значение patches_ref)
+           не совпадёт с null, и билд верно уйдёт в «коммит». */
+        kinds[source.ref_kind === 'branch' && ref === source.ref
+              ? 'branch' : 'commit'] = true;
+      }
+    }
+    if (kinds.branch && kinds.commit) {
+      warns.push('В загруженных данных смешаны билды двух видов — в одном '
+               + 'снапшоте или в разных: у одних патчи сняты с коммита '
+               + 'сборки, у других — с вершины ветки. Часть разницы патчей '
+               + 'между такими билдами — след этой разницы, а не изменение '
+               + 'в репозитории.');
+    }
+  }
+
+  /* checkHubs обнуляет warns — значит checkPatchRefs должна звучать после
+     неё. Обёртка вместо разбросанных по всем местам двух вызовов подряд:
+     забыть дописать вторую строку рядом с новым вызовом checkHubs — вопрос
+     времени. */
+  function recheck() {
+    checkHubs();          /* она же обнуляет warns */
+    checkPatchRefs();
+  }
+
+  function isDuplicate(snapshot) {
+    return items.some((item) => item.snapshot.tag === snapshot.tag
+      && item.snapshot.generated === snapshot.generated);
+  }
+
+  /* Разбор одного файла. Ничего не бросает: одна опечатка в имени тега не
+     должна отменять загрузку остальных четырёх файлов. */
+  function parseText(text, fileName) {
+    let data, list, i, snapshot;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      return { ok: false,
+               error: fileName + ': не разбирается как JSON — ' + e.message };
+    }
+    list = isArray(data) ? data : [data];
+    if (!list.length) {
+      return { ok: false, error: fileName + ': пустой список снапшотов' };
+    }
+    for (i = 0; i < list.length; i++) {
+      snapshot = list[i];
+      /* Чужую версию схемы называем прямо: «это не снапшот» сбило бы с
+         толку человека, у которого файл сделан другой версией dashboard. */
+      if (snapshot && typeof snapshot === 'object' && !isArray(snapshot)
+          && snapshot.schema !== undefined && !knownSchema(snapshot.schema)) {
+        return { ok: false,
+                 error: fileName + ': версия схемы ' + snapshot.schema
+                      + ', а дашборд понимает ' + SCHEMAS.join(' и ') };
+      }
+      if (!isSnapshot(snapshot)) {
+        return { ok: false,
+                 error: fileName + ': это не снапшот dashboard — нужны tag, '
+                      + 'generated и builds' };
+      }
+    }
+    return { ok: true, snapshots: list };
+  }
+
+  function add(snapshots, fileName) {
+    let added = 0, rejected = [], failure;
+    snapshots = snapshots || [];
+    failure = commit(() => {
+      let i, snapshot;
+      for (i = 0; i < snapshots.length; i++) {
+        snapshot = snapshots[i];
+        /* add() — публичная точка входа хранилища, а не только пара к
+           parseText: полагаться на то, что снапшот уже проверен снаружи,
+           значило бы держать вход в хранилище открытым для чужого кода. */
+        if (!isSnapshot(snapshot)) {
+          rejected.push(fileName + ': это не снапшот dashboard — нужны tag, '
+                      + 'generated и builds');
+          continue;
+        }
+        if (isDuplicate(snapshot)) {
+          rejected.push(fileName + ': снапшот ' + snapshot.tag + ' от '
+                      + snapshot.generated + ' уже загружен');
+          continue;
+        }
+        items.push({ snapshot: snapshot, file: fileName });
+        added += 1;
+      }
+      if (added && !manual) items.sort(compareItems);
+      recheck();
+      return added > 0;
+    });
+    if (failure) {
+      /* Откат уже случился: в хранилище прежний состав, и отказ надо назвать
+         так же, как любой другой отказ файлу — строкой рядом с его именем. */
+      rejected.push(fileName + ': дашборд не смог показать эти данные — '
+                  + failure + '; файл не загружен');
+      added = 0;
+    }
+    return { added: added, rejected: rejected };
+  }
+
+  function remove(index) {
+    commit(() => {
+      if (index < 0 || index >= items.length) return false;
+      items.splice(index, 1);
+      recheck();
+      return true;
+    }, 'снапшот остался на месте: без него страница не рисуется —');
+  }
+
+  /* Ручной порядок включается только состоявшейся перестановкой: клик по
+     крайней стрелке ничего не двигает и отменять автосортировку не должен. */
+  function move(index, delta) {
+    commit(() => {
+      let to = index + delta, item;
+      if (index < 0 || index >= items.length || to < 0 || to >= items.length) {
+        return false;
+      }
+      manual = true;
+      item = items[index];
+      items.splice(index, 1);
+      items.splice(to, 0, item);
+      /* Предупреждения считает каждый путь, меняющий состав: порядок задаёт
+         и то, чей хаб считается основным, и живёт ли здесь ещё строка про
+         откат прошлой перестановки. */
+      recheck();
+      return true;
+    }, 'порядок не изменён: в этом порядке страница не рисуется —');
+  }
+
+  function list() {
+    let out = [], i;
+    for (i = 0; i < items.length; i++) {
+      out.push({ tag: items[i].snapshot.tag,
+                 generated: items[i].snapshot.generated,
+                 builds: (items[i].snapshot.builds || []).length,
+                 file: items[i].file });
+    }
+    return out;
+  }
+
+  function snapshots() {
+    let out = [], i;
+    for (i = 0; i < items.length; i++) out.push(items[i].snapshot);
+    return out;
+  }
+
+  function warnings() { return warns.slice(); }
+  function onChange(fn) { listeners.push(fn); }
+  function reset() { items = []; warns = []; manual = false; listeners = []; }
+
+  return { parseText: parseText, add: add, remove: remove, move: move,
+           list: list, snapshots: snapshots, warnings: warnings,
+           onChange: onChange, reset: reset };
+}));

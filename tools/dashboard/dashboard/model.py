@@ -1,0 +1,271 @@
+"""Объекты предметной области и сериализация снапшотов."""
+import json
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+from . import __version__
+
+SCHEMA = 2
+
+# Насколько плоха проблема. Порядок здесь и есть порядок старшинства: строка
+# билда красится по самой критичной из своих проблем, и сравнивают их по
+# месту в этом кортеже.
+LEVELS = ("error", "warning", "note")
+
+
+class SnapshotError(Exception):
+    """Снапшот не читается или несовместим по версии схемы."""
+
+
+@dataclass
+class Patch:
+    path: str
+    name: str
+    cls: str
+    cves: List[str] = field(default_factory=list)
+    web_url: Optional[str] = None
+    # Не патч билда, а различие между коммитом сборки и вершиной ветки:
+    # "branch" — файл в ветке есть, в билд не вошёл; "build" — был в билде,
+    # из ветки убран; "changed" — путь тот же, содержимое в ветке другое.
+    # У патчей самого билда поле пустое.
+    ghost: Optional[str] = None
+    # blob sha файла: тот же объект, что git кладёт в дерево, — sha1 от
+    # «blob <длина>\0» и содержимого. Адресуется содержимым, а не адресом,
+    # поэтому одинаковые файлы дают одинаковый sha в любом репозитории и в
+    # любом прогоне: по нему сравнимы два снапшота, даже если компонент
+    # переехал в другой проект. None — не знаем: снапшот собран до 2.3.0
+    # или дерево не прочиталось.
+    sha: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"path": self.path, "name": self.name, "class": self.cls,
+                "cves": list(self.cves), "web_url": self.web_url,
+                "ghost": self.ghost, "sha": self.sha}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Patch":
+        return cls(path=data["path"], name=data["name"], cls=data["class"],
+                   cves=list(data.get("cves") or []),
+                   web_url=data.get("web_url"), ghost=data.get("ghost"),
+                   sha=data.get("sha"))
+
+
+@dataclass
+class Problem:
+    """Что пошло не так при сборе данных по билду и насколько это плохо.
+
+    До schema 2 проблема была просто строкой, и всё, что в ней записано,
+    страница красила одинаково — красным. Уровень пишет тот, кто проблему
+    заводит: со стороны страницы его не угадать, «ветки нет» и «патчи сняты
+    с ветки» приходят от одного и того же gitlab.
+    """
+    text: str
+    level: str = "error"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"level": self.level, "text": self.text}
+
+    @classmethod
+    def from_dict(cls, data: Any) -> "Problem":
+        # Снапшот schema 1 несёт строку. Всё, что записано до появления
+        # уровней, считаем ошибкой: занизить чужую проблему хуже, чем
+        # завысить — заниженная не покрасит строку и потеряется.
+        if isinstance(data, str):
+            return cls(text=data)
+        if not isinstance(data, dict):
+            return cls(text=str(data))
+        level = data.get("level")
+        return cls(text=str(data.get("text") or ""),
+                   level=level if level in LEVELS else "error")
+
+
+@dataclass
+class Source:
+    raw: str
+    host: Optional[str] = None
+    project: Optional[str] = None
+    ref: Optional[str] = None
+    ref_kind: str = "none"
+    web_url: Optional[str] = None
+    # Коммит, из которого билд действительно собран. Ветка в ref — то, что
+    # человек ввёл; коммит — то, чем сборка пошла, и он неизменяем.
+    commit: Optional[str] = None
+    commit_url: Optional[str] = None
+    # Чему мы верим: "original_url" — коммит стоял прямо в ссылке билда,
+    # "koji_source" — добыт из верхнеуровневого source. Доверие к ним
+    # разное, и в день, когда коммит окажется неверным, разбираться будет
+    # нечем без этого поля.
+    commit_source: Optional[str] = None
+    # Вершина ветки на момент сбора и сколько коммитов легло в ветку после
+    # точки, из которой собран билд. None — не считали или не удалось.
+    branch_head: Optional[str] = None
+    commits_ahead: Optional[int] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"raw": self.raw, "host": self.host, "project": self.project,
+                "ref": self.ref, "ref_kind": self.ref_kind,
+                "web_url": self.web_url, "commit": self.commit,
+                "commit_url": self.commit_url,
+                "commit_source": self.commit_source,
+                "branch_head": self.branch_head,
+                "commits_ahead": self.commits_ahead}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Source":
+        return cls(raw=data["raw"], host=data.get("host"),
+                   project=data.get("project"), ref=data.get("ref"),
+                   ref_kind=data.get("ref_kind", "none"),
+                   web_url=data.get("web_url"), commit=data.get("commit"),
+                   commit_url=data.get("commit_url"),
+                   commit_source=data.get("commit_source"),
+                   branch_head=data.get("branch_head"),
+                   commits_ahead=data.get("commits_ahead"))
+
+
+@dataclass
+class Build:
+    nvr: str
+    name: str
+    version: str
+    release: str
+    epoch: Optional[int] = None
+    build_id: Optional[int] = None
+    task_id: Optional[int] = None
+    owner: Optional[str] = None
+    completed: Optional[str] = None
+    # тег, в котором билд реально висит (listTagged с inherit=True отдаёт его
+    # у каждой записи). Совпал с тегом снапшота — билд затегован прямо, не
+    # совпал — унаследован оттуда. None означает «неизвестно»: так читаются
+    # снапшоты, собранные до появления поля.
+    tag_name: Optional[str] = None
+    # все koji-теги билда (listTags). tag_name — тот из них, через который
+    # билд попал в этот снапшот; остальные показывают, где он висит ещё.
+    # Пустой список означает «не спрашивали» — так читаются снапшоты,
+    # собранные до появления поля.
+    tags: List[str] = field(default_factory=list)
+    source: Optional[Source] = None
+    patch_dir_present: Optional[bool] = None
+    # Ref, с которого снят список patches: хеш коммита сборки, а когда
+    # хеша нет — имя ветки. Без этого поля одна и та же строка «патчи»
+    # означала бы у разных билдов разное, и сравнить снапшот, собранный
+    # до этой работы, с нынешним было бы нельзя.
+    patches_ref: Optional[str] = None
+    patches: List[Patch] = field(default_factory=list)
+    # Различие между коммитом сборки и вершиной ветки. В счётчики строки,
+    # карточки классов и сводку не идёт: это то, чего в билде нет.
+    ghost_patches: List[Patch] = field(default_factory=list)
+    rpms: List[str] = field(default_factory=list)
+    problems: List[Problem] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "nvr": self.nvr, "name": self.name, "version": self.version,
+            "release": self.release, "epoch": self.epoch,
+            "build_id": self.build_id, "task_id": self.task_id,
+            "owner": self.owner, "completed": self.completed,
+            "tag_name": self.tag_name, "tags": list(self.tags),
+            "source": self.source.to_dict() if self.source else None,
+            "patch_dir_present": self.patch_dir_present,
+            "patches_ref": self.patches_ref,
+            "patches": [p.to_dict() for p in self.patches],
+            "ghost_patches": [p.to_dict() for p in self.ghost_patches],
+            "rpms": list(self.rpms),
+            "problems": [p.to_dict() for p in self.problems],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Build":
+        source = data.get("source")
+        return cls(
+            nvr=data["nvr"], name=data["name"], version=data["version"],
+            release=data["release"], epoch=data.get("epoch"),
+            build_id=data.get("build_id"), task_id=data.get("task_id"),
+            owner=data.get("owner"), completed=data.get("completed"),
+            tag_name=data.get("tag_name"),
+            tags=list(data.get("tags") or []),
+            source=Source.from_dict(source) if source else None,
+            patch_dir_present=data.get("patch_dir_present"),
+            patches_ref=data.get("patches_ref"),
+            patches=[Patch.from_dict(p) for p in data.get("patches") or []],
+            ghost_patches=[Patch.from_dict(p)
+                           for p in data.get("ghost_patches") or []],
+            rpms=list(data.get("rpms") or []),
+            problems=[Problem.from_dict(p)
+                      for p in data.get("problems") or []],
+        )
+
+    def evr(self):
+        return (self.epoch, self.version, self.release)
+
+
+@dataclass
+class Snapshot:
+    tag: str
+    generated: str
+    koji_hub: str
+    koji_web: Optional[str] = None
+    # Имена классов патчей в порядке классификатора. Пустой список означает
+    # «не записано» — так читаются снапшоты, собранные до появления поля.
+    # Дашборду этот порядок нужен для карточек классов и меток строк, а
+    # взять его больше неоткуда: конфига у него нет.
+    patch_classes: List[str] = field(default_factory=list)
+    builds: List[Build] = field(default_factory=list)
+
+    def by_name(self) -> Dict[str, Build]:
+        return {build.name: build for build in self.builds}
+
+
+def snapshot_to_dict(snapshot: Snapshot) -> Dict[str, Any]:
+    # Версия инструмента стоит рядом со схемой, но значит другое: schema —
+    # формат файла, dashboard — та версия, которая файл записала. Поле
+    # необязательное и добавленное, поэтому схема остаётся прежней: снапшот
+    # с ним читают и старые версии, снапшот без него — новые.
+    return {"schema": SCHEMA, "dashboard": __version__, "tag": snapshot.tag,
+            "generated": snapshot.generated, "koji_hub": snapshot.koji_hub,
+            "koji_web": snapshot.koji_web,
+            "patch_classes": list(snapshot.patch_classes),
+            "builds": [b.to_dict() for b in snapshot.builds]}
+
+
+def snapshot_from_dict(data: Dict[str, Any]) -> Snapshot:
+    if not isinstance(data, dict):
+        raise SnapshotError("снапшот должен быть объектом")
+    schema = data.get("schema")
+    # Снапшоты прежней схемы читаются: от нынешней она отличается только тем,
+    # что проблема в ней — строка без уровня, а не объект, и Problem.from_dict
+    # понимает обе формы. Отказаться от таких файлов значило бы обесценить
+    # всё, что собрано до этой версии, — а сравнение с прошлым месяцем и есть
+    # то, ради чего снапшоты хранят.
+    if schema not in (SCHEMA, 1):
+        raise SnapshotError("несовместимая схема снапшота: %r (нужна %d)"
+                            % (schema, SCHEMA))
+    try:
+        return Snapshot(tag=data["tag"], generated=data["generated"],
+                        koji_hub=data["koji_hub"],
+                        koji_web=data.get("koji_web"),
+                        patch_classes=list(data.get("patch_classes") or []),
+                        builds=[Build.from_dict(b)
+                                for b in data.get("builds") or []])
+    except KeyError as exc:
+        raise SnapshotError("в снапшоте нет поля %s" % exc)
+
+
+def dump_snapshots(snapshots: List[Snapshot], path: str) -> None:
+    payload = [snapshot_to_dict(s) for s in snapshots]
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=1, sort_keys=True)
+
+
+def load_snapshots(path: str) -> List[Snapshot]:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except OSError as exc:
+        raise SnapshotError("не прочитать снапшот %s: %s" % (path, exc))
+    except ValueError as exc:
+        raise SnapshotError("снапшот %s не разбирается: %s" % (path, exc))
+    if isinstance(data, dict):
+        data = [data]
+    if not isinstance(data, list):
+        raise SnapshotError("снапшот %s: ожидался объект или список" % path)
+    return [snapshot_from_dict(item) for item in data]

@@ -1,0 +1,570 @@
+'use strict';
+/* Состояние страницы: какой снапшот открыт, какой диапазон сравнивается,
+   какие фильтры живы. До выделения page.js всё это проверялось только через
+   страницу целиком на заглушке DOM; здесь страница не нужна вовсе, и каждый
+   тест поднимает своё состояние с нуля. */
+var test = require('node:test');
+var assert = require('node:assert');
+var viewmodel = require('../../dashboard/assets/js/viewmodel.js');
+var diffmod = require('../../dashboard/assets/js/diff.js');
+var storemod = require('../../dashboard/assets/js/store.js');
+var labels = require('../../dashboard/assets/js/labels.js');
+var text = require('../../dashboard/assets/js/text.js');
+var searchmod = require('../../dashboard/assets/js/search.js');
+var pagemod = require('../../dashboard/assets/js/page.js');
+var querymod = require('../../dashboard/assets/js/query.js');
+
+function patch(name, cls) {
+  return { path: 'PATCH/' + name, name: name, 'class': cls, cves: [],
+           web_url: null };
+}
+
+/* Сборка с названным владельцем: у build() он всегда один и тот же, а
+   сортировке нужны разные. */
+function buildBy(name, owner) {
+  var out = build(name);
+  out.owner = owner;
+  return out;
+}
+
+function build(name, over) {
+  over = over || {};
+  return { nvr: name + '-1.0-1.el9', name: name, version: '1.0',
+           release: '1.el9', epoch: null, build_id: 1, task_id: 2,
+           tag_name: over.tag_name || null, tags: [], owner: 'builder',
+           completed: '2026-05-14 10:00:00', source: null,
+           patch_dir_present: true, patches: over.patches || [],
+           ghost_patches: over.ghost_patches || [],
+           rpms: ['a.x86_64'], problems: over.problems || [] };
+}
+
+function snap(tag, generated, over) {
+  over = over || {};
+  return { schema: 1, tag: tag, generated: generated,
+           koji_hub: 'https://hub/kojihub', koji_web: 'https://hub/koji',
+           patch_classes: over.classes || ['CVE', 'other'],
+           builds: over.builds || [build('nginx')] };
+}
+
+var JUL = '2026-07-01T00:00:00+03:00';
+var AUG = '2026-08-01T00:00:00+03:00';
+var SEP = '2026-09-01T00:00:00+03:00';
+
+/* Свежая страница: свой стор и своё состояние, ничего не делят с соседним
+   тестом. Переходы считает page по требованию, и стор ему для этого нужен
+   настоящий — он хранит исходные снапшоты, а не посчитанные строки. */
+function make(snapshots) {
+  storemod.reset();
+  if (snapshots) storemod.add(snapshots, 'проба.json');
+  var p = pagemod.create({ viewmodel: viewmodel, diffmod: diffmod,
+                           store: storemod, labels: labels, text: text,
+                           search: searchmod, query: querymod });
+  if (snapshots) p.applyData(viewmodel.buildPageData(storemod.snapshots()));
+  return p;
+}
+
+test('умолчание — последний снапшот цепочки', function () {
+  var p = make([snap('os-9.1', JUL), snap('os-9.2', AUG), snap('os-9.3', SEP)]);
+  assert.strictEqual(p.st.tag, 2);
+  assert.strictEqual(p.curSnap().tag, 'os-9.3');
+});
+
+test('умолчание перехода — вся цепочка', function () {
+  var p = make([snap('os-9.1', JUL), snap('os-9.2', AUG), snap('os-9.3', SEP)]);
+  assert.deepStrictEqual(p.currentEnds(), [0, 2]);
+});
+
+test('сравнивать нечего — концов нет вовсе', function () {
+  assert.strictEqual(make([snap('os-9.1', JUL)]).currentEnds(), null);
+});
+
+test('выбранный человеком снапшот переживает приход соседа', function () {
+  var p = make([snap('os-9.1', JUL), snap('os-9.2', AUG)]);
+  p.selectSnapshot(0);
+  storemod.add([snap('os-9.3', SEP)], 'ещё.json');
+  p.applyData(viewmodel.buildPageData(storemod.snapshots()));
+  assert.strictEqual(p.curSnap().tag, 'os-9.1');
+});
+
+test('невыбранный снапшот уступает умолчанию при приходе соседа', function () {
+  var p = make([snap('os-9.1', JUL), snap('os-9.2', AUG)]);
+  storemod.add([snap('os-9.3', SEP)], 'ещё.json');
+  p.applyData(viewmodel.buildPageData(storemod.snapshots()));
+  assert.strictEqual(p.curSnap().tag, 'os-9.3');
+});
+
+test('выбранный диапазон переживает приход соседа', function () {
+  var p = make([snap('os-9.1', JUL), snap('os-9.2', AUG), snap('os-9.3', SEP)]);
+  p.setPairEnds(0, 1);
+  storemod.add([snap('os-9.4', '2026-10-01T00:00:00+03:00')], 'ещё.json');
+  p.applyData(viewmodel.buildPageData(storemod.snapshots()));
+  assert.deepStrictEqual(p.currentEnds(), [0, 1]);
+});
+
+test('концы принимаются в любом порядке, направление задаёт цепочка',
+  function () {
+    var p = make([snap('os-9.1', JUL), snap('os-9.2', AUG),
+                  snap('os-9.3', SEP)]);
+    p.setPairEnds(2, 0);
+    assert.deepStrictEqual(p.currentEnds(), [0, 2]);
+  });
+
+test('имя снапшота — тег и время сбора', function () {
+  var p = make([snap('os-9.1', JUL)]);
+  assert.strictEqual(p.snapKey(p.curSnap()), 'os-9.1@' + JUL);
+});
+
+test('два прогона одного тега различаются именем', function () {
+  var p = make([snap('os-9.2', JUL), snap('os-9.2', SEP)]);
+  assert.notStrictEqual(p.snapKey(p.snapshots()[0]),
+                        p.snapKey(p.snapshots()[1]));
+});
+
+/* Имена видимых строк: почти каждая проверка фильтров смотрит именно на
+   них, и разворачивать это в четыре строки на каждый тест незачем. */
+function rows(p) {
+  return p.visibleRows().map(function (item) { return item.row.name; }).sort();
+}
+
+test('«версия та же» и «что-то изменилось» теперь пересекаются', function () {
+  /* Раньше вторая плашка молча гасила первую — костыль под клик. В меню оба
+     признака видны и ставятся осознанно, а пересечение — законный запрос:
+     версия не менялась, а состав поехал. */
+  var p = make([snap('os-9.1', JUL),
+                snap('os-9.2', AUG,
+                     { builds: [build('nginx', { problems: ['ой'] })] })]);
+  p.st.tab = 'diff';
+  p.setFilter('unchanged', 1);
+  p.setFilter('changed', 1);
+  assert.strictEqual(p.filterState('unchanged'), 1);
+  assert.strictEqual(p.filterState('changed'), 1);
+});
+
+test('«нет» оставляет строки без признака', function () {
+  var p = make([snap('os-9.1', JUL, {
+    classes: ['CVE'],
+    builds: [build('nginx', { patches: [patch('c.patch', 'CVE')] }),
+             build('curl')]
+  })]);
+  p.setFilter('cve', -1);
+  assert.deepStrictEqual(rows(p), ['curl']);
+});
+
+test('«есть» и «нет» на одном ключе не уживаются', function () {
+  var p = make([snap('os-9.1', JUL, {
+    classes: ['CVE'],
+    builds: [build('nginx', { patches: [patch('c.patch', 'CVE')] })]
+  })]);
+  p.setFilter('cve', 1);
+  p.setFilter('cve', -1);
+  assert.strictEqual(p.filterState('cve'), -1);
+  assert.deepStrictEqual(rows(p), []);
+});
+
+test('два «есть» в одной группе по умолчанию требуют оба признака',
+  function () {
+    var p = make([snap('os-9.1', JUL, {
+      classes: ['CVE', 'SAST'],
+      builds: [
+        build('both', { patches: [patch('c.patch', 'CVE'),
+                                  patch('s.patch', 'SAST')] }),
+        build('one', { patches: [patch('c.patch', 'CVE')] })
+      ]
+    })]);
+    p.setFilter('cve', 1);
+    p.setFilter('sast', 1);
+    assert.deepStrictEqual(rows(p), ['both']);
+  });
+
+test('в режиме «любой из» хватает одного признака', function () {
+  var p = make([snap('os-9.1', JUL, {
+    classes: ['CVE', 'SAST'],
+    builds: [
+      build('both', { patches: [patch('c.patch', 'CVE'),
+                                patch('s.patch', 'SAST')] }),
+      build('one', { patches: [patch('c.patch', 'CVE')] }),
+      build('none')
+    ]
+  })]);
+  p.setFilter('cve', 1);
+  p.setFilter('sast', 1);
+  p.setGroupMode('classes', 'any');
+  assert.deepStrictEqual(rows(p), ['both', 'one']);
+});
+
+test('«нет» действует и в режиме «любой из»', function () {
+  /* Отрицание — не одно из условий на выбор, а запрет: строка с этим
+     признаком уходит независимо от того, чем группа сложена. */
+  var p = make([snap('os-9.1', JUL, {
+    classes: ['CVE', 'SAST', 'AUTOGEN'],
+    builds: [
+      build('clean', { patches: [patch('c.patch', 'CVE')] }),
+      build('dirty', { patches: [patch('c.patch', 'CVE'),
+                                 patch('a.patch', 'AUTOGEN')] })
+    ]
+  })]);
+  p.setFilter('cve', 1);
+  p.setFilter('sast', 1);
+  p.setFilter('autogen', -1);
+  p.setGroupMode('classes', 'any');
+  assert.deepStrictEqual(rows(p), ['clean']);
+});
+
+test('группы между собой складываются по И даже в режиме «любой из»',
+  function () {
+    var p = make([snap('os-9.1', JUL, {
+      classes: ['CVE'],
+      builds: [
+        build('inh', { patches: [patch('c.patch', 'CVE')],
+                       tag_name: 'os-9.0' }),
+        build('own', { patches: [patch('c.patch', 'CVE')] })
+      ]
+    })]);
+    p.setFilter('cve', 1);
+    p.setGroupMode('classes', 'any');
+    p.setFilter('inherited', -1);
+    assert.deepStrictEqual(rows(p), ['own']);
+  });
+
+test('ключ вне групп складывается по И', function () {
+  /* Групп на все метки хватает, но набор меток задаётся данными. Молча не
+     применять неизвестный фильтр нельзя: он стоял бы в меню и не
+     действовал, ничем себя не выдав. */
+  var p = make([snap('os-9.1', JUL, { builds: [build('nginx')] })]);
+  p.st.filters.state = { 'выдуманная-метка': 1 };
+  assert.deepStrictEqual(rows(p), []);
+});
+
+test('клик по плашке снимает и «нет» тоже', function () {
+  var p = make([snap('os-9.1', JUL)]);
+  p.setFilter('has-patch', -1);
+  p.toggleFilter('has-patch');
+  assert.strictEqual(p.filterState('has-patch'), 0);
+  p.toggleFilter('has-patch');
+  assert.strictEqual(p.filterState('has-patch'), 1);
+});
+
+test('счётчики считают по всем строкам вкладки, а не по видимым',
+  function () {
+    var p = make([snap('os-9.1', JUL, {
+      classes: ['CVE'],
+      builds: [build('nginx', { patches: [patch('c.patch', 'CVE')] }),
+               build('curl')]
+    })]);
+    p.setFilter('cve', 1);
+    assert.deepStrictEqual(rows(p), ['nginx']);
+    var counts = p.filterCounts();
+    assert.strictEqual(counts.cve, 1);
+    assert.strictEqual(counts['has-patch'], 1);
+    assert.strictEqual(counts.problem, 0);
+  });
+
+test('мёртвый фильтр выбрасывается вместе со знаком', function () {
+  var p = make([snap('os-9.1', JUL, { classes: ['CVE'] })]);
+  p.setFilter('cve', -1);
+  p.setFilter('нет-такого', -1);
+  p.dropDeadFilters();
+  assert.strictEqual(p.filterState('cve'), -1);
+  assert.strictEqual(p.filterState('нет-такого'), 0);
+});
+
+test('повторный клик по фильтру снимает его', function () {
+  var p = make([snap('os-9.1', JUL)]);
+  p.toggleFilter('has-patch');
+  p.toggleFilter('has-patch');
+  assert.deepStrictEqual(p.activeFilters(), {});
+});
+
+test('«все» снимает разом все фильтры вкладки', function () {
+  var p = make([snap('os-9.1', JUL)]);
+  p.toggleFilter('has-patch');
+  p.toggleFilter('problem');
+  p.toggleFilter('all');
+  assert.deepStrictEqual(p.activeFilters(), {});
+});
+
+test('фильтр, которому не осталось строк, признаётся мёртвым', function () {
+  var p = make([snap('os-9.1', JUL)]);
+  assert.strictEqual(p.knownFilter('чужой-ключ', 'state'), false);
+  assert.strictEqual(p.knownFilter('no-patch', 'state'), true);
+});
+
+test('класс патчей из данных фильтр не роняет', function () {
+  var p = make([snap('os-9.1', JUL, { classes: ['CVE'] })]);
+  assert.strictEqual(p.knownFilter('cve', 'state'), true);
+});
+
+test('мёртвые фильтры уходят с обеих вкладок сразу', function () {
+  var p = make([snap('os-9.1', JUL)]);
+  p.st.filters.state = { 'чужой': 1, 'no-patch': 1 };
+  p.st.filters.diff = { 'тоже-чужой': 1 };
+  p.dropDeadFilters();
+  assert.deepStrictEqual(p.st.filters.state, { 'no-patch': 1 });
+  assert.deepStrictEqual(p.st.filters.diff, {});
+});
+
+test('сортировка по владельцу собирает билды одного человека подряд',
+  function () {
+    var p = make([snap('os-9.1', JUL, { builds: [
+      buildBy('nginx', 'zoe'), buildBy('curl', 'alice'),
+      buildBy('vim', 'zoe'), buildBy('zlib', 'alice')
+    ] })]);
+    p.sortBy('owner');
+    assert.deepStrictEqual(
+      p.sortRows(p.visibleRows()).map(function (i) { return i.row.owner; }),
+      ['alice', 'alice', 'zoe', 'zoe']);
+  });
+
+test('под запрос не подошло ничего — строк нет, но всего их столько же',
+  function () {
+    var p = make([snap('os-9.1', JUL)]);
+    p.st.q = 'ничего-такого';
+    assert.strictEqual(p.visibleRows().length, 0);
+    assert.strictEqual(p.totalRows(), 1);
+  });
+
+/* deep — то, ради чего строку с совпадением только в деталях (здесь: в имени
+   патча) разворачивают сразу, а не оставляют свёрнутой: иначе непонятно, чем
+   она подошла под запрос. scanState в search.js посчитан юнит-тестами
+   отдельно, а вот доводит ли page.visibleRows() найденное deep до открытости
+   строки — нет; это и проверяем, вместе с обратным случаем, где совпадение
+   мелкое и раскрывать нечего. */
+test('совпадение только в имени патча разворачивает строку', function () {
+  var p = make([snap('os-9.1', JUL, { classes: ['CVE'],
+    builds: [build('nginx',
+      { patches: [patch('unique-patch-name.patch', 'CVE')] })] })]);
+  p.st.q = 'unique-patch-name';
+  var items = p.visibleRows();
+  assert.strictEqual(items.length, 1, 'строка с патчем не попала в выдачу');
+  assert.strictEqual(items[0].open, true,
+                     'совпадение только в патче обязано раскрыть строку');
+});
+
+test('совпадение в имени компонента строку не разворачивает', function () {
+  var p = make([snap('os-9.1', JUL, { classes: ['CVE'],
+    builds: [build('nginx',
+      { patches: [patch('unique-patch-name.patch', 'CVE')] })] })]);
+  p.st.q = 'nginx';
+  var items = p.visibleRows();
+  assert.strictEqual(items.length, 1, 'строка не попала в выдачу');
+  assert.strictEqual(items[0].open, false,
+                     'мелкое совпадение по имени не должно раскрывать строку');
+});
+
+test('ключ раскрытия несёт полное имя снапшота', function () {
+  var p = make([snap('os-9.1', JUL)]);
+  assert.strictEqual(p.rowKey({ name: 'nginx' }),
+                     'state:os-9.1@' + JUL + ':nginx');
+});
+
+test('раскрытость по умолчанию решает поиск, явный выбор — сильнее',
+  function () {
+    var p = make([snap('os-9.1', JUL)]);
+    assert.strictEqual(p.openOf('k', true), true);
+    p.setOpen('k', false);
+    assert.strictEqual(p.openOf('k', true), false);
+  });
+
+test('сортировка по той же колонке переворачивает порядок', function () {
+  var p = make([snap('os-9.1', JUL)]);
+  p.sortBy('name');
+  assert.deepStrictEqual(p.st.sort.state, { key: 'name', asc: false });
+  p.sortBy('name');
+  assert.deepStrictEqual(p.st.sort.state, { key: 'name', asc: true });
+});
+
+test('сортировка по другой колонке начинается по возрастанию', function () {
+  var p = make([snap('os-9.1', JUL)]);
+  p.sortBy('name');
+  p.sortBy('patches');
+  assert.deepStrictEqual(p.st.sort.state, { key: 'patches', asc: true });
+});
+
+test('сортировка по Δ патчей считает и переписанные', function () {
+  /* Компонент, у которого переписан единственный патч, раньше стоял в
+     колонке с прочерком и по ней же уезжал вниз — то есть ровно тот
+     случай, ради которого 2.3.0 и делалась, из колонки не читался.
+
+     Патч отдан httpd, а не nginx: у обоих dpatch пока считался нулём,
+     ничью решало имя, и алфавит уже ставил nginx перед httpd что до
+     правки, что после — тест зеленел бы независимо от того, права
+     колонка или нет. Переписанный патч у httpd переворачивает алфавитную
+     подсказку: до правки побеждает она и наверх лезет nginx, после
+     правки побеждает вес патча и наверх должен лечь httpd. */
+  function withSha(sha) {
+    var p = patch('CVE-2026-3011.patch', 'CVE');
+    p.sha = sha;
+    return p;
+  }
+  var was = snap('os-9.1', JUL, { builds: [
+    build('nginx', { patches: [] }),
+    build('httpd', { patches: [withSha('aaa')] }) ] });
+  var now = snap('os-9.2', AUG, { builds: [
+    build('nginx', { patches: [] }),
+    build('httpd', { patches: [withSha('bbb')] }) ] });
+  var p = make([was, now]);
+  p.st.tab = 'diff';
+  /* Снимаем умолчание «только изменившиеся»: неизменившийся nginx нужен в
+     таблице именно затем, чтобы было с чем сравнивать порядок. */
+  p.toggleFilter('all');
+  p.sortBy('dpatch');            /* по возрастанию */
+  p.sortBy('dpatch');            /* второй клик по той же — по убыванию */
+  var order = p.sortRows(p.visibleRows()).map(function (i) {
+    return i.row.name;
+  });
+  assert.deepStrictEqual(order, ['httpd', 'nginx']);
+});
+
+test('отметка узла живёт в состоянии и снимается', function () {
+  var p = make([snap('os-9.1', JUL), snap('os-9.2', AUG)]);
+  assert.strictEqual(p.anchor(), null);
+  p.setAnchor(1);
+  assert.strictEqual(p.anchor(), 1);
+  p.setAnchor(null);
+  assert.strictEqual(p.anchor(), null);
+});
+
+/* Сводность диапазона: правило «вся цепочка, и только когда снапшотов
+   больше двух». На двух снапшотах единственный переход и есть вся цепочка,
+   и звать его итогом значит сообщать очевидное.
+
+   На рельсе это больше не подписано, но в данных страницы поле остаётся:
+   pairFor кладёт его в блок перехода, а сам блок сверяется с золотой
+   фикстурой. Так что правило проверяется здесь — там, где оно и живёт. */
+test('диапазон во всю цепочку сводный, а соседний — нет', function () {
+  var p = make([snap('os-9.1', JUL), snap('os-9.2', AUG), snap('os-9.3', SEP)]);
+  assert.strictEqual(p.pairFor([0, 2]).summary, true);
+  assert.strictEqual(p.pairFor([0, 1]).summary, false);
+});
+
+test('на двух снапшотах сводного диапазона нет вовсе', function () {
+  var p = make([snap('os-9.1', JUL), snap('os-9.2', AUG)]);
+  assert.strictEqual(p.pairFor([0, 1]).summary, false);
+});
+
+/* Два прогона одного тега в кэш предпосчитанных пар не попадают: по имени
+   тега такую пару не опознать. Значит, переход считается на месте, и
+   сводность решает уже pairFor — то самое правило, которое на разных тегах
+   сторожит diff.js. */
+test('сводность считается на месте и когда тег в цепочке двоится',
+  function () {
+    var p = make([snap('os-9.2', JUL), snap('os-9.3', AUG),
+                  snap('os-9.2', SEP)]);
+    assert.strictEqual(p.pairFor([0, 2]).summary, true);
+    assert.strictEqual(p.pairFor([1, 2]).summary, false);
+  });
+
+/* Снапшот с тем же именем — тот же файл, но набор вокруг него другой:
+   диапазон 9.1→9.3 был всей цепочкой, а с приходом четвёртого файла быть
+   ею перестал. Кэш, переживший смену состава, отдал бы прежний блок — со
+   сводностью, которой у этого диапазона уже нет. */
+test('смена состава снапшотов заводит кэш переходов заново', function () {
+  var p = make([snap('os-9.1', JUL), snap('os-9.2', AUG), snap('os-9.3', SEP)]);
+  assert.strictEqual(p.pairFor([0, 2]).summary, true,
+                     'диапазон во всю цепочку не сводный, сценарий '
+                     + 'проверяет не то');
+  storemod.add([snap('os-9.4', '2026-10-01T00:00:00+03:00')], 'd.json');
+  p.applyData(viewmodel.buildPageData(storemod.snapshots()));
+  assert.strictEqual(p.pairFor([0, 2]).summary, false);
+});
+
+test('матчер пересчитывается при смене режима, а не только запроса', function () {
+  /* Запрос тот же, режим другой — памятка обязана это заметить, иначе
+     нажатие кнопки ничего не изменит. */
+  var p = make([snap('os-9.1', JUL)]);
+  p.st.q = 'a.c';
+  p.st.regex = false;
+  assert.strictEqual(p.matcher().test('abc'), false);
+  p.st.regex = true;
+  assert.strictEqual(p.matcher().test('abc'), true);
+});
+
+/* Правильностная половина памятки — «ключ по режиму» — сторожится тестом
+   выше: без него смена режима на том же запросе не поменяла бы матчер.
+   Производительная половина — «не чаще одного раза на отрисовку» — не
+   сторожилась ничем: подмени условие на «пересчитывать всегда», и оба
+   предыдущих теста остались бы зелёными, потому что после смены режима они
+   и должны пересчитать. Считаем вызовы compile() через свою заглушку
+   вместо настоящего query.js: один вызов page.matcher() плюс один проход
+   visibleRows() — это то, что в одну отрисовку делает ui.js (rowOpts() и
+   pick() внутри). */
+test('матчер компилируется один раз на отрисовку, а не на каждое обращение',
+  function () {
+    var calls = 0;
+    var countingQuery = {
+      compile: function (raw, regex) {
+        calls += 1;
+        return querymod.compile(raw, regex);
+      }
+    };
+    storemod.reset();
+    storemod.add([snap('os-9.1', JUL,
+                  { builds: [build('a'), build('b'), build('c')] })],
+                'проба.json');
+    var p = pagemod.create({ viewmodel: viewmodel, diffmod: diffmod,
+                             store: storemod, labels: labels, text: text,
+                             search: searchmod, query: countingQuery });
+    p.applyData(viewmodel.buildPageData(storemod.snapshots()));
+    p.st.q = 'a';
+    calls = 0;                    /* сбрасываем счётчик после подготовки */
+    p.matcher();
+    p.matcher();
+    p.visibleRows();
+    assert.strictEqual(calls, 1,
+      'compile() позвался ' + calls + ' раз(а) на одну отрисовку вместо одного');
+  });
+
+test('две страницы не делят состояния', function () {
+  var a = make([snap('os-9.1', JUL), snap('os-9.2', AUG)]);
+  var b = pagemod.create({ viewmodel: viewmodel, diffmod: diffmod,
+                           store: storemod, labels: labels, text: text,
+                           search: searchmod, query: querymod });
+  b.applyData(viewmodel.buildPageData(storemod.snapshots()));
+  a.selectSnapshot(0);
+  assert.strictEqual(a.st.tag, 0);
+  assert.strictEqual(b.st.tag, 1);
+});
+
+/* Признак строки — наличие записи такого уровня, а не самая строгая из
+   них: билд с ошибкой и предупреждением разом виден и под «с проблемами»,
+   и под «с предупреждениями». Фильтр отвечает тому же вопросу, что и
+   карточка над ним: «покажи, у кого такая запись есть». */
+test('фильтры «с проблемами» и «с предупреждениями» пересекаются',
+  function () {
+    var p = make([snap('os-9.1', JUL, { builds: [
+      build('nginx', { problems: [{ level: 'error', text: 'нет ветки' },
+                                  { level: 'warning', text: 'с ветки' }] }),
+      build('curl', { problems: [{ level: 'warning', text: 'с ветки' }] }),
+      build('vim', { problems: [{ level: 'note', text: 'нечего сравнивать' }] }),
+      build('zlib')] })]);
+    p.setFilter('problem', 1);
+    assert.deepStrictEqual(rows(p), ['nginx']);
+    p.setFilter('problem', 0);
+    p.setFilter('warning', 1);
+    assert.deepStrictEqual(rows(p), ['curl', 'nginx']);
+  });
+
+/* Заметка ни о чём не предупреждает: строка с одной заметкой не попадает
+   ни в проблемные, ни в предупреждённые и не красится вовсе. */
+test('заметка не делает строку ни проблемной, ни предупреждённой', function () {
+  var p = make([snap('os-9.1', JUL, { builds: [
+    build('vim', { problems: [{ level: 'note', text: 'нечего сравнивать' }] })] })]);
+  p.setFilter('problem', 1);
+  assert.deepStrictEqual(rows(p), []);
+  p.setFilter('problem', 0);
+  p.setFilter('warning', 1);
+  assert.deepStrictEqual(rows(p), []);
+});
+
+/* Третий уровень записей сбора отбирается так же, как два первых: по
+   наличию записи, а не по тому, что она самая строгая. */
+test('фильтр «с заметками» берёт все строки, где заметка есть',
+  function () {
+    var p = make([snap('os-9.1', JUL, { builds: [
+      build('nginx', { problems: [{ level: 'note', text: 'нечего сравнивать' }] }),
+      build('curl', { problems: [{ level: 'warning', text: 'с ветки' },
+                                 { level: 'note', text: 'нечего сравнивать' }] }),
+      build('zlib')] })]);
+    p.setFilter('note', 1);
+    assert.deepStrictEqual(rows(p), ['curl', 'nginx']);
+  });
