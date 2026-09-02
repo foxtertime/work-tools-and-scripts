@@ -40,31 +40,31 @@
 
 - [ ] **Step 1: Написать падающий тест на разметку**
 
-В `tests/test_build.py` найдите класс с docstring `"""Разметка, на которую опирается ui.js, и обещания README."""` (около строки 95) и добавьте в него два метода:
+В `tests/test_build.py` найдите класс `TemplateContractTest` — его docstring `"""Разметка, на которую опирается ui.js, и обещания README."""`, около строки 94. У класса уже есть `setUp`, который кладёт собранную страницу в `self.html`; новые методы берут её оттуда, а не зовут `build_html` сами (у неё нет довода с версией — единственный её довод это путь к шаблону).
+
+Добавьте в этот класс два метода:
 
 ```python
     def test_page_has_two_screens(self):
-        # Разделы держатся на этих четырёх узлах: островок с кнопками и две
-        # секции. Пропади любой — screens.js найдёт None и страница
+        # Разделы держатся на этих пяти узлах: островок с двумя кнопками и
+        # две секции. Пропади любой — screens.js найдёт None, и страница
         # перестанет переключаться молча.
-        html = build_html("1.0.0")
         for needle in ('id="isle"',
                        'data-screen="builds"',
                        'data-screen="cve"',
                        'id="screen-builds"',
                        'id="screen-cve"'):
-            self.assertIn(needle, html, needle)
+            self.assertIn(needle, self.html, needle)
 
     def test_cve_screen_is_hidden_and_asks_for_xlsx(self):
-        # Заглушка приходит скрытой и принимает только xlsx: раздел
+        # Заглушка приходит скрытой и принимает только xlsx: страница
         # открывается на билдах, а поле выбора не должно предлагать
         # человеку файлы, которые всё равно будут отвергнуты.
-        html = build_html("1.0.0")
-        self.assertIn('id="screen-cve" hidden', html)
-        self.assertIn('id="cve-input"', html)
-        self.assertIn('accept=".xlsx"', html)
+        self.assertIn('id="screen-cve" hidden', self.html)
+        self.assertIn('id="cve-input"', self.html)
+        self.assertIn('accept=".xlsx"', self.html)
         for needle in ('id="cve-drop"', 'id="cve-pick"', 'id="cve-file"'):
-            self.assertIn(needle, html, needle)
+            self.assertIn(needle, self.html, needle)
 ```
 
 - [ ] **Step 2: Прогнать тест и убедиться, что он падает**
@@ -869,7 +869,7 @@ node --test tests/js/*.test.js
 python3 -m unittest discover -s tests
 ```
 
-Ожидается: всё чистое. Если упал `files.test.js` или старые тесты броска в `ui.test.js` — значит `mine()` отняла работающий сегодня бросок; проверьте, что в `create` передан `screen`, и что это секция, а не зона.
+Ожидается: всё чистое. Отдельного `files.test.js` в проекте нет — загрузку файлов проверяет `ui.test.js`. Если упали его старые тесты броска, значит `mine()` отняла работающий сегодня бросок: проверьте, что в `create` передан `screen` и что это секция `#screen-builds`, а не зона `#drop`.
 
 - [ ] **Step 6: Коммит**
 
