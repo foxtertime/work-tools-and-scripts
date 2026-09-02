@@ -1,0 +1,61 @@
+koji:
+  hub: https://kojihub.example.com/kojihub
+  web: https://kojihub.example.com/koji
+
+gitlab:
+  default_host: gitlab.example.com
+  token_env: GITLAB_TOKEN
+  hosts:
+    gitlab.example.com:
+      api: https://gitlab.example.com/api/v4
+      web: https://gitlab.example.com
+
+patch_dir: PATCH
+
+# Классы, для которых заводят сводные списки патчей (autogen-cve-patches.inc
+# и подобные). Сбор сверяет их в обе стороны: автоген без патчей своего
+# класса и патчи без автогена — оба случая предупреждение в строке билда.
+# Пустой список выключает обе проверки; класс, которого нет в patch_classes,
+# — ошибка конфига.
+autogen_classes: [CVE, SAST, DAST, COVERAGE]
+
+# Правила применяются по порядку, побеждает первое совпадение.
+# Последнее всеохватное правило добавляется автоматически, если его нет.
+patch_classes:
+  # Сгенерированные списки патчей: autogen-sast-patches.inc.new и подобные.
+  # Правило обязано стоять ПЕРВЫМ: в самих именах есть sast, cve и fuzz, и
+  # ниже по списку эти файлы уехали бы в SAST и DAST, накручивая счётчики.
+  - { name: AUTOGEN, pattern: '(?i)^autogen[-_]' }
+  - { name: CVE,  pattern: '(?i)CVE-\d{4}-\d{4,}' }
+  # SAST и DAST — по вхождению в любом месте имени: маркер бывает и в начале
+  # (SAST-src.core.ngx_file.c.patch.new), и в середине
+  # (httpd-2.4.62-sast-src.core.c.patch.new).
+  # Если понадобится строже — чтобы маркер не ловился внутри слова, — возьмите
+  # '(?i)(?:^|[^a-z0-9])sast(?:[^a-z0-9]|$)'
+  - { name: SAST, pattern: '(?i)sast' }
+  # Фаззинг — то же динамическое тестирование, поэтому FUZZ/fuzz идёт в DAST,
+  # а не отдельной категорией: иначе отчёт дробился бы без пользы.
+  - { name: DAST, pattern: '(?i)(?:dast|fuzz)' }
+  - { name: COVERAGE, pattern: '(?i)coverage' }
+  # Патч суффикса дистрибутива: nginx-distsuffix.patch. Стоит перед SPEC:
+  # правит он спек, но затем, чтобы переклеить суффикс сборки, а класс
+  # отвечает на вопрос «зачем патч». Расширение в шаблоне обязательно.
+  - { name: DISTSUFFIX, pattern: '(?i)distsuffix\.patch' }
+  # Лицензия: license.patch, nginx-license.patch, LICENSE.txt. Стоит перед
+  # SPEC по той же причине: правит такой патч обычно поле License в спеке,
+  # но затем, чтобы разобраться с лицензией. Расширение не нужно — файл с
+  # «license» в имени про лицензию и есть; британское licence ловится тем
+  # же правилом.
+  - { name: LICENSE, pattern: '(?i)licen[cs]e' }
+  # Патч на спек: nginx.spec.patch, httpd-2.4.62.spec.patch.new. Точки в
+  # шаблоне обязательны, иначе сюда уедут specialcase.patch и respec-fix.patch.
+  # Правило стоит после CVE/SAST/DAST: спек-патч, закрывающий CVE, — прежде
+  # всего CVE.
+  - { name: SPEC, pattern: '(?i)\.spec\.' }
+  # changelog.yaml — не исправление, а бухгалтерия каталога: своим классом он
+  # перестаёт разбавлять other. Короткое написание .yml тоже ловится.
+  - { name: CHANGELOG, pattern: '(?i)changelog\.ya?ml' }
+  # Не патчи, а просто файлы рядом с ними. Новые расширения дописывайте сюда
+  # же альтернативой — '(?i)\.(?:tar\.gz|zip|bin)' — а не отдельным классом:
+  # цветов в дашборде на бесконечное число классов не хватит.
+  - { name: FILES, pattern: '(?i)\.tar\.gz' }
