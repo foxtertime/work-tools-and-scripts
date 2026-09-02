@@ -1983,16 +1983,37 @@ test('островок переключает разделы и возвраща
   assert.equal(dom.id('screen-cve').hidden, true);
 });
 
+/* Заглушка не умеет браузерной навигации по брошенному файлу — этого
+   события у неё просто нет. Но preventDefault на dragover ровно то, чем
+   страница у настоящего браузера её отменяет: без него окно уехало бы
+   смотреть JSON вместо дашборда, и все загруженные снапшоты, которые
+   живут только в памяти страницы, исчезли бы. Проверяем оба раздела: у
+   каждого документный обработчик свой. */
+test('дашборд не отдаёт бросок браузеру ни на билдах, ни на CVE', function () {
+  var dom = load();
+  var data = { types: ['Files'], files: [domstub.file('a.json', '{}')] };
+  var onBuilds = dom.fire(dom.document, 'dragover', { dataTransfer: data });
+  assert.strictEqual(onBuilds.defaultPrevented, true,
+    'билды: ' + onBuilds.defaultPrevented);
+  isleButton(dom, 'cve').click();
+  var onCve = dom.fire(dom.document, 'dragover', { dataTransfer: data });
+  assert.strictEqual(onCve.defaultPrevented, true,
+    'cve: ' + onCve.defaultPrevented);
+});
+
 test('на разделе CVE брошенный файл не уезжает в разбор снапшотов', function () {
   /* files.js слушает бросок на всём документе — иначе браузер открыл бы
      файл вместо страницы. Пока показан чужой раздел, отвечать на это
      нельзя: xlsx получил бы отказ «не JSON», то есть сообщение про
-     формат, которого человек не называл. */
+     формат, которого человек не называл. Но и промолчать не значит
+     отпустить бросок браузеру: cve.js должен сам отменить его. */
   var dom = load();
   isleButton(dom, 'cve').click();
-  dom.fire(dom.document, 'drop', {
+  var event = dom.fire(dom.document, 'drop', {
     dataTransfer: { types: ['Files'],
                     files: [domstub.file('таблица.xlsx', 'не json')] } });
+  assert.strictEqual(event.defaultPrevented, true,
+    'бросок на разделе CVE обязан быть отменён, иначе браузер уходит с страницы');
   return dom.tick().then(function () {
     assert.equal(noteText(dom), '');
   });

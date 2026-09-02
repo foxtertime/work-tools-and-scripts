@@ -438,7 +438,8 @@
     dom: { drop: document.getElementById('cve-drop'),
            input: document.getElementById('cve-input'),
            pick: document.getElementById('cve-pick'),
-           name: document.getElementById('cve-file') } });
+           name: document.getElementById('cve-file'),
+           screen: document.getElementById('screen-cve') } });
   const notices = noticesmod.create({ store: store, toasts: toasts });
   const filters = filtersmod.create({
     box: document.getElementById('filtermenu'),

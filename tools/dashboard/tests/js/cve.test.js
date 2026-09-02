@@ -13,7 +13,8 @@ function setup() {
   var cve = cvemod.create({
     toasts: { show: function (spec) { shown.push(spec); } },
     dom: { drop: dom.id('cve-drop'), input: dom.id('cve-input'),
-           pick: dom.id('cve-pick'), name: dom.id('cve-file') } });
+           pick: dom.id('cve-pick'), name: dom.id('cve-file'),
+           screen: dom.id('screen-cve') } });
   return { dom: dom, cve: cve, shown: shown,
            drop: dom.id('cve-drop'), name: dom.id('cve-file') };
 }
@@ -87,6 +88,23 @@ test('из пачки берётся первый файл', function () {
   s.dom.fire(s.drop, 'drop', { dataTransfer: dropping('первый.xlsx', 'второй.xlsx') });
   assert.equal(s.name.textContent, 'первый.xlsx');
   assert.equal(s.shown.length, 1);
+});
+
+/* Второй из двух путей, которыми README обещает файл: диалог выбора, а не
+   только бросок. Тот же accept, тот же сброс значения поля, что и у
+   files.js — см. её тест «файлы выбирают через input» в ui.test.js. */
+test('xlsx выбирают через input', function () {
+  var s = setup();
+  var input = s.dom.id('cve-input');
+  input.files = [{ name: 'cve-2026.xlsx' }];
+  s.dom.fire(input, 'change', {});
+  assert.equal(s.name.hidden, false);
+  assert.equal(s.name.textContent, 'cve-2026.xlsx');
+  assert.equal(s.shown.length, 1);
+  assert.equal(s.shown[0].kind, 'warn');
+  /* Тот же файл, выбранный второй раз, не даёт события, пока в поле лежит
+     его прежнее значение — поэтому его сбрасывают сразу после чтения. */
+  assert.equal(input.value, '');
 });
 
 test('кнопка открывает диалог выбора', function () {
