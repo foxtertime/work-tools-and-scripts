@@ -97,6 +97,27 @@ class TemplateContractTest(unittest.TestCase):
     def setUp(self):
         self.html = build_html()
 
+    def test_page_has_two_screens(self):
+        # Разделы держатся на этих пяти узлах: островок с двумя кнопками и
+        # две секции. Пропади любой — screens.js найдёт None, и страница
+        # перестанет переключаться молча.
+        for needle in ('id="isle"',
+                       'data-screen="builds"',
+                       'data-screen="cve"',
+                       'id="screen-builds"',
+                       'id="screen-cve"'):
+            self.assertIn(needle, self.html, needle)
+
+    def test_cve_screen_is_hidden_and_asks_for_xlsx(self):
+        # Заглушка приходит скрытой и принимает только xlsx: страница
+        # открывается на билдах, а поле выбора не должно предлагать
+        # человеку файлы, которые всё равно будут отвергнуты.
+        self.assertIn('id="screen-cve" hidden', self.html)
+        self.assertIn('id="cve-input"', self.html)
+        self.assertIn('accept=".xlsx"', self.html)
+        for needle in ('id="cve-drop"', 'id="cve-pick"', 'id="cve-file"'):
+            self.assertIn(needle, self.html, needle)
+
     def test_every_default_class_has_its_own_colour(self):
         # Класс, которого страница не знает, красится общим акцентом — и
         # полоска состава начинает показывать два разных класса одним

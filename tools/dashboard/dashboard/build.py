@@ -26,7 +26,7 @@ SCRIPTS = ("vercmp.js", "rpms.js", "diff.js", "viewmodel.js", "store.js",
 # base идёт первым — там переменные и палитра, tip последним — он всплывает
 # поверх всего. Перестановка файлов здесь молча меняет вид страницы.
 STYLES = ("base.css", "layout.css", "rail.css", "cards.css", "table.css",
-          "filters.css", "toasts.css", "tip.css")
+          "filters.css", "isle.css", "toasts.css", "tip.css")
 
 
 class BuildError(Exception):

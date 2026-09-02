@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
 .superpowers/
-dashboard.html
+/dashboard.html
 # следы установки пакета: pip install -e . кладёт egg-info рядом с исходниками
 *.egg-info/
 build/
