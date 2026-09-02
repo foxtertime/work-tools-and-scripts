@@ -53,6 +53,19 @@ class BuildHtml(unittest.TestCase):
             self.assertIn("/* %s */" % name, html,
                           "в собранном файле нет %s" % name)
 
+    def test_styles_matches_css_directory(self):
+        # STYLES перечисляется руками, и файл, забытый в списке, обходит
+        # test_every_style_is_inlined молча: оно ходит по STYLES, а не по
+        # каталогу, так что забытый файл там просто не проверяется. У CSS
+        # последствие тише, чем у JS: собранная страница не падает и не
+        # молчит консолью, она просто выглядит не так, как должна, — и это
+        # легко списать на что угодно другое. Сверяем множества в обе
+        # стороны: и лишний файл на диске, и лишнее (удалённое) имя в
+        # STYLES должны быть замечены.
+        on_disk = {name for name in os.listdir(os.path.join(ASSETS, "css"))
+                   if name.endswith(".css")}
+        self.assertEqual(on_disk, set(STYLES))
+
     def test_styles_keep_cascade_order(self):
         # При равной специфичности выигрывает то, что ниже: перестановка
         # файлов в STYLES молча меняет вид страницы.
