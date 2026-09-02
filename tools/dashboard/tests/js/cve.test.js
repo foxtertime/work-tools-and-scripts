@@ -116,6 +116,45 @@ test('кнопка открывает диалог выбора', function () {
   assert.equal(opened, 1);
 });
 
+/* Документный уровень подхватывает бросок, ушедший мимо зоны, пока раздел
+   CVE показан — симметрично тому, как files.js подхватывает бросок мимо
+   своей зоны на билдах. */
+test('бросок мимо зоны на видимом разделе CVE всё равно принят', function () {
+  var s = setup();
+  s.dom.id('screen-cve').hidden = false;
+  var event = s.dom.fire(s.dom.document, 'drop',
+                          { dataTransfer: dropping('cve-2026.xlsx') });
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(s.name.hidden, false);
+  assert.equal(s.name.textContent, 'cve-2026.xlsx');
+  assert.equal(s.shown.length, 1);
+  assert.equal(s.shown[0].kind, 'warn');
+});
+
+/* Пока раздел CVE скрыт (человек смотрит билды), документный бросок — не
+   для этого модуля: files.js уже занят тем же событием. */
+test('бросок мимо зоны на скрытом разделе CVE не принят', function () {
+  var s = setup();
+  s.dom.id('screen-cve').hidden = true;
+  s.dom.fire(s.dom.document, 'drop', { dataTransfer: dropping('cve-2026.xlsx') });
+  assert.equal(s.name.hidden, true);
+  assert.equal(s.shown.length, 0);
+});
+
+/* Бросок ровно в зону не должен попасть в accept дважды — один раз через
+   собственный слушатель зоны, второй раз через документный, если бы
+   stopPropagation зоны не сработал. Раздел CVE виден, чтобы документный
+   слушатель был бы активен, будь у события шанс до него добраться. */
+test('бросок ровно в зону обработан один раз, а не дважды', function () {
+  var s = setup();
+  s.dom.id('screen-cve').hidden = false;
+  s.dom.fire(s.drop, 'drop', { dataTransfer: dropping('cve-2026.xlsx') });
+  assert.equal(s.shown.length, 1,
+    'ожидался один toast от зоны; больше одного значило бы, что документный ' +
+    'слушатель тоже сработал, несмотря на stopPropagation зоны');
+  assert.equal(s.name.textContent, 'cve-2026.xlsx');
+});
+
 test('содержимое файла не читается вовсе', function () {
   /* Заглушка не притворяется работающей: прочитать и промолчать было бы
      хуже, чем не читать и сказать. */
