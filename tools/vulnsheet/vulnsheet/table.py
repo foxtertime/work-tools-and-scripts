@@ -25,7 +25,7 @@ def read(path: str) -> List[Record]:
     """Строки данных без заголовка; полностью пустые записи пропускаются."""
     try:
         with open(path, encoding="utf-8-sig", newline="") as handle:
-            raw = list(csv.reader(handle, delimiter=";"))
+            raw = list(csv.reader(handle, delimiter=";", strict=True))
     except UnicodeDecodeError as exc:
         raise TableError("%s: не в UTF-8: %s" % (path, exc))
     except OSError as exc:

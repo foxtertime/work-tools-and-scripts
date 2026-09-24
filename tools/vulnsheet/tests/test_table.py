@@ -72,6 +72,11 @@ class ReadTest(unittest.TestCase):
     def test_not_utf8(self):
         self.assertRejected("UTF-8", data=(HEADER + "\n").encode("cp1251"))
 
+    def test_unclosed_quote_swallows_following_rows(self):
+        second = ";".join(ROW).replace("TASKID-1", "TASKID-2")
+        broken = LINE[:-1] + '"' + "неполная кавычка"
+        self.assertRejected("ошибка CSV", HEADER + "\n" + broken + "\n" + second + "\n")
+
     def test_missing_file(self):
         with self.assertRaises(TableError) as caught:
             read(os.path.join(self.room, "нет.csv"))
