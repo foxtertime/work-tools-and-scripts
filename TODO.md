@@ -16,6 +16,7 @@
 Задачи по конкретной тулзе живут в её каталоге и переезжают вместе с ней:
 
 - [`tools/dashboard/TODO.md`](tools/dashboard/TODO.md)
+- [`tools/vulnsheet/TODO.md`](tools/vulnsheet/TODO.md)
 
 ## Как писать пункты
 
