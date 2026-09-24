@@ -4,6 +4,7 @@
 PyYAML импортируется только при заданном файле: без конфига тулзе хватает
 стандартной библиотеки и koji.
 """
+import math
 import os
 import types
 from typing import Dict, Mapping, NamedTuple, Optional
@@ -78,9 +79,29 @@ def _read_yaml(path):
     except ImportError:
         raise ConfigError("для конфига нужен PyYAML: поставьте python3-pyyaml "
                           "(или pip install pyyaml)")
+
+    class _StrictLoader(yaml.SafeLoader):
+        """safe_load молча берёт последний из двух одинаковых ключей на любом
+        уровне (в т. ч. "9" дважды под vex_streams или пакет дважды в одном
+        наборе) — тихо теряя данные. Здесь это фатальная ошибка конфига.
+
+        Ключи 9 и "9" — разные объекты Python и дублем не считаются: этот
+        случай ловится отдельно, после нормализации версии, в _streams.
+        """
+
+        def construct_mapping(self, node, deep=False):
+            seen = set()
+            for key_node, _ in node.value:
+                key = self.construct_object(key_node, deep=True)
+                if key in seen:
+                    raise ConfigError("%s: ключ %r указан дважды (строка %d)" % (
+                        path, key, key_node.start_mark.line + 1))
+                seen.add(key)
+            return super().construct_mapping(node, deep=deep)
+
     try:
         with open(path, encoding="utf-8") as handle:
-            return yaml.safe_load(handle)
+            return yaml.load(handle, Loader=_StrictLoader)
     except OSError as exc:
         raise ConfigError("%s: не читается: %s" % (path, exc))
     except (yaml.YAMLError, ValueError) as exc:  # ValueError — не UTF-8
@@ -128,7 +149,8 @@ def _timeout(section, path, default):
     value = section.get("timeout")
     if value is None:
         return default
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(value) or value <= 0):
         raise ConfigError("%s: vex.timeout должен быть числом больше нуля" % path)
     return value
 
@@ -151,7 +173,7 @@ def _rhel(value, name, path):
 
 def _streams(value, path):
     if value is None:
-        return {}
+        return types.MappingProxyType({})
     if not isinstance(value, dict):
         raise ConfigError("%s: vex_streams должен быть словарём версия → пакеты" % path)
     result = {}
@@ -168,10 +190,15 @@ def _streams(value, path):
             raise ConfigError("%s: %s должен быть словарём пакет → стрим" % (path, name))
         streams = {}
         for package, stream in mapping.items():
+            # число без кавычек — частая опечатка: "1.26" YAML читает как
+            # float, и это надо явно подсказать, а не просто отвергнуть.
+            if isinstance(stream, (int, float)) and not isinstance(stream, bool):
+                raise ConfigError('%s: %s: стрим пишите в кавычках, например "1.26" (%r: %r)'
+                                  % (path, name, package, stream))
             if (not isinstance(package, str) or not package.strip()
                     or not isinstance(stream, str) or not stream.strip()):
                 raise ConfigError("%s: %s: пакет и стрим — непустые строки (%r: %r)"
                                   % (path, name, package, stream))
             streams[package.strip()] = stream.strip()
-        result[rhel] = streams
-    return result
+        result[rhel] = types.MappingProxyType(streams)
+    return types.MappingProxyType(result)

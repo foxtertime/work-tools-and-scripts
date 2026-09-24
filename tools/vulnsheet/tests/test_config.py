@@ -131,6 +131,8 @@ class LoadTest(unittest.TestCase):
             ("vex:\n  cache_ttl: -1\n", "vex.cache_ttl"),
             ("vex:\n  timeout: 0\n", "vex.timeout"),
             ("vex:\n  timeout: false\n", "vex.timeout"),
+            ("vex:\n  timeout: .nan\n", "vex.timeout"),
+            ("vex:\n  timeout: .inf\n", "vex.timeout"),
             ("vex:\n  cache_dir: ''\n", "vex.cache_dir"),
             ("koji:\n  tag: 9\n", "koji.tag"),
             ("koji:\n  hub: ''\n", "koji.hub"),
@@ -140,6 +142,7 @@ class LoadTest(unittest.TestCase):
             ("vex_streams: [nginx]\n", "vex_streams"),
             ("vex_streams:\n  \"9\": [nginx]\n", "vex_streams.9"),
             ("vex_streams:\n  \"9\":\n    nginx: ''\n", "vex_streams.9"),
+            ("vex_streams:\n  \"9\":\n    nginx: 1.26\n", "кавычк"),
             ("- a\n", "словар"),
         ]
         for text, needle in cases:
@@ -160,6 +163,24 @@ class LoadTest(unittest.TestCase):
 
     def test_duplicate_version_after_normalisation(self):
         self.assertRejected("vex_streams:\n  9:\n    a: b\n  RHEL 9:\n    c: d\n", "дважды")
+
+    def test_duplicate_yaml_key_in_vex_streams_block(self):
+        self.assertRejected(
+            "vex_streams:\n  \"9\":\n    nginx: nginx:1.26\n"
+            "  \"9\":\n    npm: nodejs:20\n", "дважды")
+
+    def test_duplicate_package_key_under_one_version(self):
+        self.assertRejected(
+            "vex_streams:\n  \"9\":\n    nginx: nginx:1.26\n"
+            "    nginx: nginx:1.28\n", "дважды")
+
+    def test_duplicate_top_level_key(self):
+        self.assertRejected("koji:\n  hub: a\nkoji:\n  hub: b\n", "дважды")
+
+    def test_loaded_streams_are_immutable(self):
+        cfg = load_config(self.write(FULL))
+        with self.assertRaises(TypeError):
+            cfg.vex_streams["9"] = {}
 
     def test_missing_file(self):
         with self.assertRaises(ConfigError) as caught:

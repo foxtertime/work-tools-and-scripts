@@ -162,6 +162,21 @@ class StreamLookupTest(unittest.TestCase):
         self.assertEqual(self.verdict("nginx:1.26", doc=doc).state,
                          "not listed (present for 9.2)")
 
+    def test_real_module_product_id_shape(self):
+        # Настоящий вид product_id модульного пакета у Red Hat: platform:
+        # NVR-с-эпохой-и-архитектурой::модуль:стрим.
+        platform = ("AppStream-9.5.0.Z.MAIN", "cpe:/a:redhat:enterprise_linux:9::appstream")
+        component = ("nginx-1:1.24.0-4.module+el9.5.0+22371+ebc8e0cb.x86_64"
+                     "::nginx:1.24")
+        fixed = pid(platform, component)
+        doc = csaf(CVE, [("fixed", platform, component)],
+                   remediations=[vendor_fix(fixed)])
+        verdict = self.verdict("nginx:1.24", doc=doc)
+        self.assertEqual((verdict.state, verdict.fixed_nvr, verdict.advisory_url),
+                         ("Fixed",
+                          "nginx-1.24.0-4.module+el9.5.0+22371+ebc8e0cb", RHSA))
+        self.assertEqual(self.verdict(doc=doc).state, "not listed (streams: nginx:1.24)")
+
 
 class ParseRhelTest(unittest.TestCase):
     def test_accepted_spellings(self):
