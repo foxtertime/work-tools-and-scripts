@@ -1,6 +1,7 @@
 import io
 import unittest
 
+from vulnsheet import report
 from vulnsheet.report import COLUMNS, format_date, row, write
 from vulnsheet.tasks import Task
 from vulnsheet.vex import Verdict
@@ -66,3 +67,34 @@ class WriteTest(unittest.TestCase):
         write([row(TASK, "vim-8.2.2637-26.sl9_8.6^4",
                    Verdict(state="Under investigation", severity="Moderate", cvss="5.5"))], out)
         self.assertEqual(out.getvalue(), ";".join(COLUMNS) + "\n" + EXAMPLE + "\n")
+
+
+class GroupsTest(unittest.TestCase):
+    GROUPS = [report.DEVELOPER, report.TASK, report.KOJI, report.VEX,
+              report.LINK, report.COMMENT]
+
+    def test_groups_cover_all_columns_in_order(self):
+        self.assertEqual(sum((COLUMNS[group] for group in self.GROUPS), []), COLUMNS)
+
+    def test_group_contents(self):
+        self.assertEqual(COLUMNS[report.DEVELOPER], [
+            "Разработчик", "Статус", "Start date", "End date", "Принятая мера"])
+        self.assertEqual(COLUMNS[report.TASK], [
+            "Task ID", "CVE ID", "Task state", "Task date", "Исполнитель", "Компонент"])
+        self.assertEqual(COLUMNS[report.KOJI], ["SL NVR (latest build)"])
+        self.assertEqual(COLUMNS[report.VEX], [
+            "RHEL NVR (if fixed)", "Fix date", "RHEL state", "RHEL severity",
+            "RHEL CVSS", "Advisory (RHSA)"])
+        self.assertEqual(COLUMNS[report.LINK], ["CVE Link"])
+        self.assertEqual(COLUMNS[report.COMMENT], ["Комментарий"])
+
+    def test_row_fields_land_on_named_indices(self):
+        cells = row(TASK, "vim-1", Verdict(state="Affected"))
+        indices = [report.TASK_ID, report.CVE_ID, report.TASK_STATE, report.TASK_DATE,
+                   report.ASSIGNEE, report.COMPONENT, report.SL_NVR, report.RHEL_STATE]
+        self.assertEqual([cells[i] for i in indices], [
+            "TASKID-181229", "CVE-2026-73070", "Отменен", "22.09.2026", "КМ", "vim",
+            "vim-1", "Affected"])
+
+    def test_missing_marker(self):
+        self.assertEqual(report.MISSING, "Missing")

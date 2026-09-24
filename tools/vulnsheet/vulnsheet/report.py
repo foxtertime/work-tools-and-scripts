@@ -19,6 +19,27 @@ COLUMNS = [
     "Fix date", "RHEL state", "RHEL severity", "RHEL CVSS",
     "Advisory (RHSA)", "CVE Link", "Комментарий",
 ]
+
+MISSING = "Missing"  # Task state строки, чьей задачи больше нет в блоках
+
+# Группы колонок для режимов обновления: что в каком режиме откуда берётся,
+# см. docs/superpowers/specs/2026-09-24-vulnsheet-update-modes-design.md.
+DEVELOPER = slice(0, 5)   # Разработчик … Принятая мера
+TASK = slice(5, 11)       # Task ID … Компонент
+KOJI = slice(11, 12)      # SL NVR
+VEX = slice(12, 18)       # RHEL NVR … Advisory
+LINK = slice(18, 19)      # CVE Link
+COMMENT = slice(19, 20)   # Комментарий
+
+TASK_ID = COLUMNS.index("Task ID")
+CVE_ID = COLUMNS.index("CVE ID")
+TASK_STATE = COLUMNS.index("Task state")
+TASK_DATE = COLUMNS.index("Task date")
+ASSIGNEE = COLUMNS.index("Исполнитель")
+COMPONENT = COLUMNS.index("Компонент")
+SL_NVR = COLUMNS.index("SL NVR (latest build)")
+RHEL_STATE = COLUMNS.index("RHEL state")
+
 _ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
 
 
