@@ -7,7 +7,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
-from tests.fakes import RHEL9, FakeKojiSession, csaf, pid
+from tests.fakes import APPSTREAM96, RHEL9, FakeKojiSession, csaf, pid
 from vulnsheet import __version__
 from vulnsheet.cli import EXIT_FATAL, EXIT_OK, EXIT_PARTIAL, main, rejects_path
 from vulnsheet.report import COLUMNS
@@ -22,12 +22,35 @@ EXPECTED = ("-;-;-;-;-;TASKID-181229;CVE-2026-73070;Отменен;22.09.2026;К
 VIM_DOC = csaf("CVE-2026-73070", [("under_investigation", RHEL9, "vim")],
                scores=[{"cvss_v3": {"baseScore": 5.5}, "products": [pid(RHEL9, "vim")]}])
 
+try:
+    import yaml  # noqa: F401 — только чтобы понять, есть ли PyYAML
+    HAVE_YAML = True
+except ImportError:
+    HAVE_YAML = False
+
+NGINX_BLOCK = BLOCK.replace("vim", "nginx")
+# под RHEL 9 обычный nginx исправлен, а стрим nginx:1.26 — уязвим
+NGINX_DOC = csaf("CVE-2026-73070", [("fixed", APPSTREAM96, "nginx-2:1.20.1-22.el9_6.x86_64"),
+                                    ("known_affected", APPSTREAM96, "nginx::nginx:1.26")])
+CONFIG = """\
+koji:
+  hub: https://koji.example.com/kojihub
+  tag: sl9
+rhel: "9"
+vex_streams:
+  "9":
+    nginx: nginx:1.26
+"""
+
 
 class CliCase(unittest.TestCase):
     def setUp(self):
         self.room = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.room)
         mock.patch.dict(os.environ, {"XDG_CACHE_HOME": self.path("cache")}).start()
+        # настоящий конфиг из окружения того, кто гоняет тесты, сюда не ходит;
+        # patch.dict вернёт переменную на место после теста
+        os.environ.pop("VULNSHEET_CONFIG", None)
         self.session = FakeKojiSession(builds={"vim": "vim-8.2.2637-26.sl9_8.6^4"})
         self.connect = mock.patch("vulnsheet.kojiclient.connect",
                                   return_value=self.session).start()
@@ -193,6 +216,96 @@ class FatalTest(CliCase):
         code = self.run_cli("--rejects", self.path("нет-каталога/bad.txt"))
         self.assertFatal(code, "отбраковки")
         self.connect.assert_not_called()
+
+    def test_missing_required_value_is_fatal(self):
+        src = self.path("tasks.txt")
+        with open(src, "w", encoding="utf-8") as handle:
+            handle.write(BLOCK)
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = main(["--rhel", "9", "--tag", "sl9", src, "-o", self.path("r.csv")])
+        self.log = err.getvalue()
+        self.assertFatal(code, "нужен --koji-url или koji.hub в конфиге")
+        self.connect.assert_not_called()
+
+
+@unittest.skipUnless(HAVE_YAML, "нужен PyYAML")
+class ConfigTest(CliCase):
+    def setUp(self):
+        super().setUp()
+        self.session.builds["nginx"] = "nginx-1.26.3-1.sl9"
+        self.docs[vex_url("CVE-2026-73070")] = NGINX_DOC
+
+    def write_config(self, text=CONFIG):
+        path = self.path("vulnsheet.yaml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        return path
+
+    def run_raw(self, *argv, text=NGINX_BLOCK + "\n"):
+        src = self.path("tasks.txt")
+        with open(src, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = main([src, "-o", self.path("report.csv")] + list(argv))
+        self.log = err.getvalue()
+        return code
+
+    def test_stream_goes_to_vex_and_plain_name_to_koji(self):
+        code = self.run_raw("--config", self.write_config())
+        self.assertEqual(code, EXIT_OK)
+        line = self.report_lines()[1]
+        self.assertIn(";nginx;nginx-1.26.3-1.sl9;", line)
+        self.assertIn(";Affected;", line)
+        self.assertEqual(self.session.calls, [("sl9", "nginx")])
+        self.assertIn("nginx → nginx:1.26 (1)", self.log)
+        self.assertIn("хаб https://koji.example.com/kojihub, тег sl9, RHEL 9", self.log)
+
+    def test_without_mapping_plain_package_is_used(self):
+        text = CONFIG.split("vex_streams:")[0]
+        self.assertEqual(self.run_raw("--config", self.write_config(text)), EXIT_OK)
+        self.assertIn(";Fixed;", self.report_lines()[1])
+        self.assertNotIn("стримы VEX", self.log)
+
+    def test_mapping_for_another_version_is_not_used(self):
+        code = self.run_raw("--config", self.write_config(), "--rhel", "9.2")
+        self.assertEqual(code, EXIT_OK)
+        self.assertNotIn("стримы VEX", self.log)
+        self.assertIn(";not listed", self.report_lines()[1])
+
+    def test_flag_wins_over_config(self):
+        path = self.write_config(CONFIG.replace("tag: sl9", "tag: sl9-old"))
+        # если бы победил конфиг, тег sl9-old не нашёлся бы — код 2
+        self.assertEqual(self.run_raw("--config", path, "--tag", "sl9"), EXIT_OK)
+        self.assertEqual(self.session.calls, [("sl9", "nginx")])
+
+    def test_config_from_environment(self):
+        path = self.write_config()
+        with mock.patch.dict(os.environ, {"VULNSHEET_CONFIG": path}):
+            self.assertEqual(self.run_raw(), EXIT_OK)
+        self.assertIn("конфиг: " + path, self.log)
+
+    def test_vex_settings_from_config_are_used(self):
+        path = self.write_config(CONFIG + "vex:\n  timeout: 7\n  cache_dir: %s\n"
+                                 % self.path("mycache"))
+        self.assertEqual(self.run_raw("--config", path), EXIT_OK)
+        self.assertEqual(self.download.call_args.args,
+                         (vex_url("CVE-2026-73070"), 7))
+        self.assertTrue(os.path.exists(self.path("mycache/cve-2026-73070.json")))
+
+    def test_broken_config_is_fatal(self):
+        code = self.run_raw("--config", self.write_config("vex:\n  jobs: 0\n"))
+        self.assertEqual(code, EXIT_FATAL)
+        self.assertIn("vex.jobs", self.log)
+        self.assertNotIn("Traceback", self.log)
+        self.connect.assert_not_called()
+
+    def test_missing_config_file_is_fatal(self):
+        code = self.run_raw("--config", self.path("нет.yaml"))
+        self.assertEqual(code, EXIT_FATAL)
+        self.assertIn("не читается", self.log)
+        self.assertNotIn("Traceback", self.log)
 
 
 class BrokenPipeTest(CliCase):

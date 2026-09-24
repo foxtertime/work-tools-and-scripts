@@ -8,7 +8,7 @@ import time
 from collections import Counter
 from typing import List, Optional
 
-from . import __version__, kojiclient, logs, report, vex
+from . import __version__, config, kojiclient, logs, report, vex
 from .tasks import parse
 
 logger = logging.getLogger(__name__)
@@ -41,10 +41,14 @@ def _parser() -> argparse.ArgumentParser:
         description="Блоки задач из тасктрекера → CSV с данными Red Hat VEX и koji.")
     parser.add_argument("input", nargs="?", default=STDIO,
                         help="файл с блоками задач (по умолчанию stdin)")
-    parser.add_argument("--rhel", required=True, type=_rhel,
-                        help="версия RHEL: 9 — только 9, 9.2 — только 9.2")
-    parser.add_argument("--koji-url", required=True, help="URL kojihub")
-    parser.add_argument("--tag", required=True, help="koji-тег")
+    parser.add_argument("--config",
+                        help="YAML-конфиг (по умолчанию — из $%s, иначе без конфига)"
+                             % config.ENV_VAR)
+    parser.add_argument("--rhel", type=_rhel,
+                        help="версия RHEL: 9 — только 9, 9.2 — только 9.2 "
+                             "(или rhel в конфиге)")
+    parser.add_argument("--koji-url", help="URL kojihub (или koji.hub в конфиге)")
+    parser.add_argument("--tag", help="koji-тег (или koji.tag в конфиге)")
     parser.add_argument("-o", "--output", default=STDIO,
                         help="CSV (по умолчанию stdout)")
     parser.add_argument("--rejects",
@@ -139,7 +143,27 @@ def _summary(builds: List[str], verdicts) -> None:
                 marks[kojiclient.NOT_FOUND], marks[kojiclient.ERROR])
 
 
+def _settings(args):
+    """Конфиг и три обязательных значения: флаг > конфиг > значение в коде."""
+    path = args.config or os.environ.get(config.ENV_VAR) or None
+    cfg = config.load_config(path)
+    if path:
+        logger.info("конфиг: %s", path)
+    else:
+        logger.info("без конфига")
+    rhel = args.rhel or cfg.rhel
+    hub = args.koji_url or cfg.koji_hub
+    tag = args.tag or cfg.koji_tag
+    for value, flag, key in ((rhel, "--rhel", "rhel"),
+                             (hub, "--koji-url", "koji.hub"),
+                             (tag, "--tag", "koji.tag")):
+        if not value:
+            raise _Fatal("нужен %s или %s в конфиге" % (flag, key))
+    return cfg, rhel, hub, tag
+
+
 def _run(args) -> int:
+    cfg, rhel, hub, tag = _settings(args)
     tasks, rejects = parse(_read_input(args.input))
     if not tasks and not rejects:
         raise _Fatal("во входе нет ни одного блока")
@@ -148,7 +172,12 @@ def _run(args) -> int:
                        reject.text.split("\n", 1)[0].strip(), reject.reason)
     cves = list(dict.fromkeys(t.cve for t in tasks))
     packages = list(dict.fromkeys(t.component for t in tasks))
-    logger.info("хаб %s, тег %s, RHEL %s", args.koji_url, args.tag, args.rhel)
+    logger.info("хаб %s, тег %s, RHEL %s", hub, tag, rhel)
+    streams = {t.component: cfg.stream_for(t.component, rhel) for t in tasks}
+    applied = Counter(t.component for t in tasks if streams[t.component])
+    if applied:
+        logger.info("стримы VEX для RHEL %s: %s", rhel, ", ".join(
+            "%s → %s (%d)" % (name, streams[name], count) for name, count in applied.items()))
     logger.info("блоков %d, отбраковано %d; CVE %d, пакетов %d",
                 len(tasks) + len(rejects), len(rejects), len(cves), len(packages))
 
@@ -160,13 +189,14 @@ def _run(args) -> int:
     try:
         nvrs, indices, failures = {}, {}, {}
         if tasks:
-            session = kojiclient.connect(args.koji_url)
-            nvrs = kojiclient.latest_builds(session, args.tag, packages)
-            settings = vex.VexSettings(cache_dir=vex.prepare_cache(_cache_dir()))
+            session = kojiclient.connect(hub)
+            nvrs = kojiclient.latest_builds(session, tag, packages)
+            settings = cfg.vex._replace(
+                cache_dir=vex.prepare_cache(cfg.vex.cache_dir or _cache_dir()))
             indices, failures = vex.fetch_all(cves, settings)
         builds = [nvrs[t.component] for t in tasks]
         verdicts = [vex.Verdict(state=vex.FETCH_ERROR) if t.cve in failures
-                    else vex.lookup(indices[t.cve], t.component, args.rhel)
+                    else vex.lookup(indices[t.cve], t.component, rhel, streams[t.component])
                     for t in tasks]
         report.write([report.row(t, b, v) for t, b, v in zip(tasks, builds, verdicts)], out)
     except BaseException:
@@ -204,6 +234,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         code = _run(args)
     except _Fatal as exc:
+        return _fatal(str(exc))
+    except config.ConfigError as exc:
         return _fatal(str(exc))
     except kojiclient.KojiError as exc:
         return _fatal("koji: %s" % exc)
