@@ -73,9 +73,12 @@ class LookupTest(unittest.TestCase):
         self.assertEqual((verdict.state, verdict.fixed_nvr),
                          ("Fixed", "firefox-128.0-1.el9_6"))
 
-    def test_stream_is_reported_when_nothing_else(self):
+    def test_stream_is_never_taken_for_the_package(self):
+        # Без маппинга firefox — только обычный пакет. Стрим — другой продукт,
+        # и его вердикт в строку не попадает, даже если больше ничего нет.
         doc = csaf(CVE, [("known_affected", RHEL9, "firefox::firefox:flatpak")])
-        self.assertEqual(self.verdict(doc, "firefox").state, "Affected")
+        self.assertEqual(self.verdict(doc, "firefox").state,
+                         "not listed (streams: firefox:flatpak)")
 
     def test_minor_stream_only_is_not_listed_with_hint(self):
         doc = csaf(CVE, [("fixed", EUS92, "vim-2:8.2.2637-20.el9_2.x86_64")])
@@ -106,6 +109,58 @@ class LookupTest(unittest.TestCase):
 
     def test_no_document_means_no_record(self):
         self.assertEqual(lookup(None, "vim", "9"), Verdict(state=NO_RECORD))
+
+
+NGINX_FIXED = "nginx-2:1.20.1-22.el9_6.x86_64"
+
+
+def nginx_doc():
+    """Обычный nginx исправлен, стрим 1.26 уязвим, стрим 1.24 не будут чинить."""
+    return csaf(CVE, [("fixed", APPSTREAM96, NGINX_FIXED),
+                      ("known_affected", APPSTREAM96, "nginx::nginx:1.26"),
+                      ("known_affected", APPSTREAM96, "nginx::nginx:1.24")],
+                remediations=[vendor_fix(pid(APPSTREAM96, NGINX_FIXED)),
+                              {"category": "no_fix_planned", "details": "Will not fix",
+                               "product_ids": [pid(APPSTREAM96, "nginx::nginx:1.24")]}])
+
+
+class StreamLookupTest(unittest.TestCase):
+    def verdict(self, stream=None, component="nginx", doc=None):
+        return lookup(build_index(doc or nginx_doc()), component, "9", stream)
+
+    def test_plain_package_ignores_streams(self):
+        verdict = self.verdict()
+        self.assertEqual((verdict.state, verdict.fixed_nvr),
+                         ("Fixed", "nginx-1.20.1-22.el9_6"))
+
+    def test_mapped_stream_replaces_the_package(self):
+        verdict = self.verdict("nginx:1.26")
+        self.assertEqual((verdict.state, verdict.fixed_nvr, verdict.advisory_url),
+                         ("Affected", "", ""))
+
+    def test_each_stream_has_its_own_verdict(self):
+        self.assertEqual(self.verdict("nginx:1.24").state, "Will not fix")
+
+    def test_short_stream_form(self):
+        self.assertEqual(self.verdict("1.26").state, "Affected")
+
+    def test_package_inside_another_module(self):
+        fixed_npm = "npm-1:10.8.2-1.el9_6.x86_64"
+        doc = csaf(CVE, [("known_affected", APPSTREAM96, "npm::nodejs:20"),
+                         ("fixed", APPSTREAM96, fixed_npm)],
+                   remediations=[vendor_fix(pid(APPSTREAM96, fixed_npm))])
+        self.assertEqual(self.verdict("nodejs:20", "npm", doc).state, "Affected")
+        self.assertEqual(self.verdict(None, "npm", doc).state, "Fixed")
+
+    def test_missing_stream_lists_what_exists(self):
+        self.assertEqual(self.verdict("nginx:1.28").state,
+                         "not listed (streams: (no stream), nginx:1.24, nginx:1.26)")
+
+    def test_stream_only_in_minor_stream_hints_present_for(self):
+        # Версия сравнивается точно: 9.2 в вердикт под 9 не попадает.
+        doc = csaf(CVE, [("known_affected", EUS92, "nginx::nginx:1.26")])
+        self.assertEqual(self.verdict("nginx:1.26", doc=doc).state,
+                         "not listed (present for 9.2)")
 
 
 class ParseRhelTest(unittest.TestCase):

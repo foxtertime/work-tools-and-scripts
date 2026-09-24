@@ -24,6 +24,7 @@ NO_RECORD = "no VEX record"
 NOT_LISTED = "not listed"
 FETCH_ERROR = "fetch error"
 FIXED = "Fixed"
+NO_STREAM = "(no stream)"
 VEX_URL = "https://security.access.redhat.com/data/csaf/v2/vex/{year}/{cve}.json"
 USER_AGENT = "vulnsheet/%s (+CSAF VEX client)" % __version__
 CACHE_TTL = 3600  # секунд
@@ -230,14 +231,36 @@ def _nvr_for(component_id):
 # вердикт
 # --------------------------------------------------------------------------
 
-def lookup(index: Optional[dict], component: str, rhel: str) -> Verdict:
-    """Вердикт для компонента под версией RHEL; index=None — записи у Red Hat нет."""
+def _wanted(variant: str, stream: Optional[str]) -> bool:
+    """Тот ли это вариант пакета, о котором спрашивают.
+
+    Без стрима — только обычный пакет: module/flatpak-стрим — другой
+    продукт с тем же именем, и выдавать его вердикт за пакет нельзя. Со
+    стримом — только он, целиком ('nginx:1.26') или частью после двоеточия
+    ('1.26').
+    """
+    if not stream:
+        return not variant
+    return bool(variant) and (variant == stream or variant.split(":", 1)[-1] == stream)
+
+
+def lookup(index: Optional[dict], component: str, rhel: str,
+           stream: Optional[str] = None) -> Verdict:
+    """Вердикт для компонента под версией RHEL; index=None — записи у Red Hat нет.
+
+    Откатов нет: версия RHEL сравнивается точно, без стрима берётся только
+    обычный пакет, со стримом — только этот стрим. Подсказки в маркере
+    not listed лишь объясняют, почему ничего не нашлось.
+    """
     if index is None:
         return Verdict(state=NO_RECORD)
     vuln, rem_index, cve = index["vuln"], index["rem"], index["cve"]
+    if stream:
+        logger.debug("%s %s: смотрим стрим %s", cve, component, stream)
 
     candidates = []
-    siblings = {}  # версия → состояния, для соседних минорных потоков
+    siblings = {}     # версия → состояния нужного варианта в соседних потоках
+    variants = set()  # другие варианты пакета ровно под этой версией
     for bucket, product_ids in vuln.get("product_status", {}).items():
         for product_id in product_ids:
             platform_id, component_id = _split_product(product_id, index["rels"])
@@ -245,6 +268,11 @@ def lookup(index: Optional[dict], component: str, rhel: str) -> Verdict:
             if found is None:
                 continue
             if _component_name(component_id, index["pkgs"]).lower() != component.lower():
+                continue
+            variant = component_id.split("::", 1)[1] if "::" in component_id else ""
+            if not _wanted(variant, stream):
+                if found == rhel:
+                    variants.add(variant or NO_STREAM)
                 continue
             state = _state_for(product_id, bucket, rem_index)
             if found != rhel:
@@ -256,26 +284,17 @@ def lookup(index: Optional[dict], component: str, rhel: str) -> Verdict:
                 "state": state, "url": url, "date": date,
                 "cvss": _cvss_for(product_id, vuln),
                 "nvr": _nvr_for(component_id),
-                "variant": component_id.split("::", 1)[1] if "::" in component_id else "",
             })
-
-    # Спрашивали обычный пакет; module/flatpak-стрим — другой продукт с тем
-    # же именем. Берём стримы, только если ничего другого под этим именем нет.
-    plain = [c for c in candidates if not c["variant"]]
-    streams = sorted({c["variant"] for c in candidates if c["variant"]})
-    if plain:
-        if streams:
-            logger.debug("%s %s: стримы %s не учитываются", cve, component, ", ".join(streams))
-        candidates = plain
-    elif streams:
-        logger.debug("%s %s: обычного пакета нет, взяты стримы %s", cve, component,
-                     ", ".join(streams))
 
     if not candidates:
         # Отсутствие в VEX — не «Not affected»: Red Hat перечисляет только то,
-        # что оценил. Если есть соседние минорные потоки — говорим об этом.
+        # что оценил. Подсказка: какие варианты пакета есть под этой версией
+        # (может, нужен маппинг на стрим), иначе — в каких соседних потоках
+        # есть нужный вариант.
         state = NOT_LISTED
-        if siblings:
+        if variants:
+            state += " (streams: " + ", ".join(sorted(variants)) + ")"
+        elif siblings:
             state += " (present for " + ", ".join(sorted(siblings)) + ")"
         return Verdict(state=state, severity=index["severity"])
 
@@ -285,6 +304,9 @@ def lookup(index: Optional[dict], component: str, rhel: str) -> Verdict:
     if len(states) > 1:
         logger.debug("%s %s: несколько вердиктов под RHEL %s (%s), взят %s",
                      cve, component, rhel, ", ".join(states), best["state"])
+    if variants:
+        logger.debug("%s %s: другие варианты пакета не учитываются: %s",
+                     cve, component, ", ".join(sorted(variants)))
     divergent = sorted(v for v, found_states in siblings.items()
                        if found_states - {best["state"]})
     if divergent:
