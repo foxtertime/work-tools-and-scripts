@@ -42,6 +42,17 @@ RHEL_FAMILIES = {
     "rhel_aus", "rhel_tus", "rhel_els", "rhel_eus_long_life",
     "rhel_mission_critical", "rhel_extras_rt",
 }
+# Репозиторий — часть CPE после «::». Надстройки — отдельные продукты со
+# своими сборками под CPE семейства RHEL (Fast Datapath: libreswan-…el9fdp),
+# за RHEL их выдавать нельзя. Неизвестный репозиторий учитывается как RHEL,
+# но с предупреждением: новая надстройка должна быть видна в журнале, а не
+# найтись случайно по чужому NVR в таблице.
+RHEL_REPOS = {
+    "", "baseos", "appstream", "crb", "codeready_builder", "nfv", "realtime",
+    "highavailability", "resilientstorage", "sap", "sap_hana", "supplementary",
+    "server", "client", "workstation", "computenode",
+}
+LAYERED_REPOS = {"fastdatapath"}
 CPE_RE = re.compile(r"cpe:/[oah]:redhat:([a-z_0-9]+):(\d+(?:\.\d+)*)")
 ARCH_SUFFIX = re.compile(
     r"\.(src|noarch|i[3-6]86|x86_64|ia64|aarch64|armv7hl|armv7hnl|"
@@ -142,12 +153,38 @@ def _remediation_index(vuln):
 # --------------------------------------------------------------------------
 
 def _rhel_version(cpe):
-    """'cpe:/o:redhat:enterprise_linux:9::baseos' → '9'; не RHEL → None."""
+    """'cpe:/o:redhat:enterprise_linux:9::baseos' → '9'; не RHEL → None.
+
+    Надстройка (…:9::fastdatapath) — тоже None: это другой продукт.
+    """
     match = CPE_RE.match(cpe or "")
     if not match:
         return None
     family, version = match.groups()
-    return version if family in RHEL_FAMILIES else None
+    if family not in RHEL_FAMILIES or _repo(cpe) in LAYERED_REPOS:
+        return None
+    return version
+
+
+def _repo(cpe):
+    """'cpe:/a:redhat:enterprise_linux:9::appstream' → 'appstream'; без «::» — ''."""
+    return cpe.split("::", 1)[1].split(":", 1)[0] if "::" in cpe else ""
+
+
+# Неизвестные репозитории, о которых уже предупредили: одно предупреждение
+# на репозиторий за прогон, а не на каждую строку таблицы.
+_warned_repos = set()
+
+
+def _warn_unknown_repo(cpe, platform_id, cve, component, rhel):
+    repo = _repo(cpe)
+    if repo in RHEL_REPOS or repo in _warned_repos:
+        return
+    _warned_repos.add(repo)
+    logger.warning("%s %s: продукт %s (%s) — неизвестный репозиторий «%s» под RHEL %s, "
+                   "учтён как RHEL; если это отдельный продукт (как Fast Datapath), "
+                   "его надо исключить в vex.LAYERED_REPOS",
+                   cve, component, platform_id, cpe, repo, rhel)
 
 
 def _split_product(product_id, rels):
@@ -264,10 +301,16 @@ def lookup(index: Optional[dict], component: str, rhel: str,
     for bucket, product_ids in vuln.get("product_status", {}).items():
         for product_id in product_ids:
             platform_id, component_id = _split_product(product_id, index["rels"])
-            found = _rhel_version(index["cpes"].get(platform_id))
+            cpe = index["cpes"].get(platform_id) or ""
+            found = _rhel_version(cpe)
+            same_name = (_component_name(component_id, index["pkgs"]).lower()
+                         == component.lower())
             if found is None:
+                if same_name and _repo(cpe) in LAYERED_REPOS:
+                    logger.debug("%s %s: продукт %s (%s) — надстройка, не RHEL",
+                                 cve, component, platform_id, cpe)
                 continue
-            if _component_name(component_id, index["pkgs"]).lower() != component.lower():
+            if not same_name:
                 continue
             variant = component_id.split("::", 1)[1] if "::" in component_id else ""
             if not _wanted(variant, stream):
@@ -279,6 +322,7 @@ def lookup(index: Optional[dict], component: str, rhel: str,
                 if found.split(".")[0] == rhel.split(".")[0]:
                     siblings.setdefault(found, set()).add(state)
                 continue
+            _warn_unknown_repo(cpe, platform_id, cve, component, rhel)
             url, date = _errata_for(product_id, rem_index)
             candidates.append({
                 "state": state, "url": url, "date": date,

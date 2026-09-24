@@ -5,7 +5,9 @@ import tempfile
 import unittest
 from unittest import mock
 
-from tests.fakes import APPSTREAM96, BASEOS96, EUS92, RHEL9, RHEL_AI, csaf, pid
+from tests.fakes import (APPSTREAM96, BASEOS96, EUS92, FASTDATAPATH9, RHEL9, RHEL_AI,
+                         UNKNOWN_REPO9, csaf, pid)
+from vulnsheet import vex
 from vulnsheet.vex import (NO_RECORD, Verdict, VexError, VexSettings, build_index,
                            fetch, fetch_all, lookup, parse_rhel, prepare_cache, vex_url)
 
@@ -109,6 +111,56 @@ class LookupTest(unittest.TestCase):
 
     def test_no_document_means_no_record(self):
         self.assertEqual(lookup(None, "vim", "9"), Verdict(state=NO_RECORD))
+
+
+class RhelRepositoryTest(unittest.TestCase):
+    """Часть CPE после «::» — репозиторий; надстройки вроде Fast Datapath за
+    RHEL не считаются, неизвестный репозиторий учитывается с предупреждением."""
+    FDP_VIM = "vim-2:9.1.0-1.el9fdp.x86_64"
+    FDP_RHSA = "https://access.redhat.com/errata/RHSA-2026:9999"
+
+    def setUp(self):
+        vex._warned_repos.clear()
+        self.addCleanup(vex._warned_repos.clear)
+        self.warning = mock.patch.object(vex.logger, "warning").start()
+        self.addCleanup(mock.patch.stopall)
+
+    def test_fast_datapath_is_not_rhel(self):
+        # FDP первым в документе и errata той же даты — раньше побеждал он
+        doc = csaf(CVE, [("fixed", FASTDATAPATH9, self.FDP_VIM),
+                         ("fixed", APPSTREAM96, FIXED_VIM)],
+                   remediations=[vendor_fix(pid(FASTDATAPATH9, self.FDP_VIM), url=self.FDP_RHSA),
+                                 vendor_fix(pid(APPSTREAM96, FIXED_VIM))])
+        verdict = lookup(build_index(doc), "vim", "9")
+        self.assertEqual((verdict.advisory_url, verdict.fixed_nvr),
+                         (RHSA, "vim-8.2.2637-22.el9_6"))
+        self.warning.assert_not_called()
+
+    def test_fast_datapath_only_is_not_listed(self):
+        doc = csaf(CVE, [("fixed", FASTDATAPATH9, self.FDP_VIM)],
+                   remediations=[vendor_fix(pid(FASTDATAPATH9, self.FDP_VIM))])
+        self.assertEqual(lookup(build_index(doc), "vim", "9").state, "not listed")
+
+    def test_unknown_repository_counts_as_rhel_and_warns_once(self):
+        doc = csaf(CVE, [("fixed", UNKNOWN_REPO9, FIXED_VIM)],
+                   remediations=[vendor_fix(pid(UNKNOWN_REPO9, FIXED_VIM))])
+        index = build_index(doc)
+        self.assertEqual(lookup(index, "vim", "9").state, "Fixed")
+        lookup(index, "vim", "9")
+        self.assertEqual(self.warning.call_count, 1)
+        self.assertIn("something_new", self.warning.call_args.args[0] % self.warning.call_args.args[1:])
+
+    def test_unknown_repository_of_other_package_is_silent(self):
+        doc = csaf(CVE, [("fixed", UNKNOWN_REPO9, "bash-0:5.1-1.el9.x86_64"),
+                         ("fixed", APPSTREAM96, FIXED_VIM)])
+        lookup(build_index(doc), "vim", "9")
+        self.warning.assert_not_called()
+
+    def test_known_repositories_are_silent(self):
+        doc = csaf(CVE, [("fixed", APPSTREAM96, FIXED_VIM), ("fixed", BASEOS96, FIXED_VIM),
+                         ("known_affected", RHEL9, "vim")])
+        lookup(build_index(doc), "vim", "9")
+        self.warning.assert_not_called()
 
 
 NGINX_FIXED = "nginx-2:1.20.1-22.el9_6.x86_64"

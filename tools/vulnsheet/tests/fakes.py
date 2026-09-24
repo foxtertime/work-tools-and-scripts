@@ -63,6 +63,10 @@ APPSTREAM96 = ("AppStream-9.6.0.Z.MAIN", "cpe:/a:redhat:enterprise_linux:9::apps
 BASEOS96 = ("BaseOS-9.6.0.Z.MAIN", "cpe:/o:redhat:enterprise_linux:9::baseos")
 EUS92 = ("AppStream-9.2.0.Z.EUS", "cpe:/a:redhat:rhel_eus:9.2::appstream")
 RHEL_AI = ("RHEL-AI-9", "cpe:/a:redhat:enterprise_linux_ai:9")
+# Надстройка со своими сборками (el9fdp) под CPE семейства RHEL — не RHEL.
+FASTDATAPATH9 = ("9Base-Fast-Datapath", "cpe:/o:redhat:enterprise_linux:9::fastdatapath")
+# Репозиторий, которого тулза не знает.
+UNKNOWN_REPO9 = ("9Base-Something", "cpe:/o:redhat:enterprise_linux:9::something_new")
 
 
 def pid(platform, component):
