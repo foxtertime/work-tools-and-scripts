@@ -39,8 +39,8 @@ def read(path: str) -> List[Record]:
         raise TableError("%s: пустой файл, нет заголовка" % path)
     header, rows = records[0], records[1:]
     if [cell.strip() for cell in header.cells] != COLUMNS:
-        raise TableError("%s: запись %d: заголовок не как у vulnsheet"
-                         % (path, header.number))
+        raise TableError("%s: запись %d: заголовок не как у vulnsheet "
+                         "(разделитель ;, UTF-8?)" % (path, header.number))
     for record in rows:
         if len(record.cells) != len(COLUMNS):
             raise TableError("%s: запись %d: ячеек %d, ожидается %d"
