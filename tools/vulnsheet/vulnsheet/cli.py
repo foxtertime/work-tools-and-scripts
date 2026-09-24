@@ -14,8 +14,10 @@ from .tasks import parse
 logger = logging.getLogger(__name__)
 
 EXIT_OK = 0
-# CSV записан, но есть отбраковка, ERROR koji, fetch error, либо читатель
-# оборвал stdout (broken pipe) — таблица дописана не до конца
+# CSV записан, но есть отбраковка, ERROR koji, fetch error (в том числе там,
+# где из-за сбоя оставлены прежние koji или VEX), строки таблицы, по которым
+# нечего спрашивать, либо читатель оборвал stdout (broken pipe) — таблица
+# дописана не до конца
 EXIT_PARTIAL = 1
 EXIT_FATAL = 2
 
@@ -224,6 +226,11 @@ def _run(args) -> int:
         for reject in rejects:
             logger.warning("блок %d «%s» отбракован: %s", reject.number,
                            reject.text.split("\n", 1)[0].strip(), reject.reason)
+        # режим 3: если из блоков не осталось ни одного годного, синхронизация
+        # молча пометила бы Missing вообще все строки таблицы
+        if args.table is not None and not tasks:
+            raise _Fatal("в блоках нет ни одного годного блока — синхронизация "
+                        "пометила бы все строки Missing")
 
     wanted = merge.pairs(records, tasks)  # пара на строку выхода, с повторами
     unique = list(dict.fromkeys(wanted))

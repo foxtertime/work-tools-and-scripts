@@ -424,6 +424,18 @@ class UpdateModesTest(CliCase):
         self.assertIn("ни одного блока", self.log)
         self.connect.assert_not_called()
 
+    def test_sync_with_no_valid_blocks_is_fatal_and_keeps_table(self):
+        table = self.write_table(OLD_ROW, name="report.csv")
+        code = self.run_main("--table", table, "--blocks", self.write_blocks(BAD + "\n"),
+                             "-o", table)
+        self.assertEqual(code, EXIT_FATAL)
+        self.assertIn("в блоках нет ни одного годного блока", self.log)
+        self.assertNotIn("Traceback", self.log)
+        self.connect.assert_not_called()
+        with open(table, encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), HEADER + "\n" + OLD_ROW + "\n")
+        self.assertFalse(os.path.exists(self.path("report.rejected.txt")))
+
     def test_broken_table_is_fatal_and_keeps_output(self):
         with open(self.path("report.csv"), "w", encoding="utf-8") as handle:
             handle.write("прошлый отчёт\n")
