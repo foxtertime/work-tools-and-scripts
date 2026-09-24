@@ -39,12 +39,13 @@ class FakeKojiSession:
     """koji.ClientSession в объёме, нужном kojiclient: getTag и multicall."""
 
     def __init__(self, builds=None, errors=None, tags=("sl9",),
-                 hub_down=False, multicall_down=False):
+                 hub_down=False, multicall_down=False, baseurl="https://koji.example.com/kojihub"):
         self.builds = dict(builds or {})
         self.errors = dict(errors or {})
         self.tags = set(tags)
         self.hub_down = hub_down
         self.multicall_down = multicall_down
+        self.baseurl = baseurl
         self.calls = []
 
     def getTag(self, tag):

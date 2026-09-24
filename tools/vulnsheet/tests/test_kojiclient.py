@@ -39,6 +39,13 @@ class LatestBuildsTest(unittest.TestCase):
         with self.assertRaises(KojiError):
             latest_builds(FakeKojiSession(multicall_down=True), "sl9", ["vim"])
 
+    def test_debug_log_names_the_hub(self):
+        session = FakeKojiSession(builds={"vim": "vim-8.2-1.sl9"})
+        with self.assertLogs("vulnsheet", "DEBUG") as caught:
+            latest_builds(session, "sl9", ["vim"])
+        joined = "\n".join(caught.output)
+        self.assertIn("https://koji.example.com/kojihub", joined)
+
 
 class ConnectTest(unittest.TestCase):
     def test_missing_koji_module_is_reported(self):

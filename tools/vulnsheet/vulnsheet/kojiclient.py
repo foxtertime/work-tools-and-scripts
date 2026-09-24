@@ -39,8 +39,9 @@ def latest_builds(session, tag: str, packages: Iterable[str]) -> Dict[str, str]:
         raise
     except Exception as exc:
         raise KojiError("хаб не ответил по тегу %s: %s" % (tag, exc))
-    logger.debug("getLatestBuilds %s: %d пакетов за %.2f с", tag, len(packages),
-                 time.monotonic() - started)
+    hub = getattr(session, "baseurl", "?")
+    elapsed = time.monotonic() - started
+    logger.debug("getLatestBuilds %s (хаб %s): %d пакетов за %.2f с", tag, hub, len(packages), elapsed)
 
     result = {}
     for pkg, call in zip(packages, calls):
