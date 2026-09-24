@@ -866,10 +866,10 @@ vex_streams:
 - [ ] **Step 5: Убедиться, что тесты проходят**
 
 Run: `cd tools/vulnsheet && python3 -m unittest tests.test_config -v`
-Expected: OK, 22 теста (без PyYAML 16 из них — `skipped`).
+Expected: OK, 20 тестов (без PyYAML 14 из них — `skipped`).
 
 Run: `cd tools/vulnsheet && python3 -m unittest discover -s tests -v`
-Expected: OK, 117 тестов.
+Expected: OK, 115 тестов.
 
 - [ ] **Step 6: Commit**
 
@@ -925,6 +925,14 @@ vex_streams:
   "9":
     nginx: nginx:1.26
 """
+```
+
+В `CliCase.setUp`, сразу после строки с `mock.patch.dict(os.environ, {"XDG_CACHE_HOME": …}).start()`, добавить:
+
+```python
+        # настоящий конфиг из окружения того, кто гоняет тесты, сюда не ходит;
+        # patch.dict вернёт переменную на место после теста
+        os.environ.pop("VULNSHEET_CONFIG", None)
 ```
 
 В класс `FatalTest` добавить:
@@ -1116,7 +1124,7 @@ def _settings(args):
 - [ ] **Step 4: Убедиться, что тесты проходят**
 
 Run: `cd tools/vulnsheet && python3 -m unittest discover -s tests -v`
-Expected: OK, 126 тестов (117 + 1 в `FatalTest` + 8 в `ConfigTest`).
+Expected: OK, 124 теста (115 + 1 в `FatalTest` + 8 в `ConfigTest`).
 
 Run: `cd tools/vulnsheet && python3 -m vulnsheet --help`
 Expected: в справке есть `--config`, у `--rhel`/`--koji-url`/`--tag` — «или … в конфиге».
@@ -1309,7 +1317,7 @@ Run из корня репозитория — корневые проверки
 (cd tools/vulnsheet && python3 -m unittest discover -s tests)
 ```
 
-Expected: ни одной строки `NOT EXECUTABLE` / `MISSING` / `BROKEN` (ссылка на `vulnsheet.example.yaml` в README резолвится); тесты — `OK`, 126.
+Expected: ни одной строки `NOT EXECUTABLE` / `MISSING` / `BROKEN` (ссылка на `vulnsheet.example.yaml` в README резолвится); тесты — `OK`, 124.
 
 - [ ] **Step 6: Commit**
 
