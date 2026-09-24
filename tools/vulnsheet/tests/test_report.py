@@ -23,7 +23,7 @@ class RowTest(unittest.TestCase):
             "Task ID", "CVE ID", "Task state", "Task date", "Исполнитель",
             "Компонент", "SL NVR (latest build)", "RHEL NVR (if fixed)",
             "Fix date", "RHEL state", "RHEL severity", "RHEL CVSS",
-            "Advisory (RHSA)", "CVE Link", "Комментарий"])
+            "Advisory (RHSA)", "CVE link", "Комментарий"])
 
     def test_example_from_the_task(self):
         verdict = Verdict(state="Under investigation", severity="Moderate", cvss="5.5")
@@ -47,7 +47,7 @@ class RowTest(unittest.TestCase):
     def test_markers_pass_through(self):
         cells = self.cells("NOT_FOUND", Verdict(state="no VEX record"))
         self.assertEqual((cells["SL NVR (latest build)"], cells["RHEL state"],
-                          cells["RHEL severity"], cells["CVE Link"]),
+                          cells["RHEL severity"], cells["CVE link"]),
                          ("NOT_FOUND", "no VEX record", "-",
                           "https://access.redhat.com/security/cve/CVE-2026-73070"))
 
@@ -85,7 +85,7 @@ class GroupsTest(unittest.TestCase):
         self.assertEqual(COLUMNS[report.VEX], [
             "RHEL NVR (if fixed)", "Fix date", "RHEL state", "RHEL severity",
             "RHEL CVSS", "Advisory (RHSA)"])
-        self.assertEqual(COLUMNS[report.LINK], ["CVE Link"])
+        self.assertEqual(COLUMNS[report.LINK], ["CVE link"])
         self.assertEqual(COLUMNS[report.COMMENT], ["Комментарий"])
 
     def test_row_fields_land_on_named_indices(self):

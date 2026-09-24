@@ -31,7 +31,7 @@
 | Задача | Task ID, CVE ID, Task state, Task date, Исполнитель, Компонент |
 | koji | SL NVR (latest build) |
 | VEX | RHEL NVR (if fixed), Fix date, RHEL state, RHEL severity, RHEL CVSS, Advisory (RHSA) |
-| Ссылка | CVE Link |
+| Ссылка | CVE link |
 | Комментарий | Комментарий |
 
 Что с группой делает каждый режим:

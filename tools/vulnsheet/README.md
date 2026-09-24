@@ -113,7 +113,7 @@ python3 -m vulnsheet --config vulnsheet.yaml --table report.csv --blocks tasks.t
 | Task ID … Компонент | из блока | как есть | из блока | как есть, `Task state` → `Missing` | из блока |
 | `SL NVR` | koji | koji | koji | koji | koji |
 | RHEL NVR … Advisory | VEX | VEX | VEX | VEX | VEX |
-| `CVE Link` | по CVE | по CVE | по CVE | по CVE | по CVE |
+| `CVE link` | по CVE | по CVE | по CVE | по CVE | по CVE |
 | `Комментарий` | `-` | как есть | как есть | как есть | `-` |
 
 - **Синхронизация** сопоставляет строку и блок по тройке (Task ID, CVE ID,
@@ -239,7 +239,7 @@ stdout это не влияет.
 | `RHEL severity` | общая severity CVE по Red Hat |
 | `RHEL CVSS` | базовая оценка CVSS (v4, иначе v3) |
 | `Advisory (RHSA)` | ссылка на errata; только при `Fixed` |
-| `CVE Link` | `https://access.redhat.com/security/cve/<CVE ID>` |
+| `CVE link` | `https://access.redhat.com/security/cve/<CVE ID>` |
 | `Комментарий` | всегда `-` |
 
 Маркеры в `RHEL state`:

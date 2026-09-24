@@ -17,7 +17,7 @@ COLUMNS = [
     "Task ID", "CVE ID", "Task state", "Task date", "Исполнитель",
     "Компонент", "SL NVR (latest build)", "RHEL NVR (if fixed)",
     "Fix date", "RHEL state", "RHEL severity", "RHEL CVSS",
-    "Advisory (RHSA)", "CVE Link", "Комментарий",
+    "Advisory (RHSA)", "CVE link", "Комментарий",
 ]
 
 MISSING = "Missing"  # Task state строки, чьей задачи больше нет в блоках
@@ -28,7 +28,7 @@ DEVELOPER = slice(0, 5)   # Разработчик … Принятая мера
 TASK = slice(5, 11)       # Task ID … Компонент
 KOJI = slice(11, 12)      # SL NVR
 VEX = slice(12, 18)       # RHEL NVR … Advisory
-LINK = slice(18, 19)      # CVE Link
+LINK = slice(18, 19)      # CVE link
 COMMENT = slice(19, 20)   # Комментарий
 
 TASK_ID = COLUMNS.index("Task ID")

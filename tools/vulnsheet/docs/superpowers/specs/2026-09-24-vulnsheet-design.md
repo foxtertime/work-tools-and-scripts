@@ -174,7 +174,7 @@ tools/vulnsheet/
 | 16 | `RHEL severity` | VEX |
 | 17 | `RHEL CVSS` | VEX |
 | 18 | `Advisory (RHSA)` | VEX, только при `Fixed`; полный URL errata |
-| 19 | `CVE Link` | `https://access.redhat.com/security/cve/<CVE ID>` |
+| 19 | `CVE link` | `https://access.redhat.com/security/cve/<CVE ID>` |
 | 20 | `Комментарий` | `-` |
 
 `RHEL state` — одно из: `Fixed`, `Affected`, `Will not fix`, `Fix deferred`,
