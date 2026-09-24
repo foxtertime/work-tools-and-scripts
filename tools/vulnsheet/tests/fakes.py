@@ -55,3 +55,45 @@ class FakeKojiSession:
 
     def multicall(self, strict=False):
         return _Multicall(self)
+
+
+# Платформы CSAF: (product_id, cpe). Версию RHEL тулза берёт из cpe.
+RHEL9 = ("red_hat_enterprise_linux_9", "cpe:/o:redhat:enterprise_linux:9")
+APPSTREAM96 = ("AppStream-9.6.0.Z.MAIN", "cpe:/a:redhat:enterprise_linux:9::appstream")
+BASEOS96 = ("BaseOS-9.6.0.Z.MAIN", "cpe:/o:redhat:enterprise_linux:9::baseos")
+EUS92 = ("AppStream-9.2.0.Z.EUS", "cpe:/a:redhat:rhel_eus:9.2::appstream")
+RHEL_AI = ("RHEL-AI-9", "cpe:/a:redhat:enterprise_linux_ai:9")
+
+
+def pid(platform, component):
+    """Составной product_id, каким его пишет Red Hat: платформа:компонент."""
+    return "%s:%s" % (platform[0], component)
+
+
+def csaf(cve, statuses, severity="Moderate", scores=(), remediations=()):
+    """Минимальный CSAF/VEX-документ.
+
+    statuses — [(bucket, платформа, component_id)], где bucket — ключ
+    product_status (fixed, known_affected, known_not_affected,
+    under_investigation).
+    """
+    platforms, relationships, status = {}, [], {}
+    for bucket, platform, component in statuses:
+        platforms[platform[0]] = platform[1]
+        composite = pid(platform, component)
+        relationships.append({
+            "full_product_name": {"product_id": composite},
+            "relates_to_product_reference": platform[0],
+            "product_reference": component,
+        })
+        status.setdefault(bucket, []).append(composite)
+    branches = [{"product": {"product_id": product_id,
+                             "product_identification_helper": {"cpe": cpe}}}
+                for product_id, cpe in platforms.items()]
+    return {
+        "document": {"aggregate_severity": {"text": severity}},
+        "product_tree": {"branches": branches, "relationships": relationships},
+        "vulnerabilities": [{"cve": cve, "product_status": status,
+                             "scores": list(scores),
+                             "remediations": list(remediations)}],
+    }
