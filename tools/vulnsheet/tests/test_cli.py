@@ -38,7 +38,7 @@ class CliCase(unittest.TestCase):
         self.addCleanup(mock.patch.stopall)
         self.log = ""
 
-    def _download(self, url):
+    def _download(self, url, timeout=None):
         doc = self.docs.get(url)
         if isinstance(doc, Exception):
             raise doc

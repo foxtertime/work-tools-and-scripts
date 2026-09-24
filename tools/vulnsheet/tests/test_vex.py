@@ -6,7 +6,8 @@ import unittest
 from unittest import mock
 
 from tests.fakes import APPSTREAM96, BASEOS96, EUS92, RHEL9, RHEL_AI, csaf, pid
-from vulnsheet.vex import NO_RECORD, Verdict, VexError, build_index, fetch, fetch_all, lookup, parse_rhel, prepare_cache, vex_url
+from vulnsheet.vex import (NO_RECORD, Verdict, VexError, VexSettings, build_index,
+                           fetch, fetch_all, lookup, parse_rhel, prepare_cache, vex_url)
 
 CVE = "CVE-2026-1000"
 FIXED_VIM = "vim-2:8.2.2637-22.el9_6.x86_64"
@@ -141,19 +142,19 @@ class FetchTest(unittest.TestCase):
 
     def test_downloads_once_then_reads_cache(self):
         with mock.patch("vulnsheet.vex.download", return_value=BODY) as download:
-            self.assertEqual(fetch(CVE, self.cache), DOC)
-            self.assertEqual(fetch(CVE, self.cache), DOC)
-        download.assert_called_once_with(vex_url(CVE))
+            self.assertEqual(fetch(CVE, VexSettings(cache_dir=self.cache)), DOC)
+            self.assertEqual(fetch(CVE, VexSettings(cache_dir=self.cache)), DOC)
+        download.assert_called_once_with(vex_url(CVE), 30)
 
     def test_404_means_no_record(self):
         with mock.patch("vulnsheet.vex.download", return_value=None):
-            self.assertIsNone(fetch(CVE, self.cache))
+            self.assertIsNone(fetch(CVE, VexSettings(cache_dir=self.cache)))
 
     def test_corrupt_cache_falls_back_to_network(self):
         with open(self.cached(), "w") as handle:
             handle.write("{оборвано")
         with mock.patch("vulnsheet.vex.download", return_value=BODY) as download:
-            self.assertEqual(fetch(CVE, self.cache), DOC)
+            self.assertEqual(fetch(CVE, VexSettings(cache_dir=self.cache)), DOC)
         download.assert_called_once()
 
     def test_stale_cache_is_refetched(self):
@@ -161,7 +162,7 @@ class FetchTest(unittest.TestCase):
             json.dump({"старый": True}, handle)
         os.utime(self.cached(), (0, 0))
         with mock.patch("vulnsheet.vex.download", return_value=BODY):
-            self.assertEqual(fetch(CVE, self.cache), DOC)
+            self.assertEqual(fetch(CVE, VexSettings(cache_dir=self.cache)), DOC)
 
     def test_retries_then_gives_up(self):
         with mock.patch("vulnsheet.vex.download", side_effect=OSError("сеть")) as download:
@@ -174,6 +175,21 @@ class FetchTest(unittest.TestCase):
         with mock.patch("vulnsheet.vex.download", side_effect=[OSError("сеть"), BODY]):
             self.assertEqual(fetch(CVE), DOC)
 
+    def test_settings_reach_download_and_retries(self):
+        with mock.patch("vulnsheet.vex.download", side_effect=OSError("сеть")) as download:
+            with self.assertRaises(VexError):
+                fetch(CVE, VexSettings(retries=2, timeout=5))
+        self.assertEqual([c.args for c in download.call_args_list],
+                         [(vex_url(CVE), 5), (vex_url(CVE), 5)])
+        self.assertEqual([c.args for c in self.sleep.call_args_list], [(1,)])
+
+    def test_zero_ttl_never_reads_cache(self):
+        settings = VexSettings(cache_dir=self.cache, cache_ttl=0)
+        with mock.patch("vulnsheet.vex.download", return_value=BODY) as download:
+            fetch(CVE, settings)
+            fetch(CVE, settings)
+        self.assertEqual(download.call_count, 2)
+
 
 class FetchAllTest(unittest.TestCase):
     def setUp(self):
@@ -181,7 +197,7 @@ class FetchAllTest(unittest.TestCase):
         self.addCleanup(mock.patch.stopall)
 
     def test_indices_failures_and_missing_records(self):
-        def download(url):
+        def download(url, timeout):
             if "1002" in url:
                 raise OSError("сеть")
             return BODY if "1000" in url else None
@@ -189,7 +205,7 @@ class FetchAllTest(unittest.TestCase):
         with mock.patch("vulnsheet.vex.download", side_effect=download) as fake:
             with self.assertLogs("vulnsheet", "WARNING") as caught:
                 indices, failures = fetch_all(
-                    [CVE, "CVE-2026-1001", "CVE-2026-1002", CVE], jobs=2)
+                    [CVE, "CVE-2026-1001", "CVE-2026-1002", CVE], VexSettings(jobs=2))
         self.assertEqual(sorted(indices), [CVE, "CVE-2026-1001"])
         self.assertIsNone(indices["CVE-2026-1001"])
         self.assertEqual(lookup(indices[CVE], "vim", "9").state, "Under investigation")
@@ -209,7 +225,7 @@ class FetchAllTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, cache)
         with mock.patch("vulnsheet.vex.download", return_value=b'{"document": {}}'):
             with self.assertLogs("vulnsheet", "WARNING"):
-                fetch_all([CVE], cache)
+                fetch_all([CVE], VexSettings(cache_dir=cache))
         self.assertFalse(os.path.exists(os.path.join(cache, "cve-2026-1000.json")))
 
 

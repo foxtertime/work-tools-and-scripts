@@ -162,7 +162,8 @@ def _run(args) -> int:
         if tasks:
             session = kojiclient.connect(args.koji_url)
             nvrs = kojiclient.latest_builds(session, args.tag, packages)
-            indices, failures = vex.fetch_all(cves, vex.prepare_cache(_cache_dir()))
+            settings = vex.VexSettings(cache_dir=vex.prepare_cache(_cache_dir()))
+            indices, failures = vex.fetch_all(cves, settings)
         builds = [nvrs[t.component] for t in tasks]
         verdicts = [vex.Verdict(state=vex.FETCH_ERROR) if t.cve in failures
                     else vex.lookup(indices[t.cve], t.component, args.rhel)

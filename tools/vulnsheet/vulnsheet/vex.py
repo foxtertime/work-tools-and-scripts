@@ -308,16 +308,25 @@ class VexError(Exception):
     """Документ VEX не получен после всех попыток."""
 
 
+class VexSettings(NamedTuple):
+    """Настройки загрузки VEX; значения по умолчанию — встроенные."""
+    cache_dir: Optional[str] = None  # None — без кэша
+    cache_ttl: int = CACHE_TTL       # секунд; 0 — кэш не читать
+    jobs: int = JOBS
+    retries: int = RETRIES
+    timeout: float = TIMEOUT         # секунд на запрос
+
+
 def vex_url(cve: str) -> str:
     return VEX_URL.format(year=cve.split("-")[1], cve=cve.lower())
 
 
-def download(url: str) -> Optional[bytes]:
+def download(url: str, timeout: float = TIMEOUT) -> Optional[bytes]:
     """Тело ответа; None при 404 (у Red Hat нет записи). Остальное — исключение."""
     started = time.monotonic()
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read()
             code = response.status
     except urllib.error.HTTPError as exc:
@@ -376,26 +385,26 @@ def prepare_cache(path: str) -> Optional[str]:
     return path
 
 
-def fetch(cve: str, cache_dir: Optional[str] = None,
-          ttl: int = CACHE_TTL) -> Optional[dict]:
+def fetch(cve: str, settings: VexSettings = VexSettings()) -> Optional[dict]:
     """Документ VEX; None, если у Red Hat записи нет; VexError — не получен."""
-    cached = os.path.join(cache_dir, cve.lower() + ".json") if cache_dir else None
+    cached = (os.path.join(settings.cache_dir, cve.lower() + ".json")
+              if settings.cache_dir else None)
     if cached:
-        doc = _read_cache(cached, ttl)
+        doc = _read_cache(cached, settings.cache_ttl)
         if doc is not None:
             logger.debug("%s: из кэша", cve)
             return doc
     url = vex_url(cve)
     last = None
-    for attempt in range(RETRIES):
+    for attempt in range(settings.retries):
         try:
-            body = download(url)
+            body = download(url, settings.timeout)
             if body is None:
                 return None
             doc = json.loads(body)
         except Exception as exc:  # сеть и мусор в ответе — повторяем
             last = exc
-            if attempt < RETRIES - 1:
+            if attempt < settings.retries - 1:
                 time.sleep(2 ** attempt)
             continue
         if cached:
@@ -404,8 +413,8 @@ def fetch(cve: str, cache_dir: Optional[str] = None,
     raise VexError("%s: %s" % (url, last))
 
 
-def fetch_all(cves: Iterable[str], cache_dir: Optional[str] = None,
-              jobs: int = JOBS) -> Tuple[Dict[str, Optional[dict]], Dict[str, str]]:
+def fetch_all(cves: Iterable[str], settings: VexSettings = VexSettings()
+              ) -> Tuple[Dict[str, Optional[dict]], Dict[str, str]]:
     """Индексы документов по уникальным CVE и ошибки загрузки.
 
     Индекс None — у Red Hat записи нет. CVE с ошибкой в индексы не попадает.
@@ -419,7 +428,7 @@ def fetch_all(cves: Iterable[str], cache_dir: Optional[str] = None,
     def load(cve):
         nonlocal done
         try:
-            doc = fetch(cve, cache_dir)
+            doc = fetch(cve, settings)
         except Exception as exc:
             with lock:
                 failures[cve] = str(exc)
@@ -432,7 +441,7 @@ def fetch_all(cves: Iterable[str], cache_dir: Optional[str] = None,
                     failures[cve] = str(exc)
                 logger.warning("VEX для %s не получен: %s", cve, exc)
                 # уже успел лечь в кэш при чтении — не отравлять его на час
-                _evict_cache(cache_dir, cve)
+                _evict_cache(settings.cache_dir, cve)
             else:
                 with lock:
                     indices[cve] = index
@@ -441,6 +450,6 @@ def fetch_all(cves: Iterable[str], cache_dir: Optional[str] = None,
             if done % step == 0 or done == len(cves):
                 logger.info("VEX: %d/%d CVE", done, len(cves))
 
-    with ThreadPoolExecutor(max_workers=max(1, jobs), thread_name_prefix="w") as pool:
+    with ThreadPoolExecutor(max_workers=max(1, settings.jobs), thread_name_prefix="w") as pool:
         list(pool.map(load, cves))
     return indices, failures
