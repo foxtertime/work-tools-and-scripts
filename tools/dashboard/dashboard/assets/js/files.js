@@ -16,7 +16,7 @@
   function create(deps) {
     const store = deps.store, toasts = deps.toasts;
     const input = deps.dom.input, dropZone = deps.dom.drop;
-    const pickBtn = deps.dom.pick;
+    const pickBtn = deps.dom.pick, screen = deps.dom.screen;
 
     function loadFiles(list) {
       let errors = [], pending = list.length;
@@ -78,6 +78,15 @@
       return Array.from(data.types || []).indexOf('Files') !== -1;
     }
 
+    /* Пока раздел билдов скрыт, документные события не наши: брошенный
+       файл там ждут другие руки, а разбор его как снапшота дал бы отказ
+       про формат, которого человек не называл.
+
+       Спрашиваем секцию, а не видимость самой зоны: #tab-empty скрывается,
+       как только снапшоты подгружены, и проверка по зоне отняла бы
+       работающий сегодня бросок на страницу с таблицей. */
+    function mine() { return !screen || !screen.hidden; }
+
     pickBtn.addEventListener('click', openPicker);
 
     input.addEventListener('change', () => {
@@ -91,17 +100,18 @@
        умолчанию открывает брошенный файл вместо страницы, и без
        preventDefault на dragover дашборд просто заменился бы содержимым JSON. */
     document.addEventListener('dragover', (e) => {
-      if (!hasFiles(e)) return;
+      if (!mine() || !hasFiles(e)) return;
       e.preventDefault();
       markOver(true);
     });
     document.addEventListener('dragleave', (e) => {
       /* Уход за пределы окна: внутри страницы dragleave приходит на каждой
          границе, и снимать подсветку по ним значило бы мигать ею. */
+      if (!mine()) return;
       if (!e.relatedTarget) markOver(false);
     });
     document.addEventListener('drop', (e) => {
-      if (!hasFiles(e)) return;
+      if (!mine() || !hasFiles(e)) return;
       e.preventDefault();
       markOver(false);
       loadFiles(e.dataTransfer.files);

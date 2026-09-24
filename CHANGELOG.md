@@ -7,6 +7,24 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-25
+
+### Добавлено
+
+- `dashboard` (3.6.0): у страницы появились разделы — островок слева
+  переключает Builds, всё нынешнее содержимое, и CVE, пока заглушку под
+  таблицу уязвимостей в xlsx.
+- `vulnsheet` (1.0.0): таблица задач по уязвимостям — разбирает блоки задач
+  из тасктрекера, для каждой пары «CVE — компонент» берёт статус, severity,
+  CVSS и данные фикса из Red Hat CSAF/VEX и последний билд из koji-тега и
+  пишет CSV из двадцати колонок. Битые блоки дословно уходят в отдельный
+  файл. Хаб, тег, версия RHEL и стримы VEX для пакетов из модулей Red Hat
+  задаются в YAML-конфиге, там же — имена бинарных пакетов, под которыми
+  компонент записан в VEX. Умеет обновлять уже ведущуюся таблицу, сохраняя
+  ручные колонки: освежать данные koji и VEX или сверять её с новыми блоками
+  — пропавшие задачи помечаются `Missing`, новые дописываются в конец.
+  Заменяет три разрозненных скрипта.
+
 ## [0.2.0] - 2026-09-02
 
 ### Добавлено
@@ -39,6 +57,7 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/foxtertime/work-tools-and-scripts/releases/tag/v0.1.0

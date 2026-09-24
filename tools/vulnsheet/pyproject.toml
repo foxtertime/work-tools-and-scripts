@@ -1,0 +1,5 @@
+# Только объявление сборщика. Метаданные лежат в setup.cfg: setuptools
+# читает [project] из pyproject лишь с 61-й версии, а в RHEL 9 стоит 53-я.
+[build-system]
+requires = ["setuptools>=40.8"]
+build-backend = "setuptools.build_meta"

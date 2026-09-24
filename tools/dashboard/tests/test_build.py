@@ -53,6 +53,19 @@ class BuildHtml(unittest.TestCase):
             self.assertIn("/* %s */" % name, html,
                           "в собранном файле нет %s" % name)
 
+    def test_styles_matches_css_directory(self):
+        # STYLES перечисляется руками, и файл, забытый в списке, обходит
+        # test_every_style_is_inlined молча: оно ходит по STYLES, а не по
+        # каталогу, так что забытый файл там просто не проверяется. У CSS
+        # последствие тише, чем у JS: собранная страница не падает и не
+        # молчит консолью, она просто выглядит не так, как должна, — и это
+        # легко списать на что угодно другое. Сверяем множества в обе
+        # стороны: и лишний файл на диске, и лишнее (удалённое) имя в
+        # STYLES должны быть замечены.
+        on_disk = {name for name in os.listdir(os.path.join(ASSETS, "css"))
+                   if name.endswith(".css")}
+        self.assertEqual(on_disk, set(STYLES))
+
     def test_styles_keep_cascade_order(self):
         # При равной специфичности выигрывает то, что ниже: перестановка
         # файлов в STYLES молча меняет вид страницы.
@@ -96,6 +109,27 @@ class TemplateContractTest(unittest.TestCase):
 
     def setUp(self):
         self.html = build_html()
+
+    def test_page_has_two_screens(self):
+        # Разделы держатся на этих пяти узлах: островок с двумя кнопками и
+        # две секции. Пропади любой — screens.js найдёт None, и страница
+        # перестанет переключаться молча.
+        for needle in ('id="isle"',
+                       'data-screen="builds"',
+                       'data-screen="cve"',
+                       'id="screen-builds"',
+                       'id="screen-cve"'):
+            self.assertIn(needle, self.html, needle)
+
+    def test_cve_screen_is_hidden_and_asks_for_xlsx(self):
+        # Заглушка приходит скрытой и принимает только xlsx: страница
+        # открывается на билдах, а поле выбора не должно предлагать
+        # человеку файлы, которые всё равно будут отвергнуты.
+        self.assertIn('id="screen-cve" hidden', self.html)
+        self.assertIn('id="cve-input"', self.html)
+        self.assertIn('accept=".xlsx"', self.html)
+        for needle in ('id="cve-drop"', 'id="cve-pick"', 'id="cve-file"'):
+            self.assertIn(needle, self.html, needle)
 
     def test_every_default_class_has_its_own_colour(self):
         # Класс, которого страница не знает, красится общим акцентом — и
