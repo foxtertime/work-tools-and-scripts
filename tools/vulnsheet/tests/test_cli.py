@@ -179,6 +179,45 @@ class FatalTest(CliCase):
             main(["--rhel", "nine", "--koji-url", "https://k", "--tag", "sl9"])
         self.assertEqual(caught.exception.code, 2)
 
+    def test_failed_run_keeps_previous_report(self):
+        with open(self.path("report.csv"), "w", encoding="utf-8") as handle:
+            handle.write("прошлый отчёт\n")
+        self.session.tags = {"sl9-other"}
+        self.assertFatal(self.run_cli(), "нет тега sl9")
+        with open(self.path("report.csv"), encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), "прошлый отчёт\n")
+        leftovers = [name for name in os.listdir(self.room) if name.startswith(".vulnsheet-")]
+        self.assertEqual(leftovers, [])
+
+    def test_unwritable_rejects_dir_fails_before_network(self):
+        code = self.run_cli("--rejects", self.path("нет-каталога/bad.txt"))
+        self.assertFatal(code, "отбраковки")
+        self.connect.assert_not_called()
+
+
+class BrokenPipeTest(CliCase):
+    def test_broken_pipe_on_stdout_exits_quietly(self):
+        src = self.path("tasks.txt")
+        with open(src, "w", encoding="utf-8") as handle:
+            handle.write(BLOCK)
+        err = io.StringIO()
+        with mock.patch("vulnsheet.report.write", side_effect=BrokenPipeError()):
+            with redirect_stdout(io.StringIO()), redirect_stderr(err):
+                code = main(["--rhel", "9", "--koji-url", "https://k/kojihub",
+                             "--tag", "sl9", src])
+        self.assertEqual(code, EXIT_PARTIAL)
+        self.assertNotIn("фатальная ошибка", err.getvalue())
+
+
+class StaleRejectsRemovalTest(CliCase):
+    def test_removal_failure_is_a_warning_not_fatal(self):
+        with open(self.path("report.rejected.txt"), "w") as handle:
+            handle.write("старьё")
+        with mock.patch("vulnsheet.cli.os.remove", side_effect=OSError("нет прав")):
+            code = self.run_cli()
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("WARNING", self.log)
+
 
 class VersionFlagTest(unittest.TestCase):
     def test_prints_version_without_other_arguments(self):

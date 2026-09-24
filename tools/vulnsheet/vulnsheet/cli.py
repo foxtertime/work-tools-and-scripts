@@ -3,6 +3,7 @@ import argparse
 import logging
 import os
 import sys
+import tempfile
 import time
 from collections import Counter
 from typing import List, Optional
@@ -13,7 +14,9 @@ from .tasks import parse
 logger = logging.getLogger(__name__)
 
 EXIT_OK = 0
-EXIT_PARTIAL = 1  # CSV записан, но есть отбраковка, ERROR koji или fetch error
+# CSV записан, но есть отбраковка, ERROR koji, fetch error, либо читатель
+# оборвал stdout (broken pipe) — таблица дописана не до конца
+EXIT_PARTIAL = 1
 EXIT_FATAL = 2
 
 STDIO = "-"
@@ -82,12 +85,29 @@ def _read_input(path: str) -> str:
 
 
 def _open_output(path: str):
+    """Дескриптор выхода: для файла — временник рядом, для замены атомарным
+    os.replace после успешной записи; неверный путь падает сразу, до сети.
+
+    Возвращает (handle, tmp_path, final_path); tmp_path is None для stdout —
+    там подменять нечего и закрывать сам поток не нужно.
+    """
     if path == STDIO:
-        return sys.stdout
+        return sys.stdout, None, None
+    directory = os.path.dirname(os.path.abspath(path)) or "."
     try:
-        return open(path, "w", newline="", encoding="utf-8")
+        handle = tempfile.NamedTemporaryFile(
+            "w", dir=directory, prefix=".vulnsheet-", suffix=".tmp",
+            delete=False, newline="", encoding="utf-8")
     except OSError as exc:
         raise _Fatal("выход не пишется: %s" % exc)
+    return handle, handle.name, path
+
+
+def _check_rejects_dir(path: str) -> None:
+    """Каталог явного --rejects проверяем сразу, а не после koji и VEX."""
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    if not os.path.isdir(directory) or not os.access(directory, os.W_OK):
+        raise _Fatal("файл отбраковки не пишется: %s" % path)
 
 
 def _write_rejects(path: str, rejects) -> None:
@@ -99,8 +119,13 @@ def _write_rejects(path: str, rejects) -> None:
             raise _Fatal("файл отбраковки не пишется: %s" % exc)
         logger.warning("битые блоки (%d) записаны в %s", len(rejects), path)
     elif os.path.exists(path):
-        os.remove(path)
-        logger.info("удалён %s от прошлого прогона: битых блоков нет", path)
+        try:
+            os.remove(path)
+        except OSError as exc:
+            # старый файл — не повод ронять свежий прогон
+            logger.warning("не удалось удалить %s от прошлого прогона: %s", path, exc)
+        else:
+            logger.info("удалён %s от прошлого прогона: битых блоков нет", path)
 
 
 def _summary(builds: List[str], verdicts) -> None:
@@ -127,8 +152,11 @@ def _run(args) -> int:
     logger.info("блоков %d, отбраковано %d; CVE %d, пакетов %d",
                 len(tasks) + len(rejects), len(rejects), len(cves), len(packages))
 
-    # выход открываем до сети: неверный путь должен падать сразу
-    out = _open_output(args.output)
+    # выход открываем до сети: неверный путь должен падать сразу, и не
+    # затирать прежний отчёт — пишем во временник рядом, подменяем в конце
+    out, tmp_path, final_path = _open_output(args.output)
+    if args.rejects:
+        _check_rejects_dir(args.rejects)
     try:
         nvrs, indices, failures = {}, {}, {}
         if tasks:
@@ -140,9 +168,18 @@ def _run(args) -> int:
                     else vex.lookup(indices[t.cve], t.component, args.rhel)
                     for t in tasks]
         report.write([report.row(t, b, v) for t, b, v in zip(tasks, builds, verdicts)], out)
-    finally:
-        if out is not sys.stdout:
+    except BaseException:
+        if tmp_path is not None:
             out.close()
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+        raise
+    else:
+        if tmp_path is not None:
+            out.close()
+            os.replace(tmp_path, final_path)
     if args.output != STDIO:
         logger.info("написан %s", args.output)
 
@@ -169,6 +206,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         return _fatal(str(exc))
     except kojiclient.KojiError as exc:
         return _fatal("koji: %s" % exc)
+    except BrokenPipeError:
+        # читатель (head и т.п.) закрыл трубу раньше нас — это не ошибка
+        # программы; чтобы интерпретатор не напечатал при выходе
+        # "Exception ignored" из-за непрочитанного stdout, перенаправляем
+        # его в /dev/null
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except (AttributeError, OSError):
+            pass
+        return EXIT_PARTIAL
     except Exception as exc:  # непредвиденное не должно ронять CLI трейсбеком
         return _fatal("фатальная ошибка: %s" % exc)
     logger.info("всего за %.1f с", time.monotonic() - started)
