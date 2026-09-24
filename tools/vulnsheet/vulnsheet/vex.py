@@ -356,6 +356,17 @@ def _write_cache(path, body):
         logger.debug("кэш %s не записан: %s", path, exc)
 
 
+def _evict_cache(cache_dir: Optional[str], cve: str) -> None:
+    """Испорченный документ не должен час пролежать в кэше: следующий
+    прогон должен перекачать его заново, а не читать тот же мусор."""
+    if not cache_dir:
+        return
+    try:
+        os.remove(os.path.join(cache_dir, cve.lower() + ".json"))
+    except OSError:
+        pass
+
+
 def prepare_cache(path: str) -> Optional[str]:
     try:
         os.makedirs(path, exist_ok=True)
@@ -409,14 +420,22 @@ def fetch_all(cves: Iterable[str], cache_dir: Optional[str] = None,
         nonlocal done
         try:
             doc = fetch(cve, cache_dir)
-            index = build_index(doc) if doc is not None else None
-        except Exception as exc:  # в том числе испорченный документ
+        except Exception as exc:
             with lock:
                 failures[cve] = str(exc)
             logger.warning("VEX для %s не получен: %s", cve, exc)
         else:
-            with lock:
-                indices[cve] = index
+            try:
+                index = build_index(doc) if doc is not None else None
+            except Exception as exc:  # документ получен, но не CSAF
+                with lock:
+                    failures[cve] = str(exc)
+                logger.warning("VEX для %s не получен: %s", cve, exc)
+                # уже успел лечь в кэш при чтении — не отравлять его на час
+                _evict_cache(cache_dir, cve)
+            else:
+                with lock:
+                    indices[cve] = index
         with lock:
             done += 1
             if done % step == 0 or done == len(cves):

@@ -204,6 +204,14 @@ class FetchAllTest(unittest.TestCase):
                 indices, failures = fetch_all([CVE])
         self.assertEqual((indices, list(failures)), ({}, [CVE]))
 
+    def test_malformed_document_is_not_cached(self):
+        cache = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, cache)
+        with mock.patch("vulnsheet.vex.download", return_value=b'{"document": {}}'):
+            with self.assertLogs("vulnsheet", "WARNING"):
+                fetch_all([CVE], cache)
+        self.assertFalse(os.path.exists(os.path.join(cache, "cve-2026-1000.json")))
+
 
 class PrepareCacheTest(unittest.TestCase):
     def test_creates_directory(self):
