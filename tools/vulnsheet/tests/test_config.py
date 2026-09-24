@@ -43,6 +43,10 @@ class DefaultsTest(unittest.TestCase):
         self.assertEqual(cfg.vex, VexSettings())
         self.assertIsNone(cfg.stream_for("nginx", "9"))
 
+    def test_default_streams_cannot_be_mutated(self):
+        with self.assertRaises(TypeError):
+            Config().vex_streams["9"] = {}
+
 
 class StreamForTest(unittest.TestCase):
     CFG = Config(vex_streams={"9": {"nginx": "nginx:1.26"},

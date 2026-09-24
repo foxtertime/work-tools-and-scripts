@@ -5,7 +5,8 @@ PyYAML импортируется только при заданном файл�
 стандартной библиотеки и koji.
 """
 import os
-from typing import Dict, NamedTuple, Optional
+import types
+from typing import Dict, Mapping, NamedTuple, Optional
 
 from .vex import VexSettings, parse_rhel
 
@@ -26,9 +27,9 @@ class Config(NamedTuple):
     koji_tag: Optional[str] = None
     rhel: Optional[str] = None
     vex: VexSettings = VexSettings()
-    # ключ — нормализованная версия RHEL; словарь по умолчанию общий, но его
-    # никто не меняет: Config неизменяем по смыслу
-    vex_streams: Dict[str, Dict[str, str]] = {}
+    # ключ — нормализованная версия RHEL; неизменяемое отображение, поэтому
+    # безопасно делить между экземплярами
+    vex_streams: Mapping[str, Mapping[str, str]] = types.MappingProxyType({})
 
     def stream_for(self, component: str, rhel: str) -> Optional[str]:
         """Стрим VEX для компонента — только из набора ровно этой версии RHEL.
