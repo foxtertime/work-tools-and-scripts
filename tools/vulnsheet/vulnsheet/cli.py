@@ -2,6 +2,7 @@
 import argparse
 import logging
 import os
+import stat
 import sys
 import tempfile
 import time
@@ -112,19 +113,40 @@ def _open_output(path: str):
     """Дескриптор выхода: для файла — временник рядом, для замены атомарным
     os.replace после успешной записи; неверный путь падает сразу, до сети.
 
+    final_path — путь к файлу, который меняется (символическая ссылка
+    разыменована: os.replace должен подменить её цель, а не саму ссылку).
+
     Возвращает (handle, tmp_path, final_path); tmp_path is None для stdout —
     там подменять нечего и закрывать сам поток не нужно.
     """
     if path == STDIO:
         return sys.stdout, None, None
-    directory = os.path.dirname(os.path.abspath(path)) or "."
+    final_path = os.path.realpath(path)
+    directory = os.path.dirname(final_path) or "."
     try:
         handle = tempfile.NamedTemporaryFile(
             "w", dir=directory, prefix=".vulnsheet-", suffix=".tmp",
             delete=False, newline="", encoding="utf-8")
     except OSError as exc:
         raise _Fatal("выход не пишется: %s" % exc)
-    return handle, handle.name, path
+    return handle, handle.name, final_path
+
+
+def _match_permissions(tmp_path: str, final_path: str) -> None:
+    """Права временника — как у файла, который он подменит: у уже
+    существующего файла — его права, у нового — режим по умолчанию (umask).
+    NamedTemporaryFile создаёт временник с правами 0600, поэтому подмена
+    без этого поменяла бы права итогового файла на любой замене."""
+    try:
+        mode = stat.S_IMODE(os.stat(final_path).st_mode)
+    except OSError:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    try:
+        os.chmod(tmp_path, mode)
+    except OSError as exc:
+        logger.warning("не удалось выставить права %s: %s", tmp_path, exc)
 
 
 def _check_rejects_dir(path: str) -> None:
@@ -278,6 +300,7 @@ def _run(args) -> int:
     else:
         if tmp_path is not None:
             out.close()
+            _match_permissions(tmp_path, final_path)
             os.replace(tmp_path, final_path)
     if args.output != STDIO:
         logger.info("написан %s", args.output)

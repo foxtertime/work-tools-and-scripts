@@ -2,6 +2,7 @@ import io
 import json
 import os
 import shutil
+import stat
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -464,6 +465,43 @@ class UpdateModesTest(CliCase):
         self.connect.assert_not_called()
         with open(self.path("report.csv"), encoding="utf-8") as handle:
             self.assertEqual(handle.read(), "прошлый отчёт\n")
+
+
+class OutputPermissionsTest(CliCase):
+    def blocks_file(self):
+        src = self.path("tasks.txt")
+        with open(src, "w", encoding="utf-8") as handle:
+            handle.write(BLOCK)
+        return src
+
+    def test_existing_output_keeps_its_permissions(self):
+        out = self.path("report.csv")
+        with open(out, "w", encoding="utf-8") as handle:
+            handle.write("прошлый отчёт\n")
+        os.chmod(out, 0o640)
+        self.assertEqual(self.run_main("--blocks", self.blocks_file(), "-o", out), EXIT_OK)
+        self.assertEqual(stat.S_IMODE(os.stat(out).st_mode), 0o640)
+
+    def test_symlink_output_keeps_the_link_and_updates_the_target(self):
+        target = self.path("real.csv")
+        with open(target, "w", encoding="utf-8") as handle:
+            handle.write("прошлый отчёт\n")
+        os.chmod(target, 0o640)
+        link = self.path("report.csv")
+        os.symlink(target, link)
+        self.assertEqual(self.run_main("--blocks", self.blocks_file(), "-o", link), EXIT_OK)
+        self.assertTrue(os.path.islink(link))
+        self.assertEqual(os.path.realpath(link), target)
+        with open(target, encoding="utf-8") as handle:
+            self.assertEqual(handle.read().splitlines(), [HEADER, EXPECTED])
+        self.assertEqual(stat.S_IMODE(os.stat(target).st_mode), 0o640)
+
+    def test_new_output_gets_the_default_permissions(self):
+        out = self.path("report.csv")
+        old_umask = os.umask(0o022)
+        os.umask(old_umask)
+        self.assertEqual(self.run_main("--blocks", self.blocks_file(), "-o", out), EXIT_OK)
+        self.assertEqual(stat.S_IMODE(os.stat(out).st_mode), 0o666 & ~old_umask)
 
 
 class BrokenPipeTest(CliCase):
