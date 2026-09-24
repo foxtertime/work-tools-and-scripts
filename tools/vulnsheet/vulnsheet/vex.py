@@ -4,9 +4,19 @@
 рисуется портал CVE Red Hat, и самый свежий: legacy API /hydra отстаёт на
 недели.
 """
+import json
 import logging
+import os
 import re
-from typing import NamedTuple, Optional
+import tempfile
+import threading
+import time
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, Iterable, NamedTuple, Optional, Tuple
+
+from . import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +24,12 @@ NO_RECORD = "no VEX record"
 NOT_LISTED = "not listed"
 FETCH_ERROR = "fetch error"
 FIXED = "Fixed"
+VEX_URL = "https://security.access.redhat.com/data/csaf/v2/vex/{year}/{cve}.json"
+USER_AGENT = "vulnsheet/%s (+CSAF VEX client)" % __version__
+CACHE_TTL = 3600  # секунд
+JOBS = 8
+RETRIES = 3
+TIMEOUT = 30  # секунд
 
 VERSION_RE = re.compile(r"^\d+(\.\d+)*$")
 
@@ -282,3 +298,130 @@ def lookup(index: Optional[dict], component: str, rhel: str) -> Verdict:
     return Verdict(state=best["state"], severity=index["severity"],
                    cvss=str(best["cvss"]), fixed_nvr=fixed_nvr,
                    fix_date=best["date"], advisory_url=best["url"])
+
+
+# --------------------------------------------------------------------------
+# загрузка
+# --------------------------------------------------------------------------
+
+class VexError(Exception):
+    """Документ VEX не получен после всех попыток."""
+
+
+def vex_url(cve: str) -> str:
+    return VEX_URL.format(year=cve.split("-")[1], cve=cve.lower())
+
+
+def download(url: str) -> Optional[bytes]:
+    """Тело ответа; None при 404 (у Red Hat нет записи). Остальное — исключение."""
+    started = time.monotonic()
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            body = response.read()
+            code = response.status
+    except urllib.error.HTTPError as exc:
+        logger.debug("GET %s → %d за %.2f с", url, exc.code, time.monotonic() - started)
+        if exc.code == 404:
+            return None
+        raise
+    logger.debug("GET %s → %d за %.2f с", url, code, time.monotonic() - started)
+    return body
+
+
+def _read_cache(path, ttl):
+    """Документ из кэша или None: нет, устарел или испорчен — идём в сеть."""
+    try:
+        if time.time() - os.path.getmtime(path) >= ttl:
+            return None
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
+
+
+def _write_cache(path, body):
+    """Атомарно: оборванная запись не должна отравить кэш. Ошибка — не повод
+    ронять прогон."""
+    try:
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(body)
+            os.replace(tmp, path)
+        except BaseException:
+            os.unlink(tmp)
+            raise
+    except OSError as exc:
+        logger.debug("кэш %s не записан: %s", path, exc)
+
+
+def prepare_cache(path: str) -> Optional[str]:
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError as exc:
+        logger.warning("кэш VEX отключён: %s", exc)
+        return None
+    return path
+
+
+def fetch(cve: str, cache_dir: Optional[str] = None,
+          ttl: int = CACHE_TTL) -> Optional[dict]:
+    """Документ VEX; None, если у Red Hat записи нет; VexError — не получен."""
+    cached = os.path.join(cache_dir, cve.lower() + ".json") if cache_dir else None
+    if cached:
+        doc = _read_cache(cached, ttl)
+        if doc is not None:
+            logger.debug("%s: из кэша", cve)
+            return doc
+    url = vex_url(cve)
+    last = None
+    for attempt in range(RETRIES):
+        try:
+            body = download(url)
+            if body is None:
+                return None
+            doc = json.loads(body)
+        except Exception as exc:  # сеть и мусор в ответе — повторяем
+            last = exc
+            if attempt < RETRIES - 1:
+                time.sleep(2 ** attempt)
+            continue
+        if cached:
+            _write_cache(cached, body)
+        return doc
+    raise VexError("%s: %s" % (url, last))
+
+
+def fetch_all(cves: Iterable[str], cache_dir: Optional[str] = None,
+              jobs: int = JOBS) -> Tuple[Dict[str, Optional[dict]], Dict[str, str]]:
+    """Индексы документов по уникальным CVE и ошибки загрузки.
+
+    Индекс None — у Red Hat записи нет. CVE с ошибкой в индексы не попадает.
+    """
+    cves = list(dict.fromkeys(cves))
+    indices, failures = {}, {}
+    lock = threading.Lock()
+    done = 0
+    step = max(1, len(cves) // 10)
+
+    def load(cve):
+        nonlocal done
+        try:
+            doc = fetch(cve, cache_dir)
+            index = build_index(doc) if doc is not None else None
+        except Exception as exc:  # в том числе испорченный документ
+            with lock:
+                failures[cve] = str(exc)
+            logger.warning("VEX для %s не получен: %s", cve, exc)
+        else:
+            with lock:
+                indices[cve] = index
+        with lock:
+            done += 1
+            if done % step == 0 or done == len(cves):
+                logger.info("VEX: %d/%d CVE", done, len(cves))
+
+    with ThreadPoolExecutor(max_workers=max(1, jobs), thread_name_prefix="w") as pool:
+        list(pool.map(load, cves))
+    return indices, failures

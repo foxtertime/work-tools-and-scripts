@@ -1,7 +1,12 @@
+import json
+import os
+import shutil
+import tempfile
 import unittest
+from unittest import mock
 
 from tests.fakes import APPSTREAM96, BASEOS96, EUS92, RHEL9, RHEL_AI, csaf, pid
-from vulnsheet.vex import NO_RECORD, Verdict, build_index, lookup, parse_rhel
+from vulnsheet.vex import NO_RECORD, Verdict, VexError, build_index, fetch, fetch_all, lookup, parse_rhel, prepare_cache, vex_url
 
 CVE = "CVE-2026-1000"
 FIXED_VIM = "vim-2:8.2.2637-22.el9_6.x86_64"
@@ -114,3 +119,101 @@ class ParseRhelTest(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaises(ValueError):
                     parse_rhel(value)
+
+
+DOC = csaf(CVE, [("under_investigation", RHEL9, "vim")])
+BODY = json.dumps(DOC).encode()
+
+
+class FetchTest(unittest.TestCase):
+    def setUp(self):
+        self.cache = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.cache)
+        self.sleep = mock.patch("vulnsheet.vex.time.sleep").start()
+        self.addCleanup(mock.patch.stopall)
+
+    def cached(self):
+        return os.path.join(self.cache, "cve-2026-1000.json")
+
+    def test_url(self):
+        self.assertEqual(vex_url(CVE), "https://security.access.redhat.com/"
+                                       "data/csaf/v2/vex/2026/cve-2026-1000.json")
+
+    def test_downloads_once_then_reads_cache(self):
+        with mock.patch("vulnsheet.vex.download", return_value=BODY) as download:
+            self.assertEqual(fetch(CVE, self.cache), DOC)
+            self.assertEqual(fetch(CVE, self.cache), DOC)
+        download.assert_called_once_with(vex_url(CVE))
+
+    def test_404_means_no_record(self):
+        with mock.patch("vulnsheet.vex.download", return_value=None):
+            self.assertIsNone(fetch(CVE, self.cache))
+
+    def test_corrupt_cache_falls_back_to_network(self):
+        with open(self.cached(), "w") as handle:
+            handle.write("{оборвано")
+        with mock.patch("vulnsheet.vex.download", return_value=BODY) as download:
+            self.assertEqual(fetch(CVE, self.cache), DOC)
+        download.assert_called_once()
+
+    def test_stale_cache_is_refetched(self):
+        with open(self.cached(), "w") as handle:
+            json.dump({"старый": True}, handle)
+        os.utime(self.cached(), (0, 0))
+        with mock.patch("vulnsheet.vex.download", return_value=BODY):
+            self.assertEqual(fetch(CVE, self.cache), DOC)
+
+    def test_retries_then_gives_up(self):
+        with mock.patch("vulnsheet.vex.download", side_effect=OSError("сеть")) as download:
+            with self.assertRaises(VexError):
+                fetch(CVE)
+        self.assertEqual(download.call_count, 3)
+        self.assertEqual([c.args for c in self.sleep.call_args_list], [(1,), (2,)])
+
+    def test_retry_recovers(self):
+        with mock.patch("vulnsheet.vex.download", side_effect=[OSError("сеть"), BODY]):
+            self.assertEqual(fetch(CVE), DOC)
+
+
+class FetchAllTest(unittest.TestCase):
+    def setUp(self):
+        mock.patch("vulnsheet.vex.time.sleep").start()
+        self.addCleanup(mock.patch.stopall)
+
+    def test_indices_failures_and_missing_records(self):
+        def download(url):
+            if "1002" in url:
+                raise OSError("сеть")
+            return BODY if "1000" in url else None
+
+        with mock.patch("vulnsheet.vex.download", side_effect=download) as fake:
+            with self.assertLogs("vulnsheet", "WARNING") as caught:
+                indices, failures = fetch_all(
+                    [CVE, "CVE-2026-1001", "CVE-2026-1002", CVE], jobs=2)
+        self.assertEqual(sorted(indices), [CVE, "CVE-2026-1001"])
+        self.assertIsNone(indices["CVE-2026-1001"])
+        self.assertEqual(lookup(indices[CVE], "vim", "9").state, "Under investigation")
+        self.assertEqual(list(failures), ["CVE-2026-1002"])
+        self.assertIn("CVE-2026-1002", "\n".join(caught.output))
+        # 1000 и 1001 — по одному разу, 1002 — три попытки
+        self.assertEqual(fake.call_count, 5)
+
+    def test_malformed_document_is_a_failure(self):
+        with mock.patch("vulnsheet.vex.download", return_value=b'{"document": {}}'):
+            with self.assertLogs("vulnsheet", "WARNING"):
+                indices, failures = fetch_all([CVE])
+        self.assertEqual((indices, list(failures)), ({}, [CVE]))
+
+
+class PrepareCacheTest(unittest.TestCase):
+    def test_creates_directory(self):
+        room = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, room)
+        path = os.path.join(room, "vulnsheet")
+        self.assertEqual(prepare_cache(path), path)
+        self.assertTrue(os.path.isdir(path))
+
+    def test_unusable_path_disables_cache(self):
+        with tempfile.NamedTemporaryFile() as blocker:
+            with self.assertLogs("vulnsheet", "WARNING"):
+                self.assertIsNone(prepare_cache(os.path.join(blocker.name, "sub")))
