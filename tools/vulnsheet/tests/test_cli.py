@@ -19,6 +19,7 @@ HEADER = ";".join(COLUMNS)
 EXPECTED = ("-;-;-;-;-;TASKID-181229;CVE-2026-73070;Отменен;22.09.2026;КМ;vim;"
             "vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;Moderate;5.5;-;"
             "https://access.redhat.com/security/cve/CVE-2026-73070;-")
+COMMON = ["--rhel", "9", "--koji-url", "https://koji.example.com/kojihub", "--tag", "sl9"]
 VIM_DOC = csaf("CVE-2026-73070", [("under_investigation", RHEL9, "vim")],
                scores=[{"cvss_v3": {"baseScore": 5.5}, "products": [pid(RHEL9, "vim")]}])
 
@@ -70,17 +71,18 @@ class CliCase(unittest.TestCase):
     def path(self, name):
         return os.path.join(self.room, name)
 
+    def run_main(self, *argv):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = main(COMMON + list(argv))
+        self.log = err.getvalue()
+        return code
+
     def run_cli(self, *extra, text=BLOCK + "\n", data=None):
         src = self.path("tasks.txt")
         with open(src, "wb") as handle:
             handle.write(data if data is not None else text.encode("utf-8"))
-        argv = ["--rhel", "9", "--koji-url", "https://koji.example.com/kojihub",
-                "--tag", "sl9", src, "-o", self.path("report.csv")] + list(extra)
-        err = io.StringIO()
-        with redirect_stderr(err):
-            code = main(argv)
-        self.log = err.getvalue()
-        return code
+        return self.run_main("--blocks", src, "-o", self.path("report.csv"), *extra)
 
     def report_lines(self):
         with open(self.path("report.csv"), encoding="utf-8") as handle:
@@ -119,7 +121,7 @@ class HappyPathTest(CliCase):
         out = io.StringIO()
         with redirect_stdout(out), redirect_stderr(io.StringIO()):
             code = main(["--rhel", "9", "--koji-url", "https://k/kojihub",
-                         "--tag", "sl9", src])
+                         "--tag", "sl9", "--blocks", src])
         self.assertEqual(code, EXIT_OK)
         self.assertEqual(out.getvalue(), HEADER + "\n" + EXPECTED + "\n")
 
@@ -188,7 +190,7 @@ class FatalTest(CliCase):
         err = io.StringIO()
         with redirect_stderr(err):
             code = main(["--rhel", "9", "--koji-url", "https://k", "--tag", "sl9",
-                         self.path("нет-такого.txt"), "-o", self.path("r.csv")])
+                         "--blocks", self.path("нет-такого.txt"), "-o", self.path("r.csv")])
         self.log = err.getvalue()
         self.assertFatal(code, "вход")
 
@@ -223,7 +225,7 @@ class FatalTest(CliCase):
             handle.write(BLOCK)
         err = io.StringIO()
         with redirect_stderr(err):
-            code = main(["--rhel", "9", "--tag", "sl9", src, "-o", self.path("r.csv")])
+            code = main(["--rhel", "9", "--tag", "sl9", "--blocks", src, "-o", self.path("r.csv")])
         self.log = err.getvalue()
         self.assertFatal(code, "нужен --koji-url или koji.hub в конфиге")
         self.connect.assert_not_called()
@@ -248,7 +250,7 @@ class ConfigTest(CliCase):
             handle.write(text)
         err = io.StringIO()
         with redirect_stderr(err):
-            code = main([src, "-o", self.path("report.csv")] + list(argv))
+            code = main(["--blocks", src, "-o", self.path("report.csv")] + list(argv))
         self.log = err.getvalue()
         return code
 
@@ -308,6 +310,136 @@ class ConfigTest(CliCase):
         self.assertNotIn("Traceback", self.log)
 
 
+# строка прежней таблицы: ручные колонки заполнены, koji и VEX устарели
+OLD_ROW = ("Иванов;В работе;01.09.2026;-;обновить;TASKID-181229;CVE-2026-73070;"
+           "В работу;01.09.2026;КМ;vim;vim-8.2.2637-20.sl9;-;-;Affected;Low;3.1;-;"
+           "https://access.redhat.com/security/cve/CVE-2026-73070;ждём апстрим")
+# OLD_ROW после режима 2: обновлены только koji и VEX
+REFRESHED = ("Иванов;В работе;01.09.2026;-;обновить;TASKID-181229;CVE-2026-73070;"
+             "В работу;01.09.2026;КМ;vim;vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;"
+             "Moderate;5.5;-;https://access.redhat.com/security/cve/CVE-2026-73070;ждём апстрим")
+# OLD_ROW после режима 3 с BLOCK: данные задачи — из блока
+SYNCED = ("Иванов;В работе;01.09.2026;-;обновить;TASKID-181229;CVE-2026-73070;"
+          "Отменен;22.09.2026;КМ;vim;vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;"
+          "Moderate;5.5;-;https://access.redhat.com/security/cve/CVE-2026-73070;ждём апстрим")
+# задача, которой больше нет в блоках
+GONE_ROW = ("Петров;Готово;-;-;-;TASKID-100000;CVE-2026-73071;Выполнена;01.08.2026;КМ;"
+            "openssl;openssl-3-1.sl9;-;-;Fixed;Low;2.0;-;"
+            "https://access.redhat.com/security/cve/CVE-2026-73071;-")
+GONE_MISSING = ("Петров;Готово;-;-;-;TASKID-100000;CVE-2026-73071;Missing;01.08.2026;КМ;"
+                "openssl;NOT_FOUND;-;-;no VEX record;-;-;-;"
+                "https://access.redhat.com/security/cve/CVE-2026-73071;-")
+NEW_BLOCK = BLOCK.replace("181229", "181230").replace("73070", "73071").replace("vim", "openssl")
+NEW_ROW = ("-;-;-;-;-;TASKID-181230;CVE-2026-73071;Отменен;22.09.2026;КМ;openssl;NOT_FOUND;"
+           "-;-;no VEX record;-;-;-;https://access.redhat.com/security/cve/CVE-2026-73071;-")
+
+
+class UsageTest(CliCase):
+    def assertUsageError(self, argv, needle):
+        with redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit) as caught:
+            main(argv)
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn(needle, err.getvalue())
+
+    def test_neither_blocks_nor_table(self):
+        self.assertUsageError(COMMON, "нужен --blocks или --table")
+
+    def test_table_from_stdin_is_refused(self):
+        self.assertUsageError(COMMON + ["--table", "-"], "только файл")
+
+    def test_blocks_from_stdin(self):
+        with mock.patch("sys.stdin", io.StringIO(BLOCK)):
+            code = self.run_main("--blocks", "-", "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER, EXPECTED])
+        self.assertIn("режим: новая таблица", self.log)
+
+
+class UpdateModesTest(CliCase):
+    def write_table(self, *rows, name="old.csv"):
+        path = self.path(name)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join((HEADER,) + rows) + "\n")
+        return path
+
+    def write_blocks(self, text):
+        path = self.path("tasks.txt")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        return path
+
+    def test_refresh_updates_only_koji_and_vex(self):
+        code = self.run_main("--table", self.write_table(OLD_ROW), "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER, REFRESHED])
+        self.assertIn("режим: обновление koji и VEX", self.log)
+        self.assertIn("old.csv: строк 1", self.log)
+
+    def test_refresh_in_place(self):
+        table = self.write_table(OLD_ROW, name="report.csv")
+        self.assertEqual(self.run_main("--table", table, "-o", table), EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER, REFRESHED])
+
+    def test_refresh_keeps_previous_vex_on_fetch_error(self):
+        self.docs[vex_url("CVE-2026-73070")] = OSError("сеть")
+        code = self.run_main("--table", self.write_table(OLD_ROW), "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_PARTIAL)
+        self.assertEqual(self.report_lines()[1],
+                         OLD_ROW.replace("vim-8.2.2637-20.sl9", "vim-8.2.2637-26.sl9_8.6^4"))
+        self.assertIn("оставлены прежние данные VEX", self.log)
+
+    def test_refresh_row_without_cve_is_partial(self):
+        row = OLD_ROW.replace("CVE-2026-73070;", "-;", 1)
+        code = self.run_main("--table", self.write_table(row), "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_PARTIAL)
+        self.assertEqual(self.report_lines(), [HEADER, row])
+        self.assertIn("строка оставлена как есть", self.log)
+        self.connect.assert_not_called()
+
+    def test_refresh_does_not_touch_rejects_file(self):
+        with open(self.path("report.rejected.txt"), "w") as handle:
+            handle.write("старьё")
+        self.run_main("--table", self.write_table(OLD_ROW), "-o", self.path("report.csv"))
+        self.assertTrue(os.path.exists(self.path("report.rejected.txt")))
+
+    def test_header_only_table_skips_network(self):
+        code = self.run_main("--table", self.write_table(), "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER])
+        self.connect.assert_not_called()
+
+    def test_sync_matches_marks_missing_and_appends(self):
+        blocks = self.write_blocks(BLOCK + "\n\n" + NEW_BLOCK + "\n")
+        code = self.run_main("--table", self.write_table(OLD_ROW, GONE_ROW),
+                             "--blocks", blocks, "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER, SYNCED, GONE_MISSING, NEW_ROW])
+        self.assertIn("режим: синхронизация с блоками", self.log)
+        self.assertIn("совпало 1, Missing 1, новых 1", self.log)
+
+    def test_sync_with_empty_blocks_is_fatal(self):
+        code = self.run_main("--table", self.write_table(OLD_ROW),
+                             "--blocks", self.write_blocks("\n"), "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_FATAL)
+        self.assertIn("ни одного блока", self.log)
+        self.connect.assert_not_called()
+
+    def test_broken_table_is_fatal_and_keeps_output(self):
+        with open(self.path("report.csv"), "w", encoding="utf-8") as handle:
+            handle.write("прошлый отчёт\n")
+        table = self.path("old.csv")
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write("не та таблица\n")
+        code = self.run_main("--table", table, "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_FATAL)
+        self.assertIn("old.csv", self.log)
+        self.assertIn("заголовок", self.log)
+        self.assertNotIn("Traceback", self.log)
+        self.connect.assert_not_called()
+        with open(self.path("report.csv"), encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), "прошлый отчёт\n")
+
+
 class BrokenPipeTest(CliCase):
     def test_broken_pipe_on_stdout_exits_quietly(self):
         src = self.path("tasks.txt")
@@ -317,7 +449,7 @@ class BrokenPipeTest(CliCase):
         with mock.patch("vulnsheet.report.write", side_effect=BrokenPipeError()):
             with redirect_stdout(io.StringIO()), redirect_stderr(err):
                 code = main(["--rhel", "9", "--koji-url", "https://k/kojihub",
-                             "--tag", "sl9", src])
+                             "--tag", "sl9", "--blocks", src])
         self.assertEqual(code, EXIT_PARTIAL)
         self.assertNotIn("фатальная ошибка", err.getvalue())
 

@@ -1,4 +1,4 @@
-"""Точка входа: блоки задач → koji и VEX → CSV и файл отбраковки."""
+"""Точка входа: блоки задач и/или прежняя таблица → koji и VEX → CSV."""
 import argparse
 import logging
 import os
@@ -8,7 +8,7 @@ import time
 from collections import Counter
 from typing import List, Optional
 
-from . import __version__, config, kojiclient, logs, report, vex
+from . import __version__, config, kojiclient, logs, merge, report, table, vex
 from .tasks import parse
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,13 @@ EXIT_FATAL = 2
 STDIO = "-"
 REJECTS_SUFFIX = ".rejected.txt"
 REJECTS_STDOUT = "vulnsheet" + REJECTS_SUFFIX
+
+# режим по (есть --blocks, есть --table)
+MODES = {
+    (True, False): "новая таблица",
+    (False, True): "обновление koji и VEX",
+    (True, True): "синхронизация с блоками",
+}
 
 
 class _Fatal(Exception):
@@ -38,9 +45,13 @@ def _rhel(value):
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="vulnsheet",
-        description="Блоки задач из тасктрекера → CSV с данными Red Hat VEX и koji.")
-    parser.add_argument("input", nargs="?", default=STDIO,
-                        help="файл с блоками задач (по умолчанию stdin)")
+        description="Блоки задач из тасктрекера и/или прежняя таблица → CSV "
+                    "с данными Red Hat VEX и koji.")
+    parser.add_argument("--blocks", metavar="FILE",
+                        help="файл с блоками задач; - — stdin")
+    parser.add_argument("--table", metavar="FILE",
+                        help="прежняя таблица vulnsheet: без --blocks — обновить в ней "
+                             "koji и VEX, с --blocks — сверить с блоками")
     parser.add_argument("--config",
                         help="YAML-конфиг (по умолчанию — из $%s, иначе без конфига)"
                              % config.ENV_VAR)
@@ -88,6 +99,13 @@ def _read_input(path: str) -> str:
         raise _Fatal("вход не читается: %s" % exc)
 
 
+def _read_table(path: str):
+    try:
+        return table.read(path)
+    except table.TableError as exc:
+        raise _Fatal("таблица %s" % exc)
+
+
 def _open_output(path: str):
     """Дескриптор выхода: для файла — временник рядом, для замены атомарным
     os.replace после успешной записи; неверный путь падает сразу, до сети.
@@ -132,13 +150,15 @@ def _write_rejects(path: str, rejects) -> None:
             logger.info("удалён %s от прошлого прогона: битых блоков нет", path)
 
 
-def _summary(builds: List[str], verdicts) -> None:
-    states = Counter(v.state.split(" (", 1)[0] for v in verdicts)
+def _summary(rows) -> None:
+    """Сводка по строкам выхода; прочерки — строки, где спрашивать было нечего."""
+    states = Counter(r[report.RHEL_STATE].split(" (", 1)[0] for r in rows
+                     if r[report.RHEL_STATE] != report.EMPTY)
     if states:
         logger.info("RHEL state: %s", ", ".join(
             "%s %d" % item for item in sorted(states.items(), key=lambda kv: (-kv[1], kv[0]))))
-    marks = Counter(b if b in (kojiclient.NOT_FOUND, kojiclient.ERROR) else "found"
-                    for b in builds)
+    marks = Counter(r[report.SL_NVR] if r[report.SL_NVR] in (kojiclient.NOT_FOUND, kojiclient.ERROR)
+                    else "found" for r in rows if r[report.SL_NVR] != report.EMPTY)
     logger.info("SL NVR: найдено %d, NOT_FOUND %d, ERROR %d", marks["found"],
                 marks[kojiclient.NOT_FOUND], marks[kojiclient.ERROR])
 
@@ -162,43 +182,84 @@ def _settings(args):
     return cfg, rhel, hub, tag
 
 
+def _merge(records, tasks, fresh):
+    if records is None:
+        return merge.build(tasks, fresh)
+    if tasks is None:
+        return merge.refresh(records, fresh)
+    return merge.sync(records, tasks, fresh)
+
+
+def _report_outcome(outcome, synced: bool) -> None:
+    if synced:
+        logger.info("совпало %d, Missing %d, новых %d",
+                    outcome.matched, outcome.missing, outcome.added)
+        if outcome.repeated:
+            logger.info("повторов троек в блоках %d — действует первый блок",
+                        outcome.repeated)
+    for note in outcome.kept_koji:
+        logger.warning("запись %d (%s %s): koji не ответил — оставлен прежний SL NVR",
+                       note.number, note.cve, note.component)
+    for note in outcome.kept_vex:
+        logger.warning("запись %d (%s %s): VEX не получен — оставлены прежние данные VEX",
+                       note.number, note.cve, note.component)
+    for note in outcome.skipped:
+        logger.warning("запись %d (%s %s): нет CVE-ID или компонента — строка оставлена как есть",
+                       note.number, note.cve, note.component)
+
+
 def _run(args) -> int:
     cfg, rhel, hub, tag = _settings(args)
-    tasks, rejects = parse(_read_input(args.input))
-    if not tasks and not rejects:
-        raise _Fatal("во входе нет ни одного блока")
-    for reject in rejects:
-        logger.warning("блок %d «%s» отбракован: %s", reject.number,
-                       reject.text.split("\n", 1)[0].strip(), reject.reason)
-    cves = list(dict.fromkeys(t.cve for t in tasks))
-    packages = list(dict.fromkeys(t.component for t in tasks))
+    logger.info("режим: %s", MODES[(args.blocks is not None, args.table is not None)])
+    records = None
+    if args.table is not None:
+        records = _read_table(args.table)
+        logger.info("таблица %s: строк %d", args.table, len(records))
+    tasks, rejects = None, []
+    if args.blocks is not None:
+        tasks, rejects = parse(_read_input(args.blocks))
+        # в режиме 3 пустые блоки иначе молча сделали бы все строки Missing
+        if not tasks and not rejects:
+            raise _Fatal("во входе нет ни одного блока")
+        for reject in rejects:
+            logger.warning("блок %d «%s» отбракован: %s", reject.number,
+                           reject.text.split("\n", 1)[0].strip(), reject.reason)
+
+    wanted = merge.pairs(records, tasks)  # пара на строку выхода, с повторами
+    unique = list(dict.fromkeys(wanted))
+    cves = list(dict.fromkeys(cve for cve, _ in unique))
+    packages = list(dict.fromkeys(component for _, component in unique))
     logger.info("хаб %s, тег %s, RHEL %s", hub, tag, rhel)
-    streams = {t.component: cfg.stream_for(t.component, rhel) for t in tasks}
-    applied = Counter(t.component for t in tasks if streams[t.component])
+    streams = {name: cfg.stream_for(name, rhel) for name in packages}
+    applied = Counter(name for _, name in wanted if streams[name])
     if applied:
         logger.info("стримы VEX для RHEL %s: %s", rhel, ", ".join(
             "%s → %s (%d)" % (name, streams[name], count) for name, count in applied.items()))
-    logger.info("блоков %d, отбраковано %d; CVE %d, пакетов %d",
-                len(tasks) + len(rejects), len(rejects), len(cves), len(packages))
+    if tasks is not None:
+        logger.info("блоков %d, отбраковано %d; CVE %d, пакетов %d",
+                    len(tasks) + len(rejects), len(rejects), len(cves), len(packages))
+    else:
+        logger.info("CVE %d, пакетов %d", len(cves), len(packages))
 
     # выход открываем до сети: неверный путь должен падать сразу, и не
-    # затирать прежний отчёт — пишем во временник рядом, подменяем в конце
+    # затирать прежний отчёт — пишем во временник рядом, подменяем в конце;
+    # таблица к этому моменту прочитана целиком, так что -o может быть ею
     out, tmp_path, final_path = _open_output(args.output)
-    if args.rejects:
+    if args.rejects and args.blocks is not None:
         _check_rejects_dir(args.rejects)
     try:
         nvrs, indices, failures = {}, {}, {}
-        if tasks:
+        if unique:
             session = kojiclient.connect(hub)
             nvrs = kojiclient.latest_builds(session, tag, packages)
             settings = cfg.vex._replace(
                 cache_dir=vex.prepare_cache(cfg.vex.cache_dir or _cache_dir()))
             indices, failures = vex.fetch_all(cves, settings)
-        builds = [nvrs[t.component] for t in tasks]
-        verdicts = [vex.Verdict(state=vex.FETCH_ERROR) if t.cve in failures
-                    else vex.lookup(indices[t.cve], t.component, rhel, streams[t.component])
-                    for t in tasks]
-        report.write([report.row(t, b, v) for t, b, v in zip(tasks, builds, verdicts)], out)
+        verdicts = {(cve, name): vex.Verdict(state=vex.FETCH_ERROR) if cve in failures
+                    else vex.lookup(indices[cve], name, rhel, streams[name])
+                    for cve, name in unique}
+        outcome = _merge(records, tasks, merge.Fresh(nvrs, verdicts))
+        report.write(outcome.rows, out)
     except BaseException:
         if tmp_path is not None:
             out.close()
@@ -214,9 +275,13 @@ def _run(args) -> int:
     if args.output != STDIO:
         logger.info("написан %s", args.output)
 
-    _write_rejects(rejects_path(args.output, args.rejects), rejects)
-    _summary(builds, verdicts)
-    partial = rejects or failures or kojiclient.ERROR in builds
+    # файл отбраковки — дело блоков: в режиме 2 его не трогаем
+    if args.blocks is not None:
+        _write_rejects(rejects_path(args.output, args.rejects), rejects)
+    _report_outcome(outcome, synced=records is not None and tasks is not None)
+    _summary(outcome.rows)
+    partial = (rejects or failures or kojiclient.ERROR in nvrs.values()
+               or outcome.skipped)
     return EXIT_PARTIAL if partial else EXIT_OK
 
 
@@ -228,7 +293,12 @@ def _fatal(message: str) -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.blocks is None and args.table is None:
+        parser.error("нужен --blocks или --table")
+    if args.table == STDIO:
+        parser.error("--table: таблица — только файл, не stdin")
     logs.configure(args.log_level)
     started = time.monotonic()
     try:
