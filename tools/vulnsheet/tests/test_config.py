@@ -177,6 +177,28 @@ class LoadTest(unittest.TestCase):
     def test_duplicate_top_level_key(self):
         self.assertRejected("koji:\n  hub: a\nkoji:\n  hub: b\n", "дважды")
 
+    def test_merge_key_reuses_a_stream_set(self):
+        # Наборы между 9 и 9.2 не наследуются — общий набор естественно
+        # переиспользовать якорем.
+        cfg = load_config(self.write(
+            "vex_streams:\n  \"9\": &base\n    nginx: nginx:1.26\n"
+            "  \"9.2\":\n    <<: *base\n    npm: nodejs:20\n"))
+        self.assertEqual(cfg.vex_streams, {"9": {"nginx": "nginx:1.26"},
+                                           "9.2": {"nginx": "nginx:1.26", "npm": "nodejs:20"}})
+
+    def test_explicit_key_overrides_merged_one(self):
+        # Переопределить ключ из якоря — обычный приём YAML, не дубль.
+        cfg = load_config(self.write(
+            "vex_streams:\n  \"9\": &base\n    nginx: nginx:1.26\n"
+            "  \"9.2\":\n    <<: *base\n    nginx: nginx:1.24\n"))
+        self.assertEqual(cfg.stream_for("nginx", "9.2"), "nginx:1.24")
+
+    def test_duplicate_explicit_key_next_to_merge_is_rejected(self):
+        self.assertRejected(
+            "vex_streams:\n  \"9\": &base\n    nginx: nginx:1.26\n"
+            "  \"9.2\":\n    <<: *base\n    npm: nodejs:20\n    npm: nodejs:22\n",
+            "дважды")
+
     def test_loaded_streams_are_immutable(self):
         cfg = load_config(self.write(FULL))
         with self.assertRaises(TypeError):

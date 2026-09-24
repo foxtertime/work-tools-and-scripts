@@ -87,11 +87,17 @@ def _read_yaml(path):
 
         Ключи 9 и "9" — разные объекты Python и дублем не считаются: этот
         случай ловится отдельно, после нормализации версии, в _streams.
+
+        Дублем считаются только ключи, записанные в словаре явно. Ключ
+        слияния «<<: *якорь» пропускаем: его разворачивает сам PyYAML, а
+        переопределить ключ, пришедший из якоря, — обычный приём YAML.
         """
 
         def construct_mapping(self, node, deep=False):
             seen = set()
             for key_node, _ in node.value:
+                if key_node.tag == "tag:yaml.org,2002:merge":
+                    continue
                 key = self.construct_object(key_node, deep=True)
                 if key in seen:
                     raise ConfigError("%s: ключ %r указан дважды (строка %d)" % (
