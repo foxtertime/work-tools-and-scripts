@@ -436,6 +436,20 @@ class UpdateModesTest(CliCase):
             self.assertEqual(handle.read(), HEADER + "\n" + OLD_ROW + "\n")
         self.assertFalse(os.path.exists(self.path("report.rejected.txt")))
 
+    def test_failed_in_place_run_keeps_table(self):
+        table = self.write_table(OLD_ROW, name="report.csv")
+        with open(table, encoding="utf-8") as handle:
+            before = handle.read()
+        self.session.tags = {"sl9-other"}
+        code = self.run_main("--table", table, "-o", table)
+        self.assertEqual(code, EXIT_FATAL)
+        self.assertIn("нет тега sl9", self.log)
+        self.assertNotIn("Traceback", self.log)
+        with open(table, encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), before)
+        leftovers = [name for name in os.listdir(self.room) if name.startswith(".vulnsheet-")]
+        self.assertEqual(leftovers, [])
+
     def test_broken_table_is_fatal_and_keeps_output(self):
         with open(self.path("report.csv"), "w", encoding="utf-8") as handle:
             handle.write("прошлый отчёт\n")
