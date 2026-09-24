@@ -12,7 +12,7 @@ rhel: "9"
 
 vex:
   # По умолчанию — $XDG_CACHE_HOME/vulnsheet или ~/.cache/vulnsheet.
-  cache_dir: ~/.cache/vulnsheet
+  # cache_dir: ~/.cache/vulnsheet
   cache_ttl: 3600   # секунд; 0 — кэш не читать, всегда идти в сеть
   jobs: 8           # параллельных загрузок
   retries: 3        # попыток на документ
