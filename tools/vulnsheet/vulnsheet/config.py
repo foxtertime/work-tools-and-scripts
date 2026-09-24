@@ -7,13 +7,13 @@ PyYAML импортируется только при заданном файл�
 import math
 import os
 import types
-from typing import Dict, Mapping, NamedTuple, Optional
+from typing import Dict, Mapping, NamedTuple, Optional, Tuple
 
 from .vex import VexSettings, parse_rhel
 
 ENV_VAR = "VULNSHEET_CONFIG"
 
-_TOP_KEYS = {"koji", "rhel", "vex", "vex_streams"}
+_TOP_KEYS = {"koji", "rhel", "vex", "vex_streams", "vex_names"}
 _KOJI_KEYS = {"hub", "tag"}
 _VEX_KEYS = {"cache_dir", "cache_ttl", "jobs", "retries", "timeout"}
 
@@ -31,6 +31,9 @@ class Config(NamedTuple):
     # ключ — нормализованная версия RHEL; неизменяемое отображение, поэтому
     # безопасно делить между экземплярами
     vex_streams: Mapping[str, Mapping[str, str]] = types.MappingProxyType({})
+    # пакет из входа → другие его имена в VEX (бинарные пакеты), для всех
+    # версий RHEL
+    vex_names: Mapping[str, Tuple[str, ...]] = types.MappingProxyType({})
 
     def stream_for(self, component: str, rhel: str) -> Optional[str]:
         """Стрим VEX для компонента — только из набора ровно этой версии RHEL.
@@ -38,6 +41,10 @@ class Config(NamedTuple):
         Отката нет: для 9.2 набор "9" не применяется, и наоборот.
         """
         return self.vex_streams.get(rhel, {}).get(component)
+
+    def names_for(self, component: str) -> Tuple[str, ...]:
+        """Другие имена пакета в VEX; пусто — только само имя."""
+        return self.vex_names.get(component, ())
 
 
 def load_config(path: Optional[str]) -> Config:
@@ -70,6 +77,7 @@ def load_config(path: Optional[str]) -> Config:
         rhel=_rhel(raw.get("rhel"), "rhel", path),
         vex=settings,
         vex_streams=_streams(raw.get("vex_streams"), path),
+        vex_names=_names(raw.get("vex_names"), path),
     )
 
 
@@ -207,4 +215,24 @@ def _streams(value, path):
                                   % (path, name, package, stream))
             streams[package.strip()] = stream.strip()
         result[rhel] = types.MappingProxyType(streams)
+    return types.MappingProxyType(result)
+
+
+def _names(value, path):
+    """vex_names: пакет → имя или список имён; непустые строки."""
+    if value is None:
+        return types.MappingProxyType({})
+    if not isinstance(value, dict):
+        raise ConfigError("%s: vex_names должен быть словарём пакет → имена" % path)
+    result = {}
+    for package, names in value.items():
+        name = "vex_names.%s" % package
+        if isinstance(names, str):
+            names = [names]
+        if (not isinstance(package, str) or not package.strip()
+                or not isinstance(names, list) or not names
+                or not all(isinstance(n, str) and n.strip() for n in names)):
+            raise ConfigError("%s: %s — имя или список имён пакета в VEX, непустые "
+                              "строки (%r: %r)" % (path, name, package, names))
+        result[package.strip()] = tuple(n.strip() for n in names)
     return types.MappingProxyType(result)

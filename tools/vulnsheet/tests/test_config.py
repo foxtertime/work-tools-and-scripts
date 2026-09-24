@@ -33,6 +33,9 @@ vex_streams:
     npm: nodejs:20
   "10":
     nodejs: nodejs:22
+vex_names:
+  rust-afterburn: [afterburn, afterburn-dracut]
+  rust-coreos-installer: coreos-installer
 """
 
 
@@ -43,9 +46,21 @@ class DefaultsTest(unittest.TestCase):
         self.assertEqual(cfg.vex, VexSettings())
         self.assertIsNone(cfg.stream_for("nginx", "9"))
 
+    def test_default_names_cannot_be_mutated(self):
+        with self.assertRaises(TypeError):
+            Config().vex_names["vim"] = ("x",)
+
     def test_default_streams_cannot_be_mutated(self):
         with self.assertRaises(TypeError):
             Config().vex_streams["9"] = {}
+
+
+class NamesForTest(unittest.TestCase):
+    def test_aliases_or_empty(self):
+        cfg = Config(vex_names={"rust-afterburn": ("afterburn",)})
+        self.assertEqual(cfg.names_for("rust-afterburn"), ("afterburn",))
+        self.assertEqual(cfg.names_for("vim"), ())
+        self.assertEqual(Config().names_for("vim"), ())
 
 
 class StreamForTest(unittest.TestCase):
@@ -104,6 +119,8 @@ class LoadTest(unittest.TestCase):
             jobs=4, retries=2, timeout=12.5))
         self.assertEqual(cfg.vex_streams, {"9": {"nginx": "nginx:1.26", "npm": "nodejs:20"},
                                            "10": {"nodejs": "nodejs:22"}})
+        self.assertEqual(cfg.vex_names, {"rust-afterburn": ("afterburn", "afterburn-dracut"),
+                                         "rust-coreos-installer": ("coreos-installer",)})
 
     def test_empty_file_is_empty_config(self):
         self.assertEqual(load_config(self.write(""))._replace(path=None), Config())
@@ -144,6 +161,12 @@ class LoadTest(unittest.TestCase):
             ("vex_streams:\n  \"9\":\n    nginx: ''\n", "vex_streams.9"),
             ("vex_streams:\n  \"9\":\n    nginx: 1.26\n", "кавычк"),
             ("- a\n", "словар"),
+            ("vex_names: [a]\n", "vex_names"),
+            ("vex_names:\n  rust-afterburn:\n", "vex_names.rust-afterburn"),
+            ("vex_names:\n  rust-afterburn: []\n", "vex_names.rust-afterburn"),
+            ("vex_names:\n  rust-afterburn: ['']\n", "vex_names.rust-afterburn"),
+            ("vex_names:\n  rust-afterburn: [1]\n", "vex_names.rust-afterburn"),
+            ("vex_names:\n  rust-afterburn: {a: b}\n", "vex_names.rust-afterburn"),
         ]
         for text, needle in cases:
             with self.subTest(text=text):

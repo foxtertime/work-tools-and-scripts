@@ -26,3 +26,12 @@ vex_streams:
   "9":
     nginx: nginx:1.26
     npm: nodejs:20      # пакет внутри чужого модуля
+
+# Другие имена пакета в VEX: пакет из входа → имя или список имён. Red Hat
+# для неисправленных продуктов пишет бинарные пакеты (afterburn), а вход и
+# koji знают исходный (rust-afterburn). VEX ищется по пакету и по всем его
+# именам отсюда, побеждает самый опасный вердикт. Для всех версий RHEL;
+# koji по-прежнему спрашивается про пакет из входа.
+vex_names:
+  rust-afterburn: [afterburn, afterburn-dracut]
+  rust-coreos-installer: coreos-installer

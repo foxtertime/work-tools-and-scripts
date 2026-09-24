@@ -264,6 +264,12 @@ def _run(args) -> int:
     if applied:
         logger.info("стримы VEX для RHEL %s: %s", rhel, ", ".join(
             "%s → %s (%d)" % (name, streams[name], count) for name, count in applied.items()))
+    aliases = {name: cfg.names_for(name) for name in packages}
+    renamed = Counter(name for _, name in wanted if aliases[name])
+    if renamed:
+        logger.info("имена VEX: %s", ", ".join(
+            "%s → %s (%d)" % (name, ", ".join(aliases[name]), count)
+            for name, count in renamed.items()))
     if tasks is not None:
         logger.info("блоков %d, отбраковано %d; CVE %d, пакетов %d",
                     len(tasks) + len(rejects), len(rejects), len(cves), len(packages))
@@ -285,7 +291,7 @@ def _run(args) -> int:
                 cache_dir=vex.prepare_cache(cfg.vex.cache_dir or _cache_dir()))
             indices, failures = vex.fetch_all(cves, settings)
         verdicts = {(cve, name): vex.Verdict(state=vex.FETCH_ERROR) if cve in failures
-                    else vex.lookup(indices[cve], name, rhel, streams[name])
+                    else vex.lookup(indices[cve], name, rhel, streams[name], aliases[name])
                     for cve, name in unique}
         outcome = _merge(records, tasks, merge.Fresh(nvrs, verdicts))
         report.write(outcome.rows, out)

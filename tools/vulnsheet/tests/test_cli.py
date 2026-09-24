@@ -277,6 +277,19 @@ class ConfigTest(CliCase):
         self.assertNotIn("стримы VEX", self.log)
         self.assertIn(";not listed", self.report_lines()[1])
 
+    def test_vex_names_find_the_binary_package(self):
+        self.docs[vex_url("CVE-2026-73070")] = csaf(
+            "CVE-2026-73070", [("known_affected", RHEL9, "afterburn")])
+        self.session.builds["rust-afterburn"] = "rust-afterburn-5.7.0-1.sl9"
+        path = self.write_config(CONFIG + "vex_names:\n  rust-afterburn: afterburn\n")
+        code = self.run_raw("--config", path, text=BLOCK.replace("vim", "rust-afterburn") + "\n")
+        self.assertEqual(code, EXIT_OK)
+        line = self.report_lines()[1]
+        self.assertIn(";rust-afterburn;rust-afterburn-5.7.0-1.sl9;", line)
+        self.assertIn(";Affected;", line)
+        self.assertEqual(self.session.calls, [("sl9", "rust-afterburn")])
+        self.assertIn("имена VEX: rust-afterburn → afterburn (1)", self.log)
+
     def test_flag_wins_over_config(self):
         path = self.write_config(CONFIG.replace("tag: sl9", "tag: sl9-old"))
         # если бы победил конфиг, тег sl9-old не нашёлся бы — код 2

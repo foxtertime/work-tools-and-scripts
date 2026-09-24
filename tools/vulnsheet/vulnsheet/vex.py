@@ -14,7 +14,7 @@ import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Iterable, NamedTuple, Optional, Tuple
+from typing import Dict, Iterable, NamedTuple, Optional, Sequence, Tuple
 
 from . import __version__
 
@@ -282,15 +282,20 @@ def _wanted(variant: str, stream: Optional[str]) -> bool:
 
 
 def lookup(index: Optional[dict], component: str, rhel: str,
-           stream: Optional[str] = None) -> Verdict:
+           stream: Optional[str] = None, aliases: Sequence[str] = ()) -> Verdict:
     """Вердикт для компонента под версией RHEL; index=None — записи у Red Hat нет.
 
     Откатов нет: версия RHEL сравнивается точно, без стрима берётся только
     обычный пакет, со стримом — только этот стрим. Подсказки в маркере
-    not listed лишь объясняют, почему ничего не нашлось.
+    not listed лишь объясняют, почему ничего не нашлось. aliases — другие
+    имена того же пакета в VEX (бинарные пакеты); из вердиктов по всем
+    именам побеждает самый опасный.
     """
     if index is None:
         return Verdict(state=NO_RECORD)
+    # имя пакета и алиасы из конфига (vex_names): для неисправленных
+    # продуктов Red Hat пишет бинарные пакеты, а не исходный
+    names = {component.lower()} | {alias.lower() for alias in aliases}
     vuln, rem_index, cve = index["vuln"], index["rem"], index["cve"]
     if stream:
         logger.debug("%s %s: смотрим стрим %s", cve, component, stream)
@@ -303,8 +308,7 @@ def lookup(index: Optional[dict], component: str, rhel: str,
             platform_id, component_id = _split_product(product_id, index["rels"])
             cpe = index["cpes"].get(platform_id) or ""
             found = _rhel_version(cpe)
-            same_name = (_component_name(component_id, index["pkgs"]).lower()
-                         == component.lower())
+            same_name = _component_name(component_id, index["pkgs"]).lower() in names
             if found is None:
                 if same_name and _repo(cpe) in LAYERED_REPOS:
                     logger.debug("%s %s: продукт %s (%s) — надстройка, не RHEL",

@@ -113,6 +113,44 @@ class LookupTest(unittest.TestCase):
         self.assertEqual(lookup(None, "vim", "9"), Verdict(state=NO_RECORD))
 
 
+
+class VexNamesTest(unittest.TestCase):
+    """Для неисправленных продуктов Red Hat пишет бинарные пакеты (afterburn),
+    а вход и koji знают исходный (rust-afterburn): мост — алиасы из конфига."""
+    WONT_FIX = {"category": "no_fix_planned", "details": "Will not fix",
+                "product_ids": [pid(RHEL9, "afterburn"), pid(RHEL9, "afterburn-dracut")]}
+
+    def doc(self):
+        return csaf(CVE, [("known_affected", RHEL9, "afterburn"),
+                          ("known_affected", RHEL9, "afterburn-dracut")],
+                    remediations=[self.WONT_FIX])
+
+    def test_source_name_alone_is_not_listed(self):
+        self.assertEqual(lookup(build_index(self.doc()), "rust-afterburn", "9").state,
+                         "not listed")
+
+    def test_alias_finds_the_binary_package(self):
+        verdict = lookup(build_index(self.doc()), "rust-afterburn", "9",
+                         aliases=("afterburn",))
+        self.assertEqual(verdict.state, "Will not fix")
+
+    def test_source_name_still_counts_and_worst_wins(self):
+        fixed_src = "rust-afterburn-0:5.7.0-1.el9.src"
+        doc = csaf(CVE, [("fixed", APPSTREAM96, fixed_src),
+                         ("known_affected", RHEL9, "afterburn")],
+                   remediations=[vendor_fix(pid(APPSTREAM96, fixed_src))])
+        index = build_index(doc)
+        self.assertEqual(lookup(index, "rust-afterburn", "9").state, "Fixed")
+        self.assertEqual(lookup(index, "rust-afterburn", "9", aliases=("afterburn",)).state,
+                         "Affected")
+
+    def test_alias_match_is_exact_and_case_insensitive(self):
+        index = build_index(self.doc())
+        self.assertEqual(lookup(index, "rust-afterburn", "9", aliases=("AfterBurn",)).state,
+                         "Will not fix")
+        self.assertEqual(lookup(index, "rust-afterburn", "9", aliases=("after",)).state,
+                         "not listed")
+
 class RhelRepositoryTest(unittest.TestCase):
     """Часть CPE после «::» — репозиторий; надстройки вроде Fast Datapath за
     RHEL не считаются, неизвестный репозиторий учитывается с предупреждением."""
