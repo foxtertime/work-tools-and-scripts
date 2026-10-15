@@ -5,21 +5,23 @@ PyYAML импортируется только при заданном файл�
 стандартной библиотеки и koji.
 
 Секция gitlab включает проверку патчей: без неё GitLab не спрашивается.
+Секция ranges, даже пустая, включает проверку апстрим-диапазонов версий.
 """
 import math
 import os
 import types
-from typing import Dict, Mapping, NamedTuple, Optional, Tuple
+from typing import Dict, Mapping, NamedTuple, Optional, Set, Tuple
 
 from .gitlabclient import GitlabHost
 from .vex import VexSettings, parse_rhel
 
 ENV_VAR = "VULNSHEET_CONFIG"
 
-_TOP_KEYS = {"koji", "rhel", "vex", "vex_streams", "vex_names", "gitlab"}
+_TOP_KEYS = {"koji", "rhel", "vex", "vex_streams", "vex_names", "gitlab", "ranges"}
 _KOJI_KEYS = {"hub", "tag"}
 _VEX_KEYS = {"cache_dir", "cache_ttl", "jobs", "retries", "timeout"}
 _GITLAB_KEYS = {"hosts", "default_host", "token_env", "patch_dir", "jobs", "retries", "timeout"}
+_RANGES_KEYS = {"names", "nvd_key_env", "cache_ttl", "jobs", "retries", "timeout"}
 # web не используется: допускается, чтобы блок хостов можно было взять из
 # конфига dashboard как есть
 _HOST_KEYS = {"api", "web"}
@@ -40,6 +42,21 @@ class GitlabSettings(NamedTuple):
     timeout: float = 30
 
 
+class RangesConfig(NamedTuple):
+    """Апстрим-диапазоны версий. Ключ NVD — в переменной nvd_key_env, не в
+    файле; без ключа NVD спрашивается медленнее."""
+    # пакет → имена продукта в NVD и CVE.org сверх самого имени пакета
+    names: Mapping[str, Tuple[str, ...]] = types.MappingProxyType({})
+    nvd_key_env: str = "NVD_API_KEY"
+    cache_ttl: int = 86400
+    jobs: int = 8
+    retries: int = 3
+    timeout: float = 30
+
+    def names_for(self, component: str) -> Set[str]:
+        return {component, *self.names.get(component, ())}
+
+
 class Config(NamedTuple):
     path: Optional[str] = None
     koji_hub: Optional[str] = None
@@ -54,6 +71,8 @@ class Config(NamedTuple):
     vex_names: Mapping[str, Tuple[str, ...]] = types.MappingProxyType({})
     # None — секции gitlab нет, патчи не проверяются
     gitlab: Optional[GitlabSettings] = None
+    # None — секции ranges нет, диапазоны не проверяются
+    ranges: Optional[RangesConfig] = None
 
     def stream_for(self, component: str, rhel: str) -> Optional[str]:
         """Стрим VEX для компонента — только из набора ровно этой версии RHEL.
@@ -97,8 +116,9 @@ def load_config(path: Optional[str]) -> Config:
         rhel=_rhel(raw.get("rhel"), "rhel", path),
         vex=settings,
         vex_streams=_streams(raw.get("vex_streams"), path),
-        vex_names=_names(raw.get("vex_names"), path),
+        vex_names=_names(raw.get("vex_names"), path, "vex_names"),
         gitlab=_gitlab(_section(raw, "gitlab", path), path),
+        ranges=_ranges(raw, path),
     )
 
 
@@ -275,21 +295,39 @@ def _streams(value, path):
     return types.MappingProxyType(result)
 
 
-def _names(value, path):
-    """vex_names: пакет → имя или список имён; непустые строки."""
+def _names(value, path, key):
+    """vex_names, ranges.names: пакет → имя или список имён; непустые строки."""
     if value is None:
         return types.MappingProxyType({})
     if not isinstance(value, dict):
-        raise ConfigError("%s: vex_names должен быть словарём пакет → имена" % path)
+        raise ConfigError("%s: %s должен быть словарём пакет → имена" % (path, key))
     result = {}
     for package, names in value.items():
-        name = "vex_names.%s" % package
+        name = "%s.%s" % (key, package)
         if isinstance(names, str):
             names = [names]
         if (not isinstance(package, str) or not package.strip()
                 or not isinstance(names, list) or not names
                 or not all(isinstance(n, str) and n.strip() for n in names)):
-            raise ConfigError("%s: %s — имя или список имён пакета в VEX, непустые "
-                              "строки (%r: %r)" % (path, name, package, names))
+            raise ConfigError("%s: %s — имя или список имён, непустые строки (%r: %r)"
+                              % (path, name, package, names))
         result[package.strip()] = tuple(n.strip() for n in names)
     return types.MappingProxyType(result)
+
+
+def _ranges(raw, path) -> Optional[RangesConfig]:
+    """Секция ranges; её присутствие, даже пустой, включает проверку."""
+    if "ranges" not in raw:
+        return None
+    section = _section(raw, "ranges", path)
+    _check_keys(section, _RANGES_KEYS, "ranges.", path)
+    defaults = RangesConfig()
+    return RangesConfig(
+        names=_names(section.get("names"), path, "ranges.names"),
+        nvd_key_env=(_string(section, "nvd_key_env", "ranges.nvd_key_env", path)
+                     or defaults.nvd_key_env),
+        cache_ttl=_integer(section, "cache_ttl", "ranges.cache_ttl", path, 0, defaults.cache_ttl),
+        jobs=_integer(section, "jobs", "ranges.jobs", path, 1, defaults.jobs),
+        retries=_integer(section, "retries", "ranges.retries", path, 1, defaults.retries),
+        timeout=_timeout(section, "ranges.timeout", path, defaults.timeout),
+    )

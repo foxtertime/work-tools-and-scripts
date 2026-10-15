@@ -408,7 +408,7 @@ def download(url: str, timeout: float = TIMEOUT) -> Optional[bytes]:
     return body
 
 
-def _read_cache(path, ttl):
+def read_cache(path, ttl):
     """Документ из кэша или None: нет, устарел или испорчен — идём в сеть."""
     try:
         if time.time() - os.path.getmtime(path) >= ttl:
@@ -419,7 +419,7 @@ def _read_cache(path, ttl):
         return None
 
 
-def _write_cache(path, body):
+def write_cache(path, body):
     """Атомарно: оборванная запись не должна отравить кэш. Ошибка — не повод
     ронять прогон."""
     try:
@@ -460,7 +460,7 @@ def fetch(cve: str, settings: VexSettings = VexSettings()) -> Optional[dict]:
     cached = (os.path.join(settings.cache_dir, cve.lower() + ".json")
               if settings.cache_dir else None)
     if cached:
-        doc = _read_cache(cached, settings.cache_ttl)
+        doc = read_cache(cached, settings.cache_ttl)
         if doc is not None:
             logger.debug("%s: из кэша", cve)
             return doc
@@ -478,7 +478,7 @@ def fetch(cve: str, settings: VexSettings = VexSettings()) -> Optional[dict]:
                 time.sleep(2 ** attempt)
             continue
         if cached:
-            _write_cache(cached, body)
+            write_cache(cached, body)
         return doc
     raise VexError("%s: %s" % (url, last))
 

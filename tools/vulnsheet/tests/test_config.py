@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from vulnsheet.config import Config, ConfigError, GitlabSettings, load_config
+from vulnsheet.config import Config, ConfigError, GitlabSettings, RangesConfig, load_config
 from vulnsheet.gitlabclient import GitlabHost
 from vulnsheet.vex import VexSettings
 
@@ -151,6 +151,27 @@ class LoadTest(unittest.TestCase):
             hosts={}, default_host=None, token_env="GITLAB_TOKEN", patch_dir="PATCH",
             jobs=8, retries=3, timeout=30))
 
+    def test_ranges_section(self):
+        cfg = load_config(self.write(
+            "ranges:\n  nvd_key_env: MY_NVD\n  cache_ttl: 60\n  jobs: 2\n  retries: 1\n"
+            "  timeout: 5\n  names:\n    nginx: [nginx, nginx_open_source]\n"
+            "    httpd: http_server\n"))
+        self.assertEqual(cfg.ranges, RangesConfig(
+            names={"nginx": ("nginx", "nginx_open_source"), "httpd": ("http_server",)},
+            nvd_key_env="MY_NVD", cache_ttl=60, jobs=2, retries=1, timeout=5))
+        self.assertEqual(cfg.ranges.names_for("httpd"), {"httpd", "http_server"})
+        self.assertEqual(cfg.ranges.names_for("vim"), {"vim"})
+
+    def test_empty_ranges_section_turns_the_check_on_with_defaults(self):
+        for text in ("ranges:\n", "ranges: {}\n"):
+            with self.subTest(text=text):
+                self.assertEqual(load_config(self.write(text)).ranges, RangesConfig())
+        self.assertEqual(RangesConfig().nvd_key_env, "NVD_API_KEY")
+        self.assertEqual(RangesConfig().cache_ttl, 86400)
+
+    def test_without_ranges_section_the_check_is_off(self):
+        self.assertIsNone(load_config(self.write("rhel: \"9\"\n")).ranges)
+
     def test_without_gitlab_section_the_check_is_off(self):
         self.assertIsNone(load_config(self.write("rhel: \"9\"\n")).gitlab)
         self.assertIsNone(load_config(self.write("gitlab:\n")).gitlab)
@@ -213,6 +234,14 @@ class LoadTest(unittest.TestCase):
             ("gitlab:\n  retries: 0\n  hosts:\n    gl: {api: x}\n", "gitlab.retries"),
             ("gitlab:\n  timeout: 0\n  hosts:\n    gl: {api: x}\n", "gitlab.timeout"),
             ("gitlab:\n  patch_dir: ''\n  hosts:\n    gl: {api: x}\n", "gitlab.patch_dir"),
+            ("ranges: [a]\n", "ranges"),
+            ("ranges:\n  nvd_key: x\n", "ranges.nvd_key"),
+            ("ranges:\n  jobs: 0\n", "ranges.jobs"),
+            ("ranges:\n  cache_ttl: -1\n", "ranges.cache_ttl"),
+            ("ranges:\n  timeout: 0\n", "ranges.timeout"),
+            ("ranges:\n  nvd_key_env: ''\n", "ranges.nvd_key_env"),
+            ("ranges:\n  names: [a]\n", "ranges.names"),
+            ("ranges:\n  names:\n    nginx: []\n", "ranges.names.nginx"),
         ]
         for text, needle in cases:
             with self.subTest(text=text):
@@ -285,3 +314,4 @@ class LoadTest(unittest.TestCase):
         cfg = load_config(os.path.join(ROOT, "vulnsheet.example.yaml"))
         self.assertEqual(cfg.stream_for("nginx", "9"), "nginx:1.26")
         self.assertIn("gitlab.example.com", cfg.gitlab.hosts)
+        self.assertIn("http_server", cfg.ranges.names_for("httpd"))

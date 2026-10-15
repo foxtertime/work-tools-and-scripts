@@ -13,6 +13,7 @@ from typing import Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 from . import report
 from .kojiclient import ERROR
 from .patches import PatchNote
+from .ranges import RangeNote
 
 Found = Mapping[str, PatchNote]  # источник (patches.SRC_*) → что известно о CVE
 from .table import Record
@@ -31,6 +32,9 @@ class Fresh(NamedTuple):
     nvrs: Mapping[str, str]
     verdicts: Mapping[Pair, Verdict]
     patched: Mapping[str, Mapping[str, Found]] = types.MappingProxyType({})
+    # (CVE, компонент) → где версия билда относительно уязвимых диапазонов;
+    # нет — не проверялось или источники не ответили
+    ranges: Mapping[Pair, RangeNote] = types.MappingProxyType({})
 
 
 # судьба пометки о патче в строке
@@ -60,22 +64,31 @@ class Outcome(NamedTuple):
     # patches.FOUND)… — и по судьбе пометки (ADDED…)
     patch_kinds: Mapping[str, int] = types.MappingProxyType({})
     note_fates: Mapping[str, int] = types.MappingProxyType({})
+    # строк по диапазону: True — в нём, False — вне, None — неизвестен; и по источнику
+    range_kinds: Mapping[Optional[bool], int] = types.MappingProxyType({})
+    range_sources: Mapping[str, int] = types.MappingProxyType({})
 
 
 class _Notes:
     def __init__(self):
         self.kept_koji, self.kept_vex, self.skipped = [], [], []
         self.patch_kinds, self.note_fates = Counter(), Counter()
+        self.range_kinds, self.range_sources = Counter(), Counter()
 
-    def note(self, found: Found, fate: str) -> None:
-        for source, patch in found.items():
+    def note(self, found: Optional[Found], ranged: Optional[RangeNote], fate: str) -> None:
+        for source, patch in (found or {}).items():
             self.patch_kinds[(source, patch.kind)] += 1
+        if ranged is not None:
+            self.range_kinds[ranged.inside] += 1
+            if ranged.source:
+                self.range_sources[ranged.source] += 1
         self.note_fates[fate] += 1
 
     def fields(self) -> dict:
         return {"kept_koji": tuple(self.kept_koji), "kept_vex": tuple(self.kept_vex),
                 "skipped": tuple(self.skipped), "patch_kinds": self.patch_kinds,
-                "note_fates": self.note_fates}
+                "note_fates": self.note_fates, "range_kinds": self.range_kinds,
+                "range_sources": self.range_sources}
 
 
 def pairs(records: Optional[Sequence[Record]],
@@ -194,15 +207,20 @@ def _fresh_row(task: Task, fresh: Fresh, notes: Optional["_Notes"] = None) -> Li
     """Строка с нуля; notes=None — строку собирают поверх прежней (_updated),
     и пометку о патче считает уже он."""
     pair = _task_pair(task)
-    patch = _patch(pair, fresh)
-    if patch is not None and notes is not None:
-        notes.note(patch, ADDED)
-    return report.row(task, fresh.nvrs[pair[1]], fresh.verdicts[pair],
-                      report.patch_note(patch) if patch else None)
+    patch, ranged, text = _comment_note(pair, fresh)
+    if text and notes is not None:
+        notes.note(patch, ranged, ADDED)
+    return report.row(task, fresh.nvrs[pair[1]], fresh.verdicts[pair], text)
 
 
-def _patch(pair: Pair, fresh: Fresh) -> Optional[Found]:
-    return fresh.patched.get(pair[1], {}).get(pair[0])
+def _comment_note(pair: Pair, fresh: Fresh):
+    """(что найдено в GitLab, что с диапазоном, текст пометки в комментарий
+    или None)."""
+    patch = fresh.patched.get(pair[1], {}).get(pair[0])
+    ranged = fresh.ranges.get(pair)
+    parts = [report.patch_note(patch) if patch else None,
+             report.range_note(ranged) if ranged is not None else None]
+    return patch, ranged, "; ".join(part for part in parts if part) or None
 
 
 def _note(record: Record) -> Note:
@@ -216,12 +234,12 @@ def _updated(record: Record, task: Task, pair: Pair, fresh: Fresh, notes: _Notes
     cells = _fresh_row(task, fresh)
     cells[report.DEVELOPER] = old[report.DEVELOPER]
     cells[report.COMMENT_INDEX] = old[report.COMMENT_INDEX]
-    patch = _patch(pair, fresh)
-    if patch is not None:
+    patch, ranged, text = _comment_note(pair, fresh)
+    if text:
         before = old[report.COMMENT_INDEX]
-        after = report.with_patch_note(before, report.patch_note(patch))
+        after = report.with_patch_note(before, text)
         cells[report.COMMENT_INDEX] = after
-        notes.note(patch, UNCHANGED if after == before
+        notes.note(patch, ranged, UNCHANGED if after == before
                    else UPDATED if report.has_patch_note(before) else ADDED)
     if fresh.nvrs[pair[1]] == ERROR:
         cells[report.KOJI] = old[report.KOJI]
