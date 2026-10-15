@@ -7,7 +7,7 @@ import sys
 import tempfile
 import time
 from collections import Counter
-from typing import List, Optional
+from typing import List, NamedTuple, Optional
 
 from . import (__version__, config, gitlabclient, httpclient, kojiclient, logs, merge,
                patches, report, table, vex)
@@ -192,10 +192,6 @@ def _settings(args):
     """Конфиг и три обязательных значения: флаг > конфиг > значение в коде."""
     path = args.config or os.environ.get(config.ENV_VAR) or None
     cfg = config.load_config(path)
-    if path:
-        logger.info("конфиг: %s", path)
-    else:
-        logger.info("без конфига")
     rhel = args.rhel or cfg.rhel
     hub = args.koji_url or cfg.koji_hub
     tag = args.tag or cfg.koji_tag
@@ -207,7 +203,15 @@ def _settings(args):
     return cfg, rhel, hub, tag
 
 
-def _patches(session, nvrs, settings):
+def _gitlab_token(settings) -> Optional[str]:
+    """Токен GitLab из окружения; файл или копипаста приносят перевод строки —
+    срезаем."""
+    if settings is None:
+        return None
+    return (os.environ.get(settings.token_env) or "").strip() or None
+
+
+def _patches(session, nvrs, settings, token):
     """Патчи под CVE по компонентам с найденным билдом; без секции gitlab —
     ничего не спрашивается."""
     if settings is None:
@@ -216,11 +220,6 @@ def _patches(session, nvrs, settings):
              if nvr not in (kojiclient.NOT_FOUND, kojiclient.ERROR)}
     if not found:
         return patches.Result({}, ())
-    # токен из файла или копипасты приносит перевод строки — срезаем
-    token = (os.environ.get(settings.token_env) or "").strip() or None
-    logger.info("GitLab: %s, каталог %s, %s", ", ".join(settings.hosts), settings.patch_dir,
-                "токен из $%s" % settings.token_env if token
-                else "без токена ($%s пуст) — видны только публичные проекты" % settings.token_env)
     infos = kojiclient.build_infos(session, found.values())
     client = gitlabclient.GitlabClient(
         settings.hosts, token=token, patch_dir=settings.patch_dir,
@@ -228,6 +227,85 @@ def _patches(session, nvrs, settings):
         retries=settings.retries, default_host=settings.default_host)
     return patches.find({name: infos.get(nvr) for name, nvr in found.items()}, client,
                         settings.jobs)
+
+
+def _place(path: str, stream: str) -> str:
+    return stream if path == STDIO else path
+
+
+def _header(args, cfg, run) -> None:
+    """Шапка прогона — до первого запроса в сеть: что прочитано, куда пишем,
+    какие источники с какими настройками и сколько будет спрашиваться.
+
+    Десятиминутный прогон должен сразу показать, что он сделает: иначе о
+    забытой секции конфига узнаёшь только в его конце."""
+    logger.info("vulnsheet %s", __version__)
+    path = args.config or os.environ.get(config.ENV_VAR)
+    logger.info("конфиг: %s" % path if path else "без конфига")
+    inputs = []
+    if run.records is not None:
+        inputs.append("таблица %s (строк %d)" % (args.table, len(run.records)))
+    if run.tasks is not None:
+        inputs.append("блоки %s" % _place(args.blocks, "stdin"))
+    logger.info("режим: %s — %s → %s", MODES[(args.blocks is not None, args.table is not None)],
+                " + ".join(inputs), _place(args.output, "stdout"))
+    if run.tasks is not None:
+        rejected = len(run.rejects)
+        logger.info("вход: блоков %d, отбраковано %d%s", len(run.tasks) + rejected, rejected,
+                    " → %s" % rejects_path(args.output, args.rejects) if rejected else "")
+    logger.info("koji: хаб %s, тег %s", run.hub, run.tag)
+    cache = "%s (%s)" % (cfg.vex.cache_dir or _cache_dir(),
+                         "живёт %d с" % cfg.vex.cache_ttl if cfg.vex.cache_ttl
+                         else "не читается")
+    logger.info("VEX: RHEL %s, кэш %s, потоков %d", run.rhel, cache, cfg.vex.jobs)
+    applied = Counter(name for _, name in run.wanted if run.streams[name])
+    if applied:
+        logger.info("стримы VEX для RHEL %s: %s", run.rhel, ", ".join(
+            "%s → %s (%d)" % (name, run.streams[name], count) for name, count in applied.items()))
+    renamed = Counter(name for _, name in run.wanted if run.aliases[name])
+    if renamed:
+        logger.info("имена VEX: %s", ", ".join(
+            "%s → %s (%d)" % (name, ", ".join(run.aliases[name]), count)
+            for name, count in renamed.items()))
+    gitlab = cfg.gitlab
+    if gitlab is None:
+        logger.info("GitLab: не задан в конфиге — патчи не проверяются")
+    else:
+        hosts = ", ".join("%s (по умолчанию)" % host if host == gitlab.default_host else host
+                          for host in gitlab.hosts)
+        token = ("токен из $%s" % gitlab.token_env if run.token else
+                 "без токена ($%s пуст) — видны только публичные проекты" % gitlab.token_env)
+        logger.info("GitLab: %s, каталог %s, %s, потоков %d", hosts, gitlab.patch_dir, token,
+                    gitlab.jobs)
+    if not run.packages:
+        logger.info("план: спрашивать нечего — в сеть не идём")
+        return
+    plan = "koji — пакетов %d, VEX — CVE %d" % (len(run.packages), len(run.cves))
+    if gitlab is not None:
+        plan += ", GitLab — патчи по билдам из koji (до %d)" % len(run.packages)
+    logger.info("план: %s", plan)
+
+
+def _warn_rejects(rejects) -> None:
+    for reject in rejects:
+        logger.warning("блок %d «%s» отбракован: %s", reject.number,
+                       reject.text.split("\n", 1)[0].strip(), reject.reason)
+
+
+class _Run(NamedTuple):
+    """Что прочитано и что будет спрошено: общее для шапки и самой работы."""
+    rhel: str
+    hub: str
+    tag: str
+    records: Optional[list]
+    tasks: Optional[list]
+    rejects: list
+    wanted: list            # пара (CVE, компонент) на строку выхода, с повторами
+    cves: list
+    packages: list
+    streams: dict
+    aliases: dict
+    token: Optional[str]
 
 
 def _merge(records, tasks, fresh):
@@ -258,23 +336,19 @@ def _report_outcome(outcome, synced: bool) -> None:
 
 def _run(args) -> int:
     cfg, rhel, hub, tag = _settings(args)
-    logger.info("режим: %s", MODES[(args.blocks is not None, args.table is not None)])
     records = None
     if args.table is not None:
         records = _read_table(args.table)
-        logger.info("таблица %s: строк %d", args.table, len(records))
     tasks, rejects = None, []
     if args.blocks is not None:
         tasks, rejects = parse(_read_input(args.blocks))
         # в режиме 3 пустые блоки иначе молча сделали бы все строки Missing
         if not tasks and not rejects:
             raise _Fatal("во входе нет ни одного блока")
-        for reject in rejects:
-            logger.warning("блок %d «%s» отбракован: %s", reject.number,
-                           reject.text.split("\n", 1)[0].strip(), reject.reason)
         # режим 3: если из блоков не осталось ни одного годного, синхронизация
         # молча пометила бы Missing вообще все строки таблицы
         if args.table is not None and not tasks:
+            _warn_rejects(rejects)
             raise _Fatal("в блоках нет ни одного годного блока — синхронизация "
                         "пометила бы все строки Missing")
 
@@ -282,23 +356,12 @@ def _run(args) -> int:
     unique = list(dict.fromkeys(wanted))
     cves = list(dict.fromkeys(cve for cve, _ in unique))
     packages = list(dict.fromkeys(component for _, component in unique))
-    logger.info("хаб %s, тег %s, RHEL %s", hub, tag, rhel)
     streams = {name: cfg.stream_for(name, rhel) for name in packages}
-    applied = Counter(name for _, name in wanted if streams[name])
-    if applied:
-        logger.info("стримы VEX для RHEL %s: %s", rhel, ", ".join(
-            "%s → %s (%d)" % (name, streams[name], count) for name, count in applied.items()))
     aliases = {name: cfg.names_for(name) for name in packages}
-    renamed = Counter(name for _, name in wanted if aliases[name])
-    if renamed:
-        logger.info("имена VEX: %s", ", ".join(
-            "%s → %s (%d)" % (name, ", ".join(aliases[name]), count)
-            for name, count in renamed.items()))
-    if tasks is not None:
-        logger.info("блоков %d, отбраковано %d; CVE %d, пакетов %d",
-                    len(tasks) + len(rejects), len(rejects), len(cves), len(packages))
-    else:
-        logger.info("CVE %d, пакетов %d", len(cves), len(packages))
+    token = _gitlab_token(cfg.gitlab)
+    _header(args, cfg, _Run(rhel, hub, tag, records, tasks, rejects, wanted, cves, packages,
+                            streams, aliases, token))
+    _warn_rejects(rejects)
 
     # выход открываем до сети: неверный путь должен падать сразу, и не
     # затирать прежний отчёт — пишем во временник рядом, подменяем в конце;
@@ -315,7 +378,7 @@ def _run(args) -> int:
             settings = cfg.vex._replace(
                 cache_dir=vex.prepare_cache(cfg.vex.cache_dir or _cache_dir()))
             indices, failures = vex.fetch_all(cves, settings)
-            found = _patches(session, nvrs, cfg.gitlab)
+            found = _patches(session, nvrs, cfg.gitlab, token)
         verdicts = {(cve, name): vex.Verdict(state=vex.FETCH_ERROR) if cve in failures
                     else vex.lookup(indices[cve], name, rhel, streams[name], aliases[name])
                     for cve, name in unique}
