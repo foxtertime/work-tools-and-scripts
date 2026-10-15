@@ -361,6 +361,7 @@ gitlab:
       api: https://gitlab.example.com/api/v4
 """
 TREE_URL = "https://gitlab.example.com/api/v4/projects/g%2Fvim/repository/tree"
+BLOB = "https://gitlab.example.com/g/vim/-/blob/sl9/PATCH/vim-CVE-2026-73070.patch"
 
 
 class GitlabTest(CliCase):
@@ -389,9 +390,9 @@ class GitlabTest(CliCase):
 
     def test_patch_in_the_tree_is_noted_in_the_comment(self):
         self.assertEqual(self.run_gitlab(), EXIT_OK)
-        self.assertEqual(self.report_lines(), [HEADER, EXPECTED[:-1] + "патч присутствует"])
+        self.assertEqual(self.comment(), "патч найден: " + BLOB)
         self.assertEqual(self.session.build_calls, [VIM_NVR])
-        self.assertIn("компонентов прочитано 1", self.log)
+        self.assertIn("    - патч найден 1", self.log)
 
     def test_token_from_the_environment_is_sent_stripped(self):
         self.run_gitlab()
@@ -433,7 +434,23 @@ class GitlabTest(CliCase):
             handle.write(GITLAB_CONFIG)
         code = self.run_main("--config", path, "--table", table, "-o", self.path("report.csv"))
         self.assertEqual(code, EXIT_OK)
-        self.assertEqual(self.comment(), "ждём апстрим; патч присутствует")
+        self.assertEqual(self.comment(), "ждём апстрим; патч найден: " + BLOB)
+
+    def test_patch_removed_from_the_branch_links_to_the_build_commit(self):
+        sha = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+        self.session.infos[VIM_NVR]["source"] = "git+ssh://git@gitlab.example.com/g/vim#" + sha
+
+        def tree_at(ref):
+            return (TREE_URL, (("path", "PATCH"), ("per_page", "100"),
+                               ("recursive", "true"), ("ref", ref)))
+        self.transport.routes = {
+            tree_at(sha): Response(200, [{"type": "blob",
+                                          "path": "PATCH/vim-CVE-2026-73070.patch"}], {}),
+            tree_at("sl9"): Response(200, [], {})}
+        self.assertEqual(self.run_gitlab(), EXIT_OK)
+        self.assertEqual(self.comment(), "патч убран из ветки sl9, возможно, не нужен после "
+                                         "обновления пакета: " + BLOB.replace("/sl9/", "/%s/" % sha))
+        self.assertIn("    - убран из ветки 1", self.log)
 
     def test_without_gitlab_section_gitlab_is_not_asked(self):
         self.assertEqual(self.run_gitlab(config="rhel: \"9\"\n"), EXIT_OK)
@@ -545,14 +562,14 @@ class HeaderTest(CliCase):
 
 
 class FooterTest(CliCase):
-    """Итог прогона: последним блоком — что сделано и сколько чего найдено."""
+    """Итог прогона: последним блоком, списком — что сделано и сколько чего
+    найдено."""
 
     def footer(self):
         """Сообщения итога, без времени и уровня: от «итог:» до конца."""
         messages = [line.split(" cli: ", 1)[1] for line in self.log.splitlines()
                     if re.search(r" INFO +cli: ", line)]
-        start = next(i for i, m in enumerate(messages) if m.startswith("итог: "))
-        return messages[start:]
+        return messages[messages.index("итог:"):]
 
     def gitlab(self, routes):
         path = self.path("vulnsheet.yaml")
@@ -569,11 +586,16 @@ class FooterTest(CliCase):
         self.assertEqual(self.run_cli(), EXIT_OK)
         footer = self.footer()
         self.assertEqual(footer[:-1], [
-            "итог: написан %s, строк 1" % self.path("report.csv"),
-            "koji: найдено 1, NOT_FOUND 0, ERROR 0",
-            "VEX: Under investigation 1",
-            "GitLab: не задан — патчи не проверялись",
-            "код возврата 0",
+            "итог:",
+            "  - написан %s, строк 1" % self.path("report.csv"),
+            "  - koji:",
+            "    - найдено 1",
+            "    - NOT_FOUND 0",
+            "    - ERROR 0",
+            "  - VEX:",
+            "    - Under investigation 1",
+            "  - GitLab: не задан — патчи не проверялись",
+            "  - код возврата 0",
         ])
         self.assertRegex(footer[-1], r"^всего за \d+\.\d с$")
 
@@ -586,9 +608,22 @@ class FooterTest(CliCase):
         self.assertEqual(self.run_cli("--config", path,
                                       text=BLOCK + "\n\n" + BLOCK + "\n\n" + bash + "\n"),
                          EXIT_OK)
-        self.assertIn("GitLab: патч найден в 2 строках — пометка поставлена в 2, уже стояла в 0; "
-                      "компонентов прочитано 1, без каталога патчей 0, без источника 1, "
-                      "из SRPM 0, ошибок 0", self.footer())
+        footer = self.footer()
+        start = footer.index("  - GitLab, строки:")
+        self.assertEqual(footer[start:start + 12], [
+            "  - GitLab, строки:",
+            "    - патч найден 2",
+            "    - убран из ветки 0",
+            "    - есть только в ветке 0",
+            "    - пометка поставлена 2, обновлена 0, без изменений 0",
+            "  - GitLab, компоненты:",
+            "    - прочитано 1",
+            "    - без каталога патчей 0",
+            "    - без источника 1",
+            "    - из SRPM 0",
+            "    - ошибок 0",
+            "  - код возврата 0",
+        ])
 
     def test_failures_are_listed_as_reasons_for_exit_code_1(self):
         path = self.gitlab({TREE_URL: Response(500, {"message": "boom"}, {})})
@@ -600,13 +635,16 @@ class FooterTest(CliCase):
                             text=BLOCK + "\n\n" + BAD + "\n\n" + openssl + "\n")
         self.assertEqual(code, EXIT_PARTIAL)
         footer = self.footer()
-        self.assertIn("koji: найдено 1, NOT_FOUND 0, ERROR 1", footer)
-        self.assertIn("VEX: Under investigation 1, fetch error 1", footer)
-        self.assertIn("вход: отбраковано блоков 1 → %s" % self.path("report.rejected.txt"),
-                      footer)
-        self.assertIn("код возврата 1: битых блоков 1, пакетов с ERROR от koji 1, "
-                      "CVE без документа VEX 1, компонентов с непроверенными патчами 1",
-                      footer)
+        self.assertIn("    - ERROR 1", footer)
+        self.assertIn("    - fetch error 1", footer)
+        self.assertIn("  - отбраковано блоков 1 → %s" % self.path("report.rejected.txt"), footer)
+        self.assertEqual(footer[footer.index("  - код возврата 1:"):-1], [
+            "  - код возврата 1:",
+            "    - битых блоков 1",
+            "    - пакетов с ERROR от koji 1",
+            "    - CVE без документа VEX 1",
+            "    - компонентов с ошибкой проверки патчей 1",
+        ])
 
     def test_sync_counts_and_kept_values(self):
         table = self.path("old.csv")
@@ -619,11 +657,17 @@ class FooterTest(CliCase):
             handle.write(BLOCK + "\n")
         code = self.run_main("--table", table, "--blocks", src, "-o", self.path("report.csv"))
         self.assertEqual(code, EXIT_PARTIAL)
-        footer = self.footer()
-        self.assertEqual(footer[0], "итог: написан %s, строк 2 — совпало 1, Missing 1, новых 0"
-                         % self.path("report.csv"))
-        self.assertEqual(footer[1], "koji: найдено 2, NOT_FOUND 0, ERROR 0 "
-                                    "(в 2 строках оставлен прежний SL NVR)")
+        self.assertEqual(self.footer()[1:10], [
+            "  - написан %s, строк 2" % self.path("report.csv"),
+            "    - совпало 1",
+            "    - Missing 1",
+            "    - новых 0",
+            "  - koji:",
+            "    - найдено 2",
+            "    - NOT_FOUND 0",
+            "    - ERROR 0",
+            "    - оставлен прежний SL NVR 2",
+        ])
 
     def test_stdout_and_rows_with_nothing_to_ask(self):
         table = self.path("old.csv")
@@ -632,13 +676,13 @@ class FooterTest(CliCase):
         with redirect_stdout(io.StringIO()):
             self.assertEqual(self.run_main("--table", table), EXIT_PARTIAL)
         footer = self.footer()
-        self.assertEqual(footer[0], "итог: выведено в stdout, строк 1")
-        self.assertIn("код возврата 1: строк без CVE-ID или компонента 1", footer)
+        self.assertEqual(footer[1], "  - выведено в stdout, строк 1")
+        self.assertIn("    - строк без CVE-ID или компонента 1", footer)
 
     def test_footer_is_the_last_block(self):
         self.run_cli(text=BLOCK + "\n\n" + BAD + "\n")
-        self.assertLess(self.log.index("отбракован:"), self.log.index("итог: "))
-        self.assertLess(self.log.index("битые блоки (1) записаны"), self.log.index("итог: "))
+        self.assertLess(self.log.index("отбракован:"), self.log.index("итог:"))
+        self.assertLess(self.log.index("битые блоки (1) записаны"), self.log.index("итог:"))
 
 
 class UsageTest(CliCase):
@@ -722,7 +766,9 @@ class UpdateModesTest(CliCase):
         self.assertEqual(code, EXIT_OK)
         self.assertEqual(self.report_lines(), [HEADER, SYNCED, GONE_MISSING, NEW_ROW])
         self.assertIn("режим: синхронизация с блоками", self.log)
-        self.assertIn("совпало 1, Missing 1, новых 1", self.log)
+        self.assertIn("    - совпало 1\n", self.log)
+        self.assertIn("    - Missing 1\n", self.log)
+        self.assertIn("    - новых 1\n", self.log)
 
     def test_sync_with_empty_blocks_is_fatal(self):
         code = self.run_main("--table", self.write_table(OLD_ROW),

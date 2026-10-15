@@ -3,7 +3,9 @@ import unittest
 
 from vulnsheet import report
 from vulnsheet.kojiclient import ERROR, NOT_FOUND
-from vulnsheet.merge import Fresh, Note, build, pairs, refresh, sync
+from vulnsheet.merge import ADDED, UNCHANGED, Fresh, Note, build, pairs, refresh, sync
+from vulnsheet.merge import UPDATED as NOTE_UPDATED
+from vulnsheet.patches import BRANCH_ONLY, FOUND, REMOVED, PatchNote
 from vulnsheet.table import Record
 from vulnsheet.tasks import Task
 from vulnsheet.vex import FETCH_ERROR, Verdict
@@ -128,10 +130,18 @@ class RefreshTest(unittest.TestCase):
         self.assertEqual(row[report.LINK], [LINK + "CVE-2026-0001"])
 
 
+URL = "https://gitlab.example.com/g/vim/-/blob/sl9/PATCH/vim-CVE-2026-0001.patch"
+VIM_NOTE = PatchNote(FOUND, "sl9", (URL,))
+NOTE = "патч найден: " + URL
 # vim закрыт патчем под CVE-2026-0001, openssl — под чужую CVE
 PATCHED = FRESH._replace(patched=types.MappingProxyType({
-    "vim": frozenset({"CVE-2026-0001"}), "openssl": frozenset({"CVE-2026-9999"})}))
-NOTE = "патч присутствует"
+    "vim": {"CVE-2026-0001": VIM_NOTE},
+    "openssl": {"CVE-2026-9999": PatchNote(FOUND, "sl9", (URL,))}}))
+
+
+def with_notes(**notes):
+    """FRESH с пометками: компонент → {CVE: PatchNote}."""
+    return FRESH._replace(patched=types.MappingProxyType(notes))
 
 
 class PatchNoteTest(unittest.TestCase):
@@ -139,8 +149,18 @@ class PatchNoteTest(unittest.TestCase):
         rows = build([task(), OPENSSL], PATCHED).rows
         self.assertEqual([r[report.COMMENT_INDEX] for r in rows], [NOTE, "-"])
 
+    def test_each_kind_of_note_is_written(self):
+        removed = PatchNote(REMOVED, "sl9", (URL,))
+        row = build([task()], with_notes(vim={"CVE-2026-0001": removed})).rows[0]
+        self.assertEqual(row[report.COMMENT_INDEX], report.patch_note(removed))
+
     def test_refresh_appends_the_note_to_the_old_comment(self):
         row = refresh([Record(2, OLD)], PATCHED).rows[0]
+        self.assertEqual(row[report.COMMENT_INDEX], "ждём апстрим; " + NOTE)
+
+    def test_refresh_replaces_its_own_old_note(self):
+        cells = changed(OLD, {report.COMMENT_INDEX: "ждём апстрим; патч присутствует"})
+        row = refresh([Record(2, cells)], PATCHED).rows[0]
         self.assertEqual(row[report.COMMENT_INDEX], "ждём апстрим; " + NOTE)
 
     def test_refresh_without_patch_keeps_the_old_comment(self):
@@ -148,30 +168,33 @@ class PatchNoteTest(unittest.TestCase):
         self.assertEqual(row[report.COMMENT_INDEX], "ждём апстрим")
 
     def test_sync_marks_matched_missing_and_new_rows(self):
-        patched = PATCHED._replace(patched=types.MappingProxyType({
-            "vim": frozenset({"CVE-2026-0001"}), "bash": frozenset({"CVE-2026-0002"}),
-            "openssl": frozenset({"CVE-2026-0003"})}))
-        out = sync([Record(2, OLD), Record(3, BASH)], [OPENSSL, task()], patched)
+        fresh = with_notes(vim={"CVE-2026-0001": VIM_NOTE}, bash={"CVE-2026-0002": VIM_NOTE},
+                           openssl={"CVE-2026-0003": VIM_NOTE})
+        out = sync([Record(2, OLD), Record(3, BASH)], [OPENSSL, task()], fresh)
         self.assertEqual([r[report.COMMENT_INDEX] for r in out.rows],
                          ["ждём апстрим; " + NOTE, NOTE, NOTE])
 
-    def test_rows_with_patch_and_new_notes_are_counted(self):
-        out = build([task(), task(), OPENSSL], PATCHED)
-        self.assertEqual((out.patched, out.notes_added), (2, 2))
-        already = changed(OLD, {report.COMMENT_INDEX: "ждём; " + NOTE})
-        out = refresh([Record(2, OLD), Record(3, already), Record(4, BASH)], PATCHED)
-        self.assertEqual((out.patched, out.notes_added), (2, 1))
+    def test_rows_are_counted_by_kind_of_note(self):
+        fresh = with_notes(vim={"CVE-2026-0001": VIM_NOTE},
+                           bash={"CVE-2026-0002": PatchNote(REMOVED, "sl9", (URL,))},
+                           openssl={"CVE-2026-0003": PatchNote(BRANCH_ONLY, "sl9", (URL,))})
+        out = sync([Record(2, OLD), Record(3, BASH)], [OPENSSL, task(), task()], fresh)
+        self.assertEqual(dict(out.patch_kinds), {FOUND: 1, REMOVED: 1, BRANCH_ONLY: 1})
 
-    def test_sync_counts_new_rows_too(self):
-        verdicts = dict(PATCHED.verdicts)
-        verdicts[("CVE-2026-9999", "openssl")] = Verdict("not listed")
-        fresh = PATCHED._replace(verdicts=verdicts)
-        out = sync([Record(2, OLD)], [task(), OPENSSL._replace(cve="CVE-2026-9999")], fresh)
-        self.assertEqual((out.patched, out.notes_added), (2, 2))
+    def test_fate_of_each_note_is_counted(self):
+        same = changed(OLD, {report.COMMENT_INDEX: "ждём; " + NOTE})
+        stale = changed(OLD, {report.COMMENT_INDEX: "патч присутствует"})
+        out = refresh([Record(2, OLD), Record(3, same), Record(4, stale), Record(5, BASH)],
+                      PATCHED)
+        self.assertEqual(dict(out.note_fates), {ADDED: 1, UNCHANGED: 1, NOTE_UPDATED: 1})
+        out = build([task(), task(), OPENSSL], PATCHED)
+        self.assertEqual(dict(out.note_fates), {ADDED: 2})
 
     def test_row_with_nothing_to_ask_gets_no_note(self):
         cells = changed(OLD, {report.CVE_ID: "-"})
-        self.assertEqual(refresh([Record(2, cells)], PATCHED).rows, [cells])
+        out = refresh([Record(2, cells)], PATCHED)
+        self.assertEqual(out.rows, [cells])
+        self.assertEqual(dict(out.note_fates), {})
 
 
 class SyncTest(unittest.TestCase):
