@@ -6,7 +6,8 @@ VEX и отдаёт их сюда записью Fresh. Что в каком р�
 таблица групп колонок в
 docs/superpowers/specs/2026-09-24-vulnsheet-update-modes-design.md.
 """
-from typing import Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
+import types
+from typing import Dict, FrozenSet, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
 from . import report
 from .kojiclient import ERROR
@@ -20,9 +21,12 @@ Key = Tuple[str, str, str]   # (Task ID, CVE, компонент)
 
 class Fresh(NamedTuple):
     """Ответы источников: компонент → NVR (или NOT_FOUND/ERROR);
-    (CVE, компонент) → вердикт (FETCH_ERROR — документ не получен)."""
+    (CVE, компонент) → вердикт (FETCH_ERROR — документ не получен);
+    компонент → CVE, под которые в каталоге патчей билда есть файл (нет
+    компонента — патчи не проверялись или не прочитались)."""
     nvrs: Mapping[str, str]
     verdicts: Mapping[Pair, Verdict]
+    patched: Mapping[str, FrozenSet[str]] = types.MappingProxyType({})
 
 
 class Note(NamedTuple):
@@ -165,7 +169,11 @@ def _as_task(record: Record, pair: Pair) -> Task:
 
 def _fresh_row(task: Task, fresh: Fresh) -> List[str]:
     pair = _task_pair(task)
-    return report.row(task, fresh.nvrs[pair[1]], fresh.verdicts[pair])
+    return report.row(task, fresh.nvrs[pair[1]], fresh.verdicts[pair], _patched(pair, fresh))
+
+
+def _patched(pair: Pair, fresh: Fresh) -> bool:
+    return pair[0] in fresh.patched.get(pair[1], ())
 
 
 def _note(record: Record) -> Note:
@@ -178,7 +186,8 @@ def _updated(record: Record, task: Task, pair: Pair, fresh: Fresh, notes: _Notes
     old = record.cells
     cells = _fresh_row(task, fresh)
     cells[report.DEVELOPER] = old[report.DEVELOPER]
-    cells[report.COMMENT] = old[report.COMMENT]
+    cells[report.COMMENT_INDEX] = report.with_patch_note(old[report.COMMENT_INDEX],
+                                                         _patched(pair, fresh))
     if fresh.nvrs[pair[1]] == ERROR:
         cells[report.KOJI] = old[report.KOJI]
         notes.kept_koji.append(_note(record))

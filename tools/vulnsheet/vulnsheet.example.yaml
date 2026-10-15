@@ -35,3 +35,23 @@ vex_streams:
 vex_names:
   rust-afterburn: [afterburn, afterburn-dracut]
   rust-coreos-installer: coreos-installer
+
+# Проверка патчей в GitLab. Есть секция — для каждого компонента по билду из
+# SL NVR находится коммит сборки (extra.source.original_url билда в koji),
+# читается каталог патчей этого коммита, и если в нём есть файл с CVE строки
+# в имени, в «Комментарий» пишется «патч присутствует». Нет секции — GitLab
+# не спрашивается.
+gitlab:
+  # Сервер для хостов, которых нет в hosts (другое имя того же GitLab).
+  # Подмена пишется в журнал предупреждением.
+  default_host: gitlab.example.com
+  # Переменная окружения с токеном (read_api); в файле токен не хранится.
+  # Без токена видны только публичные проекты.
+  token_env: GITLAB_TOKEN
+  patch_dir: PATCH  # каталог патчей в репозитории
+  jobs: 8           # параллельных запросов
+  retries: 3        # попыток на запрос
+  timeout: 30       # секунд на запрос
+  hosts:
+    gitlab.example.com:
+      api: https://gitlab.example.com/api/v4

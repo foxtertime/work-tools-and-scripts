@@ -1,7 +1,7 @@
 """Последние билды пакетов в koji-теге. Доступ только на чтение."""
 import logging
 import time
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -57,4 +57,31 @@ def latest_builds(session, tag: str, packages: Iterable[str]) -> Dict[str, str]:
     if missing:
         logger.warning("в теге %s нет пакетов (%d): %s", tag, len(missing),
                        ", ".join(missing))
+    return result
+
+
+def build_infos(session, nvrs: Iterable[str]) -> Dict[str, Optional[dict]]:
+    """{NVR: ответ getBuild | None}, все — одним multicall.
+
+    Нужны ради extra.source.original_url и source: по ним ищется коммит
+    сборки в GitLab. None — хаб не ответил по билду или не знает его.
+    """
+    nvrs = list(dict.fromkeys(nvrs))
+    if not nvrs:
+        return {}
+    started = time.monotonic()
+    try:
+        with session.multicall(strict=False) as multicall:
+            calls = [multicall.getBuild(nvr) for nvr in nvrs]
+    except Exception as exc:
+        raise KojiError("хаб не ответил на getBuild: %s" % exc)
+    logger.debug("getBuild: %d билдов за %.2f с", len(nvrs), time.monotonic() - started)
+
+    result = {}
+    for nvr, call in zip(nvrs, calls):
+        try:
+            result[nvr] = call.result
+        except Exception as exc:  # ошибка по одному билду не роняет остальные
+            logger.warning("koji не ответил по билду %s: %s", nvr, exc)
+            result[nvr] = None
     return result

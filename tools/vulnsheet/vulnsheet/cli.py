@@ -1,4 +1,4 @@
-"""Точка входа: блоки задач и/или прежняя таблица → koji и VEX → CSV."""
+"""Точка входа: блоки задач и/или прежняя таблица → koji, VEX и GitLab → CSV."""
 import argparse
 import logging
 import os
@@ -9,16 +9,17 @@ import time
 from collections import Counter
 from typing import List, Optional
 
-from . import __version__, config, kojiclient, logs, merge, report, table, vex
+from . import (__version__, config, gitlabclient, httpclient, kojiclient, logs, merge,
+               patches, report, table, vex)
 from .tasks import parse
 
 logger = logging.getLogger(__name__)
 
 EXIT_OK = 0
 # CSV записан, но есть отбраковка, ERROR koji, fetch error (в том числе там,
-# где из-за сбоя оставлены прежние koji или VEX), строки таблицы, по которым
-# нечего спрашивать, либо читатель оборвал stdout (broken pipe) — таблица
-# дописана не до конца
+# где из-за сбоя оставлены прежние koji или VEX), компоненты, чьи патчи в
+# GitLab проверить не удалось, строки таблицы, по которым нечего спрашивать,
+# либо читатель оборвал stdout (broken pipe) — таблица дописана не до конца
 EXIT_PARTIAL = 1
 EXIT_FATAL = 2
 
@@ -206,6 +207,29 @@ def _settings(args):
     return cfg, rhel, hub, tag
 
 
+def _patches(session, nvrs, settings):
+    """Патчи под CVE по компонентам с найденным билдом; без секции gitlab —
+    ничего не спрашивается."""
+    if settings is None:
+        return patches.Result({}, ())
+    found = {name: nvr for name, nvr in nvrs.items()
+             if nvr not in (kojiclient.NOT_FOUND, kojiclient.ERROR)}
+    if not found:
+        return patches.Result({}, ())
+    # токен из файла или копипасты приносит перевод строки — срезаем
+    token = (os.environ.get(settings.token_env) or "").strip() or None
+    logger.info("GitLab: %s, каталог %s, %s", ", ".join(settings.hosts), settings.patch_dir,
+                "токен из $%s" % settings.token_env if token
+                else "без токена ($%s пуст) — видны только публичные проекты" % settings.token_env)
+    infos = kojiclient.build_infos(session, found.values())
+    client = gitlabclient.GitlabClient(
+        settings.hosts, token=token, patch_dir=settings.patch_dir,
+        transport=httpclient.UrllibTransport(timeout=settings.timeout),
+        retries=settings.retries, default_host=settings.default_host)
+    return patches.find({name: infos.get(nvr) for name, nvr in found.items()}, client,
+                        settings.jobs)
+
+
 def _merge(records, tasks, fresh):
     if records is None:
         return merge.build(tasks, fresh)
@@ -284,16 +308,18 @@ def _run(args) -> int:
         _check_rejects_dir(args.rejects)
     try:
         nvrs, indices, failures = {}, {}, {}
+        found = patches.Result({}, ())
         if unique:
             session = kojiclient.connect(hub)
             nvrs = kojiclient.latest_builds(session, tag, packages)
             settings = cfg.vex._replace(
                 cache_dir=vex.prepare_cache(cfg.vex.cache_dir or _cache_dir()))
             indices, failures = vex.fetch_all(cves, settings)
+            found = _patches(session, nvrs, cfg.gitlab)
         verdicts = {(cve, name): vex.Verdict(state=vex.FETCH_ERROR) if cve in failures
                     else vex.lookup(indices[cve], name, rhel, streams[name], aliases[name])
                     for cve, name in unique}
-        outcome = _merge(records, tasks, merge.Fresh(nvrs, verdicts))
+        outcome = _merge(records, tasks, merge.Fresh(nvrs, verdicts, found.cves))
         report.write(outcome.rows, out)
     except BaseException:
         if tmp_path is not None:
@@ -317,7 +343,7 @@ def _run(args) -> int:
     _report_outcome(outcome, synced=records is not None and tasks is not None)
     _summary(outcome.rows)
     partial = (rejects or failures or kojiclient.ERROR in nvrs.values()
-               or outcome.skipped)
+               or found.failed or outcome.skipped)
     return EXIT_PARTIAL if partial else EXIT_OK
 
 

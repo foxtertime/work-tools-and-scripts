@@ -5,7 +5,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-from vulnsheet.config import Config, ConfigError, load_config
+from vulnsheet.config import Config, ConfigError, GitlabSettings, load_config
+from vulnsheet.gitlabclient import GitlabHost
 from vulnsheet.vex import VexSettings
 
 try:
@@ -36,6 +37,19 @@ vex_streams:
 vex_names:
   rust-afterburn: [afterburn, afterburn-dracut]
   rust-coreos-installer: coreos-installer
+gitlab:
+  default_host: gitlab.example.com
+  token_env: SL_GITLAB_TOKEN
+  patch_dir: patches
+  jobs: 2
+  retries: 5
+  timeout: 7
+  hosts:
+    gitlab.example.com:
+      api: https://gitlab.example.com/api/v4/
+      web: https://gitlab.example.com
+    mirror.example.com:
+      api: https://mirror.example.com/api/v4
 """
 
 
@@ -121,6 +135,25 @@ class LoadTest(unittest.TestCase):
                                            "10": {"nodejs": "nodejs:22"}})
         self.assertEqual(cfg.vex_names, {"rust-afterburn": ("afterburn", "afterburn-dracut"),
                                          "rust-coreos-installer": ("coreos-installer",)})
+        self.assertEqual(cfg.gitlab, GitlabSettings(
+            hosts={"gitlab.example.com": GitlabHost("https://gitlab.example.com/api/v4/",
+                                                    "https://gitlab.example.com"),
+                   # web по умолчанию — api без /api/…
+                   "mirror.example.com": GitlabHost("https://mirror.example.com/api/v4",
+                                                    "https://mirror.example.com")},
+            default_host="gitlab.example.com", token_env="SL_GITLAB_TOKEN",
+            patch_dir="patches", jobs=2, retries=5, timeout=7))
+
+    def test_gitlab_defaults(self):
+        cfg = load_config(self.write(
+            "gitlab:\n  hosts:\n    gl.example.com:\n      api: https://gl.example.com/api/v4\n"))
+        self.assertEqual(cfg.gitlab._replace(hosts={}), GitlabSettings(
+            hosts={}, default_host=None, token_env="GITLAB_TOKEN", patch_dir="PATCH",
+            jobs=8, retries=3, timeout=30))
+
+    def test_without_gitlab_section_the_check_is_off(self):
+        self.assertIsNone(load_config(self.write("rhel: \"9\"\n")).gitlab)
+        self.assertIsNone(load_config(self.write("gitlab:\n")).gitlab)
 
     def test_empty_file_is_empty_config(self):
         self.assertEqual(load_config(self.write(""))._replace(path=None), Config())
@@ -167,6 +200,19 @@ class LoadTest(unittest.TestCase):
             ("vex_names:\n  rust-afterburn: ['']\n", "vex_names.rust-afterburn"),
             ("vex_names:\n  rust-afterburn: [1]\n", "vex_names.rust-afterburn"),
             ("vex_names:\n  rust-afterburn: {a: b}\n", "vex_names.rust-afterburn"),
+            ("gitlab: [a]\n", "gitlab"),
+            ("gitlab:\n  token_env: X\n", "gitlab.hosts"),
+            ("gitlab:\n  hosts: {}\n", "gitlab.hosts"),
+            ("gitlab:\n  hosts:\n    gl:\n", "gitlab.hosts.gl"),
+            ("gitlab:\n  hosts:\n    gl: {web: x}\n", "gitlab.hosts.gl.api"),
+            ("gitlab:\n  hosts:\n    gl: {api: x, tokn: y}\n", "gitlab.hosts.gl.tokn"),
+            ("gitlab:\n  hostz: {}\n", "gitlab.hostz"),
+            ("gitlab:\n  default_host: other\n  hosts:\n    gl: {api: x}\n",
+             "gitlab.default_host"),
+            ("gitlab:\n  jobs: 0\n  hosts:\n    gl: {api: x}\n", "gitlab.jobs"),
+            ("gitlab:\n  retries: 0\n  hosts:\n    gl: {api: x}\n", "gitlab.retries"),
+            ("gitlab:\n  timeout: 0\n  hosts:\n    gl: {api: x}\n", "gitlab.timeout"),
+            ("gitlab:\n  patch_dir: ''\n  hosts:\n    gl: {api: x}\n", "gitlab.patch_dir"),
         ]
         for text, needle in cases:
             with self.subTest(text=text):
@@ -238,3 +284,4 @@ class LoadTest(unittest.TestCase):
     def test_example_file_is_valid(self):
         cfg = load_config(os.path.join(ROOT, "vulnsheet.example.yaml"))
         self.assertEqual(cfg.stream_for("nginx", "9"), "nginx:1.26")
+        self.assertIn("gitlab.example.com", cfg.gitlab.hosts)
