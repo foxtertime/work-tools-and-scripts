@@ -4,6 +4,7 @@ import unittest
 from vulnsheet import report
 from vulnsheet.patches import (BRANCH_ONLY, FOUND, REMOVED, SRC_CHANGELOG, SRC_PATCH, SRC_SPEC,
                                Item, PatchNote)
+from vulnsheet.ranges import CVEORG, NVD, Interval, RangeNote
 from vulnsheet.report import COLUMNS, format_date, row, write
 from vulnsheet.tasks import Task
 from vulnsheet.vex import Verdict
@@ -115,6 +116,33 @@ class PatchNoteTextTest(unittest.TestCase):
                 SRC_PATCH: PatchNote(FOUND, "sl9", (Item(None, L1),))}
         self.assertEqual(report.patch_note(note),
                          "патч найден: %s; спек, %%changelog 9.0-2: %s#L6" % (L1, SPEC_URL))
+
+
+class RangeNoteTextTest(unittest.TestCase):
+    def test_inside(self):
+        note = RangeNote("1.26.2", True, NVD, (Interval("1.11.4", True, "1.26.3", False),))
+        self.assertEqual(report.range_note(note),
+                         "версия 1.26.2 в уязвимом диапазоне >=1.11.4 <1.26.3 (NVD)")
+
+    def test_outside_one_and_several(self):
+        one = RangeNote("1.26.3", False, CVEORG, (Interval("1.11.4", True, "1.26.3", False),))
+        self.assertEqual(report.range_note(one),
+                         "версия 1.26.3 вне уязвимого диапазона >=1.11.4 <1.26.3 (CVE.org)")
+        several = one._replace(intervals=one.intervals + (Interval("1.27.0", True, "1.27.0", True),))
+        self.assertEqual(report.range_note(several), "версия 1.26.3 вне уязвимых диапазонов "
+                                                     ">=1.11.4 <1.26.3, =1.27.0 (CVE.org)")
+
+    def test_unknown(self):
+        self.assertEqual(report.range_note(RangeNote("1.0", None, None, ())),
+                         "диапазон версий неизвестен")
+
+    def test_range_fragment_is_own_but_human_versions_are_not(self):
+        self.assertTrue(report.has_patch_note("ждём; версия 1.0 в уязвимом диапазоне <2 (NVD)"))
+        self.assertTrue(report.has_patch_note("версия 1.0 вне уязвимого диапазона <1 (NVD)"))
+        self.assertTrue(report.has_patch_note("диапазон версий неизвестен"))
+        self.assertFalse(report.has_patch_note("версия обновлена до 1.27"))
+        self.assertEqual(report.with_patch_note("версия обновлена до 1.27", "диапазон версий неизвестен"),
+                         "версия обновлена до 1.27; диапазон версий неизвестен")
 
 
 class PatchNoteTest(unittest.TestCase):

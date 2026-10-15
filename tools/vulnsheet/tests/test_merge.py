@@ -5,6 +5,7 @@ from vulnsheet import report
 from vulnsheet.kojiclient import ERROR, NOT_FOUND
 from vulnsheet.merge import ADDED, UNCHANGED, Fresh, Note, build, pairs, refresh, sync
 from vulnsheet.merge import UPDATED as NOTE_UPDATED
+from vulnsheet.ranges import CVEORG, NVD, Interval, RangeNote
 from vulnsheet.patches import (BRANCH_ONLY, FOUND, REMOVED, SRC_CHANGELOG, SRC_PATCH, Item,
                                PatchNote)
 from vulnsheet.table import Record
@@ -206,6 +207,32 @@ class PatchNoteTest(unittest.TestCase):
         out = refresh([Record(2, cells)], PATCHED)
         self.assertEqual(out.rows, [cells])
         self.assertEqual(dict(out.note_fates), {})
+
+
+INSIDE = RangeNote("2", True, NVD, (Interval(None, False, "3", False),))
+RANGE_TEXT = "версия 2 в уязвимом диапазоне <3 (NVD)"
+
+
+class RangeNoteTest(unittest.TestCase):
+    def test_range_fragment_follows_the_patch_fragments(self):
+        fresh = PATCHED._replace(ranges={("CVE-2026-0001", "vim"): INSIDE})
+        row = build([task()], fresh).rows[0]
+        self.assertEqual(row[report.COMMENT_INDEX], NOTE + "; " + RANGE_TEXT)
+
+    def test_range_alone_is_a_note_too(self):
+        out = refresh([Record(2, OLD)], FRESH._replace(ranges={("CVE-2026-0001", "vim"): INSIDE}))
+        self.assertEqual(out.rows[0][report.COMMENT_INDEX], "ждём апстрим; " + RANGE_TEXT)
+        self.assertEqual(dict(out.note_fates), {ADDED: 1})
+
+    def test_ranges_are_counted(self):
+        unknown = RangeNote("1", None, None, ())
+        outside = RangeNote("5", False, CVEORG, (Interval(None, False, "3", False),))
+        fresh = FRESH._replace(ranges={("CVE-2026-0001", "vim"): INSIDE,
+                                       ("CVE-2026-0002", "bash"): outside,
+                                       ("CVE-2026-0003", "openssl"): unknown})
+        out = refresh([Record(2, OLD), Record(3, BASH), Record(4, NEW)], fresh)
+        self.assertEqual(dict(out.range_kinds), {True: 1, False: 1, None: 1})
+        self.assertEqual(dict(out.range_sources), {NVD: 1, CVEORG: 1})
 
 
 class SyncTest(unittest.TestCase):

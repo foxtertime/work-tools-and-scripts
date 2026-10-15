@@ -8,6 +8,7 @@ import shutil
 import stat
 import tempfile
 import unittest
+import urllib.error
 from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
@@ -15,6 +16,7 @@ from tests.fakes import APPSTREAM96, RHEL9, FakeKojiSession, FakeTransport, Resp
 from vulnsheet import __version__
 from vulnsheet.cli import EXIT_FATAL, EXIT_OK, EXIT_PARTIAL, main, rejects_path
 from vulnsheet.report import COLUMNS
+from vulnsheet.ranges import cveorg_url, nvd_url
 from vulnsheet.vex import vex_url
 
 BLOCK = "Состоит из\nTASKID-181229\nCVE-2026-73070 vim\nОтменен\n22.09.2026\nКМ"
@@ -477,6 +479,84 @@ class GitlabTest(CliCase):
         self.made.assert_not_called()
 
 
+class RangesTest(CliCase):
+    """Апстрим-диапазоны: NVD, иначе CVE.org; сети нет — подменён ranges.download."""
+
+    NVD_DOC = {"vulnerabilities": [{"cve": {"configurations": [{"nodes": [{"cpeMatch": [
+        {"vulnerable": True, "criteria": "cpe:2.3:a:vim:vim:*:*:*:*:*:*:*:*",
+         "versionEndExcluding": "9.0.2106"}]}]}]}}]}
+
+    def setUp(self):
+        super().setUp()
+        self.ranges_answers = {nvd_url("CVE-2026-73070"): self.NVD_DOC,
+                               cveorg_url("CVE-2026-73070"): None}
+        self.range_calls = []
+        mock.patch("vulnsheet.ranges.download", side_effect=self._ranges_download).start()
+        mock.patch("vulnsheet.ranges.time.sleep").start()
+        mock.patch.dict(os.environ, {"NVD_API_KEY": ""}).start()
+
+    def _ranges_download(self, url, timeout=None, headers=None):
+        self.range_calls.append((url, dict(headers or {})))
+        answer = self.ranges_answers.get(url)
+        if isinstance(answer, Exception):
+            raise answer
+        return None if answer is None else json.dumps(answer).encode()
+
+    def run_ranges(self, config="ranges: {}\n"):
+        path = self.path("vulnsheet.yaml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(config)
+        return self.run_cli("--config", path)
+
+    def comment(self):
+        return next(csv.reader(self.report_lines()[1:], delimiter=";"))[-1]
+
+    def test_version_inside_the_range_is_noted(self):
+        self.assertEqual(self.run_ranges(), EXIT_OK)
+        self.assertEqual(self.comment(),
+                         "версия 8.2.2637 в уязвимом диапазоне <9.0.2106 (NVD)")
+        self.assertIn("диапазоны: NVD без ключа ($NVD_API_KEY пуст, пауза 6 с), CVE.org",
+                      self.log)
+        self.assertIn("диапазоны — CVE 1", self.log)
+
+    def test_footer_counts(self):
+        self.run_ranges()
+        log = re.sub(r"(?m)^\S+ \w+ +cli: ", "", self.log)
+        for line in ("  - диапазоны версий:", "    - в диапазоне 1", "    - вне диапазона 0",
+                     "    - неизвестен 0", "    - источник: NVD 1, CVE.org 0"):
+            self.assertIn(line + "\n", log)
+
+    def test_key_from_the_environment_goes_to_nvd_only(self):
+        with mock.patch.dict(os.environ, {"MY_NVD": " nvd-secret\n"}):
+            self.run_ranges("ranges:\n  nvd_key_env: MY_NVD\n")
+        self.assertIn("диапазоны: NVD с ключом из $MY_NVD", self.log)
+        self.assertNotIn("nvd-secret", self.log)
+        headers = dict((url.split("/")[2], h) for url, h in self.range_calls)
+        self.assertEqual(headers["services.nvd.nist.gov"], {"apiKey": "nvd-secret"})
+        self.assertEqual(headers["cveawg.mitre.org"], {})
+
+    def test_product_names_from_the_config(self):
+        self.ranges_answers[nvd_url("CVE-2026-73070")] = json.loads(
+            json.dumps(self.NVD_DOC).replace("vim:vim", "vim:vim_editor"))
+        self.run_ranges()
+        self.assertEqual(self.comment(), "диапазон версий неизвестен")
+        self.run_ranges("ranges:\n  names:\n    vim: vim_editor\n")
+        self.assertIn("в уязвимом диапазоне", self.comment())
+
+    def test_both_sources_down_is_partial_without_a_fragment(self):
+        for url in list(self.ranges_answers):
+            self.ranges_answers[url] = urllib.error.URLError("сеть")
+        self.assertEqual(self.run_ranges(), EXIT_PARTIAL)
+        self.assertEqual(self.comment(), "-")
+        self.assertIn("CVE без диапазонов из-за сбоя 1", self.log)
+
+    def test_without_ranges_section_nothing_is_asked(self):
+        self.assertEqual(self.run_ranges('rhel: "9"\n'), EXIT_OK)
+        self.assertEqual(self.range_calls, [])
+        self.assertIn("диапазоны: не заданы в конфиге — версии не сверяются", self.log)
+        self.assertIn("диапазоны версий: не заданы — не сверялись", self.log)
+
+
 class HeaderTest(CliCase):
     """Шапка прогона: до первого запроса в сеть — что прочитано, куда пишем,
     какие источники с какими настройками и сколько будет спрашиваться."""
@@ -507,6 +587,7 @@ class HeaderTest(CliCase):
             "koji: хаб https://koji.example.com/kojihub, тег sl9",
             "VEX: RHEL 9, кэш %s (живёт 3600 с), потоков 8" % cache,
             "GitLab: не задан в конфиге — патчи не проверяются",
+            "диапазоны: не заданы в конфиге — версии не сверяются",
             "план: koji — пакетов 1, VEX — CVE 1",
         ])
 
@@ -613,6 +694,7 @@ class FooterTest(CliCase):
             "  - VEX:",
             "    - Under investigation 1",
             "  - GitLab: не задан — патчи не проверялись",
+            "  - диапазоны версий: не заданы — не сверялись",
             "  - код возврата 0",
         ])
         self.assertRegex(footer[-1], r"^всего за \d+\.\d с$")
@@ -628,7 +710,7 @@ class FooterTest(CliCase):
                          EXIT_OK)
         footer = self.footer()
         start = footer.index("  - GitLab, строки:")
-        self.assertEqual(footer[start:start + 15], [
+        self.assertEqual(footer[start:start + 16], [
             "  - GitLab, строки:",
             "    - каталог PATCH: найден 2, убран из ветки 0, только в ветке 0",
             "    - PatchN в спеке: найден 0, убран из ветки 0, только в ветке 0",
@@ -643,6 +725,7 @@ class FooterTest(CliCase):
             "    - спек прочитан 0",
             "    - спека нет 1",
             "    - спеков несколько, не выбран 0",
+            "  - диапазоны версий: не заданы — не сверялись",
             "  - код возврата 0",
         ])
 
