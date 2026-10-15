@@ -1,8 +1,9 @@
+import logging
 import unittest
 
 from tests.fakes import FakeTransport, Response
 from vulnsheet.gitlabclient import GitlabClient, GitlabHost
-from vulnsheet.patches import cves_in, find
+from vulnsheet.patches import FAILED, NO_DIR, NO_SOURCE, READ, SRPM, cves_in, find
 
 HOSTS = {"gitlab.example.com": GitlabHost(api="https://gitlab.example.com/api/v4",
                                           web="https://gitlab.example.com")}
@@ -151,13 +152,27 @@ class FindTest(unittest.TestCase):
         self.assertEqual(got.failed, ())
         self.assertEqual(transport.requests, [])
 
-    def test_summary_is_logged_at_info(self):
+    def test_outcomes_are_counted_by_kind(self):
+        cli, _ = client({
+            at("sl9"): tree("PATCH/CVE-2024-1234.patch"),
+            (TREE_URL.replace("vim", "zsh"), at("sl9")[1]): Response(
+                404, {"message": "404 Tree Not Found"}, {}),
+            COMMITS_URL.replace("vim", "zsh") + "sl9": Response(200, {"id": SHA}, {}),
+        })
+        with self.assertLogs("vulnsheet.patches", "WARNING"):
+            got = find({"vim": info(), "zsh": info("git+https://gitlab.example.com/g/zsh#sl9"),
+                        "bash": info(original_url=None),
+                        "gcc": info("x/gcc-1-1.src.rpm"), "perl": None}, cli)
+        self.assertEqual(dict(got.kinds), {READ: 1, NO_DIR: 1, NO_SOURCE: 1, SRPM: 1, FAILED: 1})
+
+    def test_summary_is_left_to_the_caller(self):
+        # итог по патчам пишет cli в конце прогона, не в его середине
         cli, _ = client({at("sl9"): tree("PATCH/CVE-2024-1234.patch")})
+        # assertNoLogs — только с Python 3.10; маркер держит assertLogs довольным
         with self.assertLogs("vulnsheet.patches", "INFO") as caught:
-            find({"vim": info(), "bash": info(original_url=None)}, cli)
-        line = "\n".join(caught.output)
-        self.assertIn("прочитано 1", line)
-        self.assertIn("без источника 1", line)
+            find({"vim": info()}, cli)
+            logging.getLogger("vulnsheet.patches").info("маркер")
+        self.assertEqual(caught.output, ["INFO:vulnsheet.patches:маркер"])
 
     def test_components_are_checked_in_parallel_and_all_come_back(self):
         routes = {}

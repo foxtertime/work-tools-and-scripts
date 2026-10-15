@@ -155,6 +155,20 @@ class PatchNoteTest(unittest.TestCase):
         self.assertEqual([r[report.COMMENT_INDEX] for r in out.rows],
                          ["ждём апстрим; " + NOTE, NOTE, NOTE])
 
+    def test_rows_with_patch_and_new_notes_are_counted(self):
+        out = build([task(), task(), OPENSSL], PATCHED)
+        self.assertEqual((out.patched, out.notes_added), (2, 2))
+        already = changed(OLD, {report.COMMENT_INDEX: "ждём; " + NOTE})
+        out = refresh([Record(2, OLD), Record(3, already), Record(4, BASH)], PATCHED)
+        self.assertEqual((out.patched, out.notes_added), (2, 1))
+
+    def test_sync_counts_new_rows_too(self):
+        verdicts = dict(PATCHED.verdicts)
+        verdicts[("CVE-2026-9999", "openssl")] = Verdict("not listed")
+        fresh = PATCHED._replace(verdicts=verdicts)
+        out = sync([Record(2, OLD)], [task(), OPENSSL._replace(cve="CVE-2026-9999")], fresh)
+        self.assertEqual((out.patched, out.notes_added), (2, 2))
+
     def test_row_with_nothing_to_ask_gets_no_note(self):
         cells = changed(OLD, {report.CVE_ID: "-"})
         self.assertEqual(refresh([Record(2, cells)], PATCHED).rows, [cells])
