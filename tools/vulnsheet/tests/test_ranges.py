@@ -8,7 +8,7 @@ from unittest import mock
 
 from vulnsheet.ranges import (CVEORG, NVD, Docs, Interval, RangeNote, RangeSettings,
                               cveorg_intervals, cveorg_url, fetch_all, judge, nvd_intervals,
-                              nvd_url, pick, ranges_for, upstream_version)
+                              nvd_url, pick, ranges_for, upstream_version, _Limiter)
 
 
 def cpe(product, version="*", vendor="f5", update="*", vulnerable=True, **bounds):
@@ -247,15 +247,49 @@ class FetchTest(unittest.TestCase):
                                                      self.answers[cveorg_url("CVE-2024-7347")], ()))
         self.assertEqual(failures, {})
 
-    def test_nvd_is_paced_without_a_key(self):
-        fetch_all(self.CVES, self.settings())
-        self.assertEqual([c.args[0] for c in self.sleep.call_args_list], [6.0, 6.0])
+    def limiter_interval(self, **kwargs):
+        with mock.patch("vulnsheet.ranges._Limiter", wraps=_Limiter) as made:
+            fetch_all(self.CVES, self.settings(**kwargs))
+        return made.call_args.args[0]
 
-    def test_key_is_sent_to_nvd_only_and_shortens_the_pause(self):
+    def test_nvd_requests_are_spaced_by_its_limit(self):
+        self.assertEqual(self.limiter_interval(), 6.0)                  # 5 / 30 с
+        self.assertEqual(self.limiter_interval(nvd_key="secret-key"), 0.6)  # 50 / 30 с
+
+    def test_key_is_sent_to_nvd_only(self):
         fetch_all(self.CVES, self.settings(nvd_key="secret-key"))
-        self.assertEqual([c.args[0] for c in self.sleep.call_args_list], [0.6, 0.6])
         for url, headers in self.calls:
             self.assertEqual(headers.get("apiKey"), "secret-key" if "nvd" in url else None)
+
+    def test_rejected_key_stops_asking_nvd(self):
+        # с неверным ключом NVD отвечает 404 — это не «записи нет»
+        for cve in self.CVES:
+            self.answers[nvd_url(cve)] = None
+        with self.assertLogs("vulnsheet.ranges", "WARNING") as caught:
+            docs, failures = fetch_all(self.CVES, self.settings(nvd_key="bad", jobs=1))
+        nvd_calls = [url for url, _ in self.calls if "nvd" in url]
+        self.assertEqual(len(nvd_calls), 1)
+        self.assertEqual({cve: d.failed for cve, d in docs.items()},
+                         {cve: (NVD,) for cve in self.CVES})
+        self.assertEqual(failures, {})  # CVE.org ответил
+        line = "\n".join(caught.output)
+        self.assertIn("ключ", line)
+        self.assertEqual(line.count("404"), 1)
+
+    def test_404_without_a_key_is_a_failure_of_that_cve(self):
+        self.answers[nvd_url("CVE-2024-7347")] = None
+        with self.assertLogs("vulnsheet.ranges", "WARNING"):
+            docs, _ = fetch_all(self.CVES, self.settings(jobs=1))
+        self.assertEqual(docs["CVE-2024-7347"].failed, (NVD,))
+        self.assertEqual(docs["CVE-2025-23419"].failed, ())
+
+    def test_progress_announces_the_nvd_phase_and_its_end(self):
+        fetch_all(self.CVES[:1], self.settings())  # одна CVE уже в кэше
+        with self.assertLogs("vulnsheet.ranges", "INFO") as caught:
+            fetch_all(self.CVES, self.settings())
+        line = "\n".join(caught.output)
+        self.assertIn("NVD — CVE 3, из кэша 1, в сеть 2, ~12 с без ключа", line)
+        self.assertIn("диапазоны: NVD 3/3", line)
 
     def test_cache_spares_the_network_and_the_pause(self):
         fetch_all(self.CVES, self.settings())
@@ -308,6 +342,40 @@ class FetchTest(unittest.TestCase):
         docs, failures = fetch_all(self.CVES[:1], self.settings())
         self.assertEqual(docs["CVE-2024-7347"].nvd, good)
         self.assertEqual(failures, {})
+
+
+class LimiterTest(unittest.TestCase):
+    def setUp(self):
+        self.now = 100.0
+        self.sleeps = []
+
+    def clock(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.sleeps.append(round(seconds, 3))
+        self.now += seconds
+
+    def test_starts_are_spaced(self):
+        limiter = _Limiter(0.6, clock=self.clock, sleep=self.sleep)
+        for _ in range(3):
+            limiter.wait()
+        self.assertEqual(self.sleeps, [0.6, 0.6])
+
+    def test_slow_answers_eat_into_the_pause(self):
+        limiter = _Limiter(6.0, clock=self.clock, sleep=self.sleep)
+        limiter.wait()
+        self.now += 4.0      # ответ шёл 4 с
+        limiter.wait()
+        self.assertEqual(self.sleeps, [2.0])
+
+    def test_idle_time_is_not_saved_up(self):
+        limiter = _Limiter(0.6, clock=self.clock, sleep=self.sleep)
+        limiter.wait()
+        self.now += 60
+        limiter.wait()
+        limiter.wait()
+        self.assertEqual(self.sleeps, [0.6])
 
 
 class RangesForTest(unittest.TestCase):
