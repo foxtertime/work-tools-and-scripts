@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-15
+
+### Добавлено
+
+- `vulnsheet` (1.4.0): пометка о патче — со ссылкой на файл в GitLab и со
+  сверкой с веткой: «патч найден», «патч убран из ветки, возможно, не нужен
+  после обновления пакета» или «патч есть в ветке, но не в билде». Своя
+  пометка прошлого прогона обновляется на месте. В имени файла узнаётся
+  несколько CVE одного года (`cve-2026-12345-67890`). Итог прогона —
+  списком.
+
 ## [0.6.0] - 2026-10-15
 
 ### Добавлено
@@ -85,7 +96,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.3.0...v0.4.0

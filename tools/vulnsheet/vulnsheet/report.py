@@ -3,12 +3,14 @@
 Формат фиксирован процессом: 20 колонок, разделитель ';', пустая ячейка —
 '-', даты — dd.mm.yyyy. Колонки процесса (разработчик, статус, даты работ,
 принятая мера, комментарий) заполняют люди, здесь они — прочерки. В
-комментарий тулза дописывает только пометку о найденном патче.
+комментарий тулза дописывает только пометку о патче в GitLab и обновляет
+только её.
 """
 import csv
 import re
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
+from .patches import BRANCH_ONLY, FOUND, REMOVED
 from .vex import FIXED
 
 EMPTY = "-"
@@ -22,8 +24,11 @@ COLUMNS = [
 ]
 
 MISSING = "Missing"  # Task state строки, чьей задачи больше нет в блоках
-# в каталоге патчей билда есть файл с CVE строки в имени
-PATCH_NOTE = "патч присутствует"
+# Пометки о патче в комментарии. По этим началам тулза узнаёт свою пометку
+# среди текста людей и заменяет её; «патч присутствует» писала версия 1.1.
+_NOTE_STARTS = ("патч найден:", "патч убран из ветки", "патч есть в ветке",
+                "патч присутствует")
+_SEPARATOR = "; "
 
 # Группы колонок для режимов обновления: что в каком режиме откуда берётся,
 # см. docs/superpowers/specs/2026-09-24-vulnsheet-update-modes-design.md.
@@ -56,19 +61,51 @@ def format_date(value: str) -> str:
     return "%s.%s.%s" % (day, month, year)
 
 
-def with_patch_note(comment: str, patched: bool) -> str:
-    """Комментарий с пометкой о патче: пустую ячейку она заменяет, к тексту
-    людей дописывается через «; », второй раз не ставится. Без патча ячейка
-    не трогается — и пометку прошлого прогона тулза не снимает: в ручной
-    колонке своя пометка от написанной людьми не отличима."""
-    if not patched or PATCH_NOTE in comment:
+def patch_note(note) -> str:
+    """Текст пометки о патче (patches.PatchNote)."""
+    links = " ".join(note.urls)
+    if note.kind == REMOVED:
+        return ("патч убран из ветки %s, возможно, не нужен после обновления пакета: %s"
+                % (note.branch, links))
+    if note.kind == BRANCH_ONLY:
+        return "патч есть в ветке %s, но не в билде: %s" % (note.branch, links)
+    assert note.kind == FOUND, note.kind
+    return "патч найден: %s" % links
+
+
+def _is_note(segment: str) -> bool:
+    return segment.strip().startswith(_NOTE_STARTS)
+
+
+def has_patch_note(comment: str) -> bool:
+    return any(_is_note(segment) for segment in comment.split(_SEPARATOR))
+
+
+def with_patch_note(comment: str, note: Optional[str]) -> str:
+    """Комментарий с пометкой о патче.
+
+    Пустую ячейку пометка заменяет, к тексту людей дописывается через «; ».
+    Своя пометка прошлых прогонов заменяется на месте, текст людей вокруг
+    остаётся; если своих пометок несколько, остаётся одна. Без пометки
+    (патча нет или проверить не удалось) ячейка не трогается — пометку
+    прошлого прогона тулза не снимает: патча могли просто не увидеть."""
+    if not note:
         return comment
     if comment.strip() in ("", EMPTY):
-        return PATCH_NOTE
-    return "%s; %s" % (comment, PATCH_NOTE)
+        return note
+    segments, placed = [], False
+    for segment in comment.split(_SEPARATOR):
+        if not _is_note(segment):
+            segments.append(segment)
+        elif not placed:
+            segments.append(note)
+            placed = True
+    if not placed:
+        segments.append(note)
+    return _SEPARATOR.join(segments)
 
 
-def row(task, nvr: str, verdict, patched: bool = False) -> List[str]:
+def row(task, nvr: str, verdict, note: Optional[str] = None) -> List[str]:
     fixed = verdict.state == FIXED
     cells = [
         "", "", "", "", "",
@@ -79,7 +116,7 @@ def row(task, nvr: str, verdict, patched: bool = False) -> List[str]:
         verdict.state, verdict.severity, verdict.cvss,
         verdict.advisory_url if fixed else "",
         CVE_PAGE.format(cve=task.cve),
-        PATCH_NOTE if patched else "",
+        note or "",
     ]
     # пустое — только None и "": CVSS 0.0 — настоящее значение
     return [EMPTY if cell is None or cell == "" else cell for cell in cells]

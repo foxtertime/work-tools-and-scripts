@@ -286,6 +286,31 @@ class ProblemLevelTest(unittest.TestCase):
 
 
 
+
+class BlobUrlTest(unittest.TestCase):
+    def test_blob_url(self):
+        cli, _ = client({})
+        self.assertEqual(
+            cli.blob_url("gitlab.example.com", "g/r", "br", "PATCH/a.patch"),
+            "https://gitlab.example.com/g/r/-/blob/br/PATCH/a.patch")
+
+    def test_blob_url_is_percent_encoded(self):
+        # пробел или «#» в имени ветки или файла без кодирования ломают ссылку
+        cli, _ = client({})
+        self.assertEqual(
+            cli.blob_url("gitlab.example.com", "g r/r", "b#1", "PATCH/a b.patch"),
+            "https://gitlab.example.com/g%20r/r/-/blob/b%231/PATCH/a%20b.patch")
+
+    def test_substituted_host_links_to_the_server_that_answered(self):
+        cli, _ = client({}, default_host="gitlab.example.com")
+        self.assertEqual(
+            cli.blob_url("mirror.example.com", "g/r", "br", "PATCH/a.patch"),
+            "https://gitlab.example.com/g/r/-/blob/br/PATCH/a.patch")
+
+    def test_unknown_host_has_no_url(self):
+        cli, _ = client({})
+        self.assertIsNone(cli.blob_url("nope", "g/r", "br", "PATCH/a.patch"))
+
 class LoggingTest(unittest.TestCase):
     """Слушаем весь пакет, а не один модуль: строка запроса приходит из
     httpclient, строка про каталог патчей — отсюда, и в одном тесте бывают

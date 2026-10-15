@@ -1,8 +1,8 @@
 """Чтение каталога патчей из GitLab через REST v4. Доступ только на чтение.
 
 Перенесено из тулзы dashboard (тулзы общего кода не делят) в урезанном
-виде: нужно только дерево каталога патчей, без сравнения коммитов и
-веб-ссылок.
+виде: нужны только дерево каталога патчей и ссылка на файл, без сравнения
+коммитов.
 
 Сам разговор по HTTP — повторы, паузы, чистка токена из сообщений — живёт
 в httpclient.py. Здесь только знание о GitLab: как спросить дерево ветки и
@@ -73,6 +73,14 @@ class GitlabClient:
         if "*" in self._hosts:
             return self._hosts["*"], None
         return None, None
+
+    def blob_url(self, host, project, ref, path) -> Optional[str]:
+        """Веб-ссылка на файл; хост — тот сервер, что отвечал (с подменой)."""
+        cfg = self._resolve_host(host)[0]
+        if not cfg or not ref:
+            return None
+        return "%s/%s/-/blob/%s/%s" % (cfg.web.rstrip("/"), _path(project),
+                                       _path(ref), _path(path))
 
     def patch_files(self, host, project, ref) -> TreeResult:
         """Пути файлов внутри каталога патчей ref; результат мемоизируется."""
@@ -165,3 +173,9 @@ class GitlabClient:
         logger.debug("%s: ветка %s — не удалось выяснить, есть ли она: %s %s",
                      project, ref, response.status, server_message(response))
         return _tree_problem("gitlab: %s %s" % (response.status, server_message(response)))
+
+
+def _path(value) -> str:
+    """Кусок пути веб-ссылки: слэши разделяют сегменты и остаются, а пробел
+    или «#» в имени ветки без кодирования ломают ссылку."""
+    return quote(str(value), safe="/")

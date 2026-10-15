@@ -2,6 +2,7 @@ import io
 import unittest
 
 from vulnsheet import report
+from vulnsheet.patches import BRANCH_ONLY, FOUND, REMOVED, PatchNote
 from vulnsheet.report import COLUMNS, format_date, row, write
 from vulnsheet.tasks import Task
 from vulnsheet.vex import Verdict
@@ -52,34 +53,71 @@ class RowTest(unittest.TestCase):
                           "https://access.redhat.com/security/cve/CVE-2026-73070"))
 
 
+L1 = "https://gitlab.example.com/g/vim/-/blob/sl9/PATCH/a.patch"
+L2 = "https://gitlab.example.com/g/vim/-/blob/sl9/PATCH/b.patch"
+FOUND_TEXT = "патч найден: " + L1
+
+
+class PatchNoteTextTest(unittest.TestCase):
+    def test_found(self):
+        self.assertEqual(report.patch_note(PatchNote(FOUND, "sl9", (L1, L2))),
+                         "патч найден: %s %s" % (L1, L2))
+
+    def test_removed_from_the_branch(self):
+        self.assertEqual(report.patch_note(PatchNote(REMOVED, "sl9", (L1,))),
+                         "патч убран из ветки sl9, возможно, не нужен после обновления "
+                         "пакета: " + L1)
+
+    def test_only_in_the_branch(self):
+        self.assertEqual(report.patch_note(PatchNote(BRANCH_ONLY, "sl9", (L1,))),
+                         "патч есть в ветке sl9, но не в билде: " + L1)
+
+
 class PatchNoteTest(unittest.TestCase):
     VERDICT = Verdict(state="Affected", severity="Low", cvss="3.1")
 
-    def test_row_with_patch_says_so_in_the_comment(self):
-        cells = row(TASK, "vim-1-1.sl9", self.VERDICT, patched=True)
-        self.assertEqual(cells[report.COMMENT_INDEX], "патч присутствует")
+    def test_row_with_patch_carries_the_note(self):
+        cells = row(TASK, "vim-1-1.sl9", self.VERDICT, note=FOUND_TEXT)
+        self.assertEqual(cells[report.COMMENT_INDEX], FOUND_TEXT)
 
     def test_row_without_patch_has_an_empty_comment(self):
         cells = row(TASK, "vim-1-1.sl9", self.VERDICT)
         self.assertEqual(cells[report.COMMENT_INDEX], "-")
 
     def test_note_replaces_an_empty_cell(self):
-        self.assertEqual(report.with_patch_note("-", True), "патч присутствует")
-        self.assertEqual(report.with_patch_note(" ", True), "патч присутствует")
+        self.assertEqual(report.with_patch_note("-", FOUND_TEXT), FOUND_TEXT)
+        self.assertEqual(report.with_patch_note(" ", FOUND_TEXT), FOUND_TEXT)
 
     def test_note_is_appended_to_human_text(self):
-        self.assertEqual(report.with_patch_note("ждём апстрим", True),
-                         "ждём апстрим; патч присутствует")
+        self.assertEqual(report.with_patch_note("ждём апстрим", FOUND_TEXT),
+                         "ждём апстрим; " + FOUND_TEXT)
 
-    def test_note_is_not_repeated(self):
-        cell = "ждём апстрим; патч присутствует"
-        self.assertEqual(report.with_patch_note(cell, True), cell)
+    def test_own_note_is_replaced_and_human_text_kept(self):
+        for own in ("патч присутствует", "патч найден: " + L2,
+                    "патч убран из ветки sl9, возможно, не нужен после обновления пакета: " + L2,
+                    "патч есть в ветке sl9, но не в билде: " + L2):
+            with self.subTest(own=own):
+                self.assertEqual(report.with_patch_note("ждём; %s; проверить" % own, FOUND_TEXT),
+                                 "ждём; %s; проверить" % FOUND_TEXT)
+                self.assertEqual(report.with_patch_note(own, FOUND_TEXT), FOUND_TEXT)
+
+    def test_same_note_leaves_the_cell_as_is(self):
+        cell = "ждём апстрим; " + FOUND_TEXT
+        self.assertEqual(report.with_patch_note(cell, FOUND_TEXT), cell)
+
+    def test_two_own_notes_collapse_into_one(self):
+        cell = "патч присутствует; ждём; патч найден: " + L2
+        self.assertEqual(report.with_patch_note(cell, FOUND_TEXT), FOUND_TEXT + "; ждём")
 
     def test_without_patch_the_cell_is_left_alone(self):
-        # пометка прошлого прогона не снимается: в ручной колонке своя
-        # пометка от написанной людьми не отличима
-        for cell in ("-", "ждём апстрим", "патч присутствует"):
-            self.assertEqual(report.with_patch_note(cell, False), cell)
+        # пометка прошлого прогона не снимается: патча могли и не увидеть
+        for cell in ("-", "ждём апстрим", "патч присутствует", FOUND_TEXT):
+            self.assertEqual(report.with_patch_note(cell, None), cell)
+
+    def test_own_note_is_recognised(self):
+        self.assertTrue(report.has_patch_note("ждём; патч присутствует"))
+        self.assertTrue(report.has_patch_note(FOUND_TEXT))
+        self.assertFalse(report.has_patch_note("патч пишем сами"))
 
 
 class FormatDateTest(unittest.TestCase):

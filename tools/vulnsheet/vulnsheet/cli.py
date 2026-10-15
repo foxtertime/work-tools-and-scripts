@@ -180,53 +180,72 @@ def _reasons(rejects, nvrs, failures, found, outcome) -> List[str]:
     counts = (("битых блоков", len(rejects)),
               ("пакетов с ERROR от koji", sum(1 for nvr in nvrs.values() if nvr == kojiclient.ERROR)),
               ("CVE без документа VEX", len(failures)),
-              ("компонентов с непроверенными патчами", len(found.failed)),
+              ("компонентов с ошибкой проверки патчей", len(found.failed)),
               ("строк без CVE-ID или компонента", len(outcome.skipped)))
     return ["%s %d" % item for item in counts if item[1]]
 
 
+def _item(depth: int, text: str) -> None:
+    """Пункт итога: отдельная строка журнала, вложенность — отступом."""
+    logger.info("%s- %s", "  " * depth, text)
+
+
 def _footer(args, cfg, rejects, found, outcome, reasons) -> None:
-    """Итог прогона — последним блоком, с теми же метками, что у шапки: что
-    сделано и сколько чего найдено. Прочерки в колонках — строки, где
-    спрашивать было нечего, они не считаются."""
+    """Итог прогона — последним блоком, списком, с теми же метками, что у
+    шапки: что сделано и сколько чего найдено. Прочерки в колонках — строки,
+    где спрашивать было нечего, они не считаются."""
     rows = outcome.rows
-    where = ("выведено в stdout" if args.output == STDIO else "написан %s" % args.output)
-    line = "итог: %s, строк %d" % (where, len(rows))
+    logger.info("итог:")
+    _item(1, "%s, строк %d" % ("выведено в stdout" if args.output == STDIO
+                                else "написан %s" % args.output, len(rows)))
     if args.table is not None and args.blocks is not None:
-        line += " — совпало %d, Missing %d, новых %d" % (outcome.matched, outcome.missing,
-                                                          outcome.added)
+        _item(2, "совпало %d" % outcome.matched)
+        _item(2, "Missing %d" % outcome.missing)
+        _item(2, "новых %d" % outcome.added)
         if outcome.repeated:
-            line += ", повторов троек в блоках %d — действует первый блок" % outcome.repeated
-    logger.info("%s", line)
+            _item(2, "повторов троек в блоках %d — действует первый блок" % outcome.repeated)
 
     marks = Counter(r[report.SL_NVR] if r[report.SL_NVR] in (kojiclient.NOT_FOUND, kojiclient.ERROR)
                     else "found" for r in rows if r[report.SL_NVR] != report.EMPTY)
-    line = "koji: найдено %d, NOT_FOUND %d, ERROR %d" % (
-        marks["found"], marks[kojiclient.NOT_FOUND], marks[kojiclient.ERROR])
+    _item(1, "koji:")
+    _item(2, "найдено %d" % marks["found"])
+    _item(2, "NOT_FOUND %d" % marks[kojiclient.NOT_FOUND])
+    _item(2, "ERROR %d" % marks[kojiclient.ERROR])
     if outcome.kept_koji:
-        line += " (в %d строках оставлен прежний SL NVR)" % len(outcome.kept_koji)
-    logger.info("%s", line)
+        _item(2, "оставлен прежний SL NVR %d" % len(outcome.kept_koji))
 
     states = Counter(r[report.RHEL_STATE].split(" (", 1)[0] for r in rows
                      if r[report.RHEL_STATE] != report.EMPTY)
-    line = "VEX: %s" % (", ".join("%s %d" % item for item in sorted(
-        states.items(), key=lambda kv: (-kv[1], kv[0]))) or "строк нет")
+    _item(1, "VEX:")
+    for state, count in sorted(states.items(), key=lambda kv: (-kv[1], kv[0])):
+        _item(2, "%s %d" % (state, count))
+    if not states:
+        _item(2, "строк нет")
     if outcome.kept_vex:
-        line += " (в %d строках оставлены прежние данные VEX)" % len(outcome.kept_vex)
-    logger.info("%s", line)
+        _item(2, "оставлены прежние данные VEX %d" % len(outcome.kept_vex))
 
     if cfg.gitlab is None:
-        logger.info("GitLab: не задан — патчи не проверялись")
+        _item(1, "GitLab: не задан — патчи не проверялись")
     else:
-        logger.info("GitLab: патч найден в %d строках — пометка поставлена в %d, уже стояла в %d; "
-                    "компонентов %s", outcome.patched, outcome.notes_added,
-                    outcome.patched - outcome.notes_added,
-                    ", ".join("%s %d" % (kind, found.kinds.get(kind, 0))
-                              for kind in patches.KINDS))
+        kinds, fates = outcome.patch_kinds, outcome.note_fates
+        _item(1, "GitLab, строки:")
+        _item(2, "патч найден %d" % kinds.get(patches.FOUND, 0))
+        _item(2, "убран из ветки %d" % kinds.get(patches.REMOVED, 0))
+        _item(2, "есть только в ветке %d" % kinds.get(patches.BRANCH_ONLY, 0))
+        _item(2, "пометка " + ", ".join("%s %d" % (fate, fates.get(fate, 0))
+                                         for fate in merge.FATES))
+        _item(1, "GitLab, компоненты:")
+        for kind in patches.KINDS:
+            _item(2, "%s %d" % (kind, found.kinds.get(kind, 0)))
     if rejects:
-        logger.info("вход: отбраковано блоков %d → %s", len(rejects),
-                    rejects_path(args.output, args.rejects))
-    logger.info("код возврата %s", "1: " + ", ".join(reasons) if reasons else "0")
+        _item(1, "отбраковано блоков %d → %s" % (len(rejects),
+                                                 rejects_path(args.output, args.rejects)))
+    if reasons:
+        _item(1, "код возврата 1:")
+        for reason in reasons:
+            _item(2, reason)
+    else:
+        _item(1, "код возврата 0")
 
 
 def _settings(args):
@@ -418,7 +437,7 @@ def _run(args) -> int:
         verdicts = {(cve, name): vex.Verdict(state=vex.FETCH_ERROR) if cve in failures
                     else vex.lookup(indices[cve], name, rhel, streams[name], aliases[name])
                     for cve, name in unique}
-        outcome = _merge(records, tasks, merge.Fresh(nvrs, verdicts, found.cves))
+        outcome = _merge(records, tasks, merge.Fresh(nvrs, verdicts, found.notes))
         report.write(outcome.rows, out)
     except BaseException:
         if tmp_path is not None:

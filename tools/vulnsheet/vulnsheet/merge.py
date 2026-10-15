@@ -7,10 +7,12 @@ VEX и отдаёт их сюда записью Fresh. Что в каком р�
 docs/superpowers/specs/2026-09-24-vulnsheet-update-modes-design.md.
 """
 import types
-from typing import Dict, FrozenSet, List, Mapping, NamedTuple, Optional, Sequence, Tuple
+from collections import Counter
+from typing import Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
 from . import report
 from .kojiclient import ERROR
+from .patches import PatchNote
 from .table import Record
 from .tasks import CVE_RE, Task
 from .vex import FETCH_ERROR, Verdict
@@ -22,11 +24,18 @@ Key = Tuple[str, str, str]   # (Task ID, CVE, компонент)
 class Fresh(NamedTuple):
     """Ответы источников: компонент → NVR (или NOT_FOUND/ERROR);
     (CVE, компонент) → вердикт (FETCH_ERROR — документ не получен);
-    компонент → CVE, под которые в каталоге патчей билда есть файл (нет
-    компонента — патчи не проверялись или не прочитались)."""
+    компонент → CVE → что известно о патче в GitLab (нет — патча нет, или
+    патчи не проверялись, или не прочитались)."""
     nvrs: Mapping[str, str]
     verdicts: Mapping[Pair, Verdict]
-    patched: Mapping[str, FrozenSet[str]] = types.MappingProxyType({})
+    patched: Mapping[str, Mapping[str, PatchNote]] = types.MappingProxyType({})
+
+
+# судьба пометки о патче в строке
+ADDED = "поставлена"
+UPDATED = "обновлена"
+UNCHANGED = "без изменений"
+FATES = (ADDED, UPDATED, UNCHANGED)
 
 
 class Note(NamedTuple):
@@ -45,19 +54,25 @@ class Outcome(NamedTuple):
     kept_koji: Tuple[Note, ...] = ()  # koji ERROR — оставлен прежний SL NVR
     kept_vex: Tuple[Note, ...] = ()   # fetch error — оставлены прежние VEX
     skipped: Tuple[Note, ...] = ()    # спрашивать нечего — строка как есть
-    patched: int = 0                  # строк, чья CVE нашлась в каталоге патчей
-    notes_added: int = 0              # из них — где пометку поставил этот прогон
+    # строк с пометкой о патче: по виду пометки (patches.FOUND…) и по её
+    # судьбе (ADDED…)
+    patch_kinds: Mapping[str, int] = types.MappingProxyType({})
+    note_fates: Mapping[str, int] = types.MappingProxyType({})
 
 
 class _Notes:
     def __init__(self):
         self.kept_koji, self.kept_vex, self.skipped = [], [], []
-        self.patched = self.notes_added = 0
+        self.patch_kinds, self.note_fates = Counter(), Counter()
+
+    def note(self, patch: PatchNote, fate: str) -> None:
+        self.patch_kinds[patch.kind] += 1
+        self.note_fates[fate] += 1
 
     def fields(self) -> dict:
         return {"kept_koji": tuple(self.kept_koji), "kept_vex": tuple(self.kept_vex),
-                "skipped": tuple(self.skipped), "patched": self.patched,
-                "notes_added": self.notes_added}
+                "skipped": tuple(self.skipped), "patch_kinds": self.patch_kinds,
+                "note_fates": self.note_fates}
 
 
 def pairs(records: Optional[Sequence[Record]],
@@ -176,15 +191,15 @@ def _fresh_row(task: Task, fresh: Fresh, notes: Optional["_Notes"] = None) -> Li
     """Строка с нуля; notes=None — строку собирают поверх прежней (_updated),
     и пометку о патче считает уже он."""
     pair = _task_pair(task)
-    patched = _patched(pair, fresh)
-    if patched and notes is not None:
-        notes.patched += 1
-        notes.notes_added += 1
-    return report.row(task, fresh.nvrs[pair[1]], fresh.verdicts[pair], patched)
+    patch = _patch(pair, fresh)
+    if patch is not None and notes is not None:
+        notes.note(patch, ADDED)
+    return report.row(task, fresh.nvrs[pair[1]], fresh.verdicts[pair],
+                      report.patch_note(patch) if patch else None)
 
 
-def _patched(pair: Pair, fresh: Fresh) -> bool:
-    return pair[0] in fresh.patched.get(pair[1], ())
+def _patch(pair: Pair, fresh: Fresh) -> Optional[PatchNote]:
+    return fresh.patched.get(pair[1], {}).get(pair[0])
 
 
 def _note(record: Record) -> Note:
@@ -197,12 +212,14 @@ def _updated(record: Record, task: Task, pair: Pair, fresh: Fresh, notes: _Notes
     old = record.cells
     cells = _fresh_row(task, fresh)
     cells[report.DEVELOPER] = old[report.DEVELOPER]
-    patched = _patched(pair, fresh)
-    cells[report.COMMENT_INDEX] = report.with_patch_note(old[report.COMMENT_INDEX], patched)
-    if patched:
-        notes.patched += 1
-        if cells[report.COMMENT_INDEX] != old[report.COMMENT_INDEX]:
-            notes.notes_added += 1
+    cells[report.COMMENT_INDEX] = old[report.COMMENT_INDEX]
+    patch = _patch(pair, fresh)
+    if patch is not None:
+        before = old[report.COMMENT_INDEX]
+        after = report.with_patch_note(before, report.patch_note(patch))
+        cells[report.COMMENT_INDEX] = after
+        notes.note(patch, UNCHANGED if after == before
+                   else UPDATED if report.has_patch_note(before) else ADDED)
     if fresh.nvrs[pair[1]] == ERROR:
         cells[report.KOJI] = old[report.KOJI]
         notes.kept_koji.append(_note(record))
