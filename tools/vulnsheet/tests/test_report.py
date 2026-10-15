@@ -52,6 +52,36 @@ class RowTest(unittest.TestCase):
                           "https://access.redhat.com/security/cve/CVE-2026-73070"))
 
 
+class PatchNoteTest(unittest.TestCase):
+    VERDICT = Verdict(state="Affected", severity="Low", cvss="3.1")
+
+    def test_row_with_patch_says_so_in_the_comment(self):
+        cells = row(TASK, "vim-1-1.sl9", self.VERDICT, patched=True)
+        self.assertEqual(cells[report.COMMENT_INDEX], "патч присутствует")
+
+    def test_row_without_patch_has_an_empty_comment(self):
+        cells = row(TASK, "vim-1-1.sl9", self.VERDICT)
+        self.assertEqual(cells[report.COMMENT_INDEX], "-")
+
+    def test_note_replaces_an_empty_cell(self):
+        self.assertEqual(report.with_patch_note("-", True), "патч присутствует")
+        self.assertEqual(report.with_patch_note(" ", True), "патч присутствует")
+
+    def test_note_is_appended_to_human_text(self):
+        self.assertEqual(report.with_patch_note("ждём апстрим", True),
+                         "ждём апстрим; патч присутствует")
+
+    def test_note_is_not_repeated(self):
+        cell = "ждём апстрим; патч присутствует"
+        self.assertEqual(report.with_patch_note(cell, True), cell)
+
+    def test_without_patch_the_cell_is_left_alone(self):
+        # пометка прошлого прогона не снимается: в ручной колонке своя
+        # пометка от написанной людьми не отличима
+        for cell in ("-", "ждём апстрим", "патч присутствует"):
+            self.assertEqual(report.with_patch_note(cell, False), cell)
+
+
 class FormatDateTest(unittest.TestCase):
     def test_values(self):
         for value, want in [("2026-09-02", "02.09.2026"),

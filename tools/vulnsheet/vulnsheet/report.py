@@ -2,7 +2,8 @@
 
 Формат фиксирован процессом: 20 колонок, разделитель ';', пустая ячейка —
 '-', даты — dd.mm.yyyy. Колонки процесса (разработчик, статус, даты работ,
-принятая мера, комментарий) заполняют люди, здесь они — прочерки.
+принятая мера, комментарий) заполняют люди, здесь они — прочерки. В
+комментарий тулза дописывает только пометку о найденном патче.
 """
 import csv
 import re
@@ -21,6 +22,8 @@ COLUMNS = [
 ]
 
 MISSING = "Missing"  # Task state строки, чьей задачи больше нет в блоках
+# в каталоге патчей билда есть файл с CVE строки в имени
+PATCH_NOTE = "патч присутствует"
 
 # Группы колонок для режимов обновления: что в каком режиме откуда берётся,
 # см. docs/superpowers/specs/2026-09-24-vulnsheet-update-modes-design.md.
@@ -39,6 +42,7 @@ ASSIGNEE = COLUMNS.index("Исполнитель")
 COMPONENT = COLUMNS.index("Компонент")
 SL_NVR = COLUMNS.index("SL NVR (latest build)")
 RHEL_STATE = COLUMNS.index("RHEL state")
+COMMENT_INDEX = COLUMNS.index("Комментарий")
 
 _ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
 
@@ -52,7 +56,19 @@ def format_date(value: str) -> str:
     return "%s.%s.%s" % (day, month, year)
 
 
-def row(task, nvr: str, verdict) -> List[str]:
+def with_patch_note(comment: str, patched: bool) -> str:
+    """Комментарий с пометкой о патче: пустую ячейку она заменяет, к тексту
+    людей дописывается через «; », второй раз не ставится. Без патча ячейка
+    не трогается — и пометку прошлого прогона тулза не снимает: в ручной
+    колонке своя пометка от написанной людьми не отличима."""
+    if not patched or PATCH_NOTE in comment:
+        return comment
+    if comment.strip() in ("", EMPTY):
+        return PATCH_NOTE
+    return "%s; %s" % (comment, PATCH_NOTE)
+
+
+def row(task, nvr: str, verdict, patched: bool = False) -> List[str]:
     fixed = verdict.state == FIXED
     cells = [
         "", "", "", "", "",
@@ -63,7 +79,7 @@ def row(task, nvr: str, verdict) -> List[str]:
         verdict.state, verdict.severity, verdict.cvss,
         verdict.advisory_url if fixed else "",
         CVE_PAGE.format(cve=task.cve),
-        "",
+        PATCH_NOTE if patched else "",
     ]
     # пустое — только None и "": CVSS 0.0 — настоящее значение
     return [EMPTY if cell is None or cell == "" else cell for cell in cells]

@@ -1,4 +1,5 @@
 """Подделки внешних систем для тестов. Сети здесь нет."""
+from collections import namedtuple
 
 
 class _Call:
@@ -34,13 +35,26 @@ class _Multicall:
         nvr = self._session.builds.get(package)
         return _Call([{"nvr": nvr}] if nvr else [])
 
+    def getBuild(self, nvr):
+        self._session.build_calls.append(nvr)
+        if nvr in self._session.errors:
+            return _Call(error=RuntimeError(self._session.errors[nvr]))
+        return _Call(self._session.infos.get(nvr))
+
 
 class FakeKojiSession:
-    """koji.ClientSession в объёме, нужном kojiclient: getTag и multicall."""
+    """koji.ClientSession в объёме, нужном kojiclient: getTag и multicall.
+
+    builds — пакет → NVR последнего билда; infos — NVR → ответ getBuild;
+    errors — пакет или NVR → текст ошибки хаба по этому вызову.
+    """
 
     def __init__(self, builds=None, errors=None, tags=("sl9",),
-                 hub_down=False, multicall_down=False, baseurl="https://koji.example.com/kojihub"):
+                 hub_down=False, multicall_down=False, baseurl="https://koji.example.com/kojihub",
+                 infos=None):
         self.builds = dict(builds or {})
+        self.infos = dict(infos or {})
+        self.build_calls = []
         self.errors = dict(errors or {})
         self.tags = set(tags)
         self.hub_down = hub_down
@@ -101,3 +115,27 @@ def csaf(cve, statuses, severity="Moderate", scores=(), remediations=()):
                              "scores": list(scores),
                              "remediations": list(remediations)}],
     }
+
+
+Response = namedtuple("Response", "status body headers")
+
+
+class FakeTransport:
+    """HTTP-транспорт для GitlabClient: очередь ответов на каждый URL."""
+
+    def __init__(self, routes=None):
+        self.routes = routes or {}
+        self.requests = []
+
+    def get(self, url, headers=None, params=None):
+        self.requests.append((url, dict(params or {}), dict(headers or {})))
+        key = (url, tuple(sorted((params or {}).items())))
+        if key in self.routes:
+            queue = self.routes[key]
+        elif url in self.routes:
+            queue = self.routes[url]
+        else:
+            return Response(404, {"message": "404 Project Not Found"}, {})
+        if isinstance(queue, list):
+            return queue.pop(0) if len(queue) > 1 else queue[0]
+        return queue
