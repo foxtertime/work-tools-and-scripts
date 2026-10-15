@@ -10,7 +10,7 @@ from collections import Counter
 from typing import List, NamedTuple, Optional
 
 from . import (__version__, config, gitlabclient, httpclient, kojiclient, logs, merge,
-               patches, report, table, vex)
+               patches, ranges, report, table, vex)
 from .tasks import parse
 
 logger = logging.getLogger(__name__)
@@ -175,12 +175,13 @@ def _write_rejects(path: str, rejects) -> None:
             logger.info("удалён %s от прошлого прогона: битых блоков нет", path)
 
 
-def _reasons(rejects, nvrs, failures, found, outcome) -> List[str]:
+def _reasons(rejects, nvrs, failures, found, range_failed, outcome) -> List[str]:
     """Почему код возврата 1; пусто — код 0."""
     counts = (("битых блоков", len(rejects)),
               ("пакетов с ERROR от koji", sum(1 for nvr in nvrs.values() if nvr == kojiclient.ERROR)),
               ("CVE без документа VEX", len(failures)),
               ("компонентов с ошибкой проверки патчей", len(found.failed)),
+              ("CVE без диапазонов из-за сбоя", len(range_failed)),
               ("строк без CVE-ID или компонента", len(outcome.skipped)))
     return ["%s %d" % item for item in counts if item[1]]
 
@@ -241,6 +242,16 @@ def _footer(args, cfg, rejects, found, outcome, reasons) -> None:
             _item(2, "%s %d" % (kind, found.kinds.get(kind, 0)))
         for kind in patches.SPEC_KINDS:
             _item(2, "%s %d" % (kind, found.spec_kinds.get(kind, 0)))
+    if cfg.ranges is None:
+        _item(1, "диапазоны версий: не заданы — не сверялись")
+    else:
+        kinds, sources = outcome.range_kinds, outcome.range_sources
+        _item(1, "диапазоны версий:")
+        _item(2, "в диапазоне %d" % kinds.get(True, 0))
+        _item(2, "вне диапазона %d" % kinds.get(False, 0))
+        _item(2, "неизвестен %d" % kinds.get(None, 0))
+        _item(2, "источник: %s" % ", ".join("%s %d" % (source, sources.get(source, 0))
+                                             for source in (ranges.NVD, ranges.CVEORG)))
     if rejects:
         _item(1, "отбраковано блоков %d → %s" % (len(rejects),
                                                  rejects_path(args.output, args.rejects)))
@@ -341,13 +352,49 @@ def _header(args, cfg, run) -> None:
                  "без токена ($%s пуст) — видны только публичные проекты" % gitlab.token_env)
         logger.info("GitLab: %s, каталог %s, %s, потоков %d", hosts, gitlab.patch_dir, token,
                     gitlab.jobs)
+    if cfg.ranges is None:
+        logger.info("диапазоны: не заданы в конфиге — версии не сверяются")
+    else:
+        env = cfg.ranges.nvd_key_env
+        key = ("NVD с ключом из $%s" % env if run.nvd_key else
+               "NVD без ключа ($%s пуст, пауза %g с)" % (env, ranges.PAUSE))
+        logger.info("диапазоны: %s, CVE.org, кэш %s (живёт %d с), потоков %d", key,
+                    _ranges_cache(cfg), cfg.ranges.cache_ttl, cfg.ranges.jobs)
     if not run.packages:
         logger.info("план: спрашивать нечего — в сеть не идём")
         return
     plan = "koji — пакетов %d, VEX — CVE %d" % (len(run.packages), len(run.cves))
     if gitlab is not None:
         plan += ", GitLab — патчи по билдам из koji (до %d)" % len(run.packages)
+    if cfg.ranges is not None:
+        plan += ", диапазоны — CVE %d" % len(run.cves)
     logger.info("план: %s", plan)
+
+
+def _ranges_cache(cfg) -> str:
+    return os.path.join(cfg.vex.cache_dir or _cache_dir(), "ranges")
+
+
+def _range_notes(cfg, unique, nvrs, nvd_key):
+    """(CVE, компонент) → RangeNote и CVE, по которым диапазоны не известны
+    из-за сбоя. Без секции ranges ничего не спрашивается."""
+    settings = cfg.ranges
+    if settings is None or not unique:
+        return {}, set()
+    docs, _ = ranges.fetch_all((cve for cve, _ in unique), ranges.RangeSettings(
+        cache_dir=_ranges_cache(cfg), cache_ttl=settings.cache_ttl, jobs=settings.jobs,
+        retries=settings.retries, timeout=settings.timeout, nvd_key=nvd_key))
+    notes, failed = {}, set()
+    for cve, name in unique:
+        version = ranges.upstream_version(nvrs.get(name, ""))
+        if version is None or cve not in docs:
+            continue
+        found, broken = ranges.ranges_for(docs[cve], settings.names_for(name))
+        if broken:
+            failed.add(cve)
+            continue
+        notes[(cve, name)] = ranges.judge(version, found)
+    return notes, failed
 
 
 def _warn_rejects(rejects) -> None:
@@ -370,6 +417,7 @@ class _Run(NamedTuple):
     streams: dict
     aliases: dict
     token: Optional[str]
+    nvd_key: Optional[str]
 
 
 def _merge(records, tasks, fresh):
@@ -418,8 +466,11 @@ def _run(args) -> int:
     streams = {name: cfg.stream_for(name, rhel) for name in packages}
     aliases = {name: cfg.names_for(name) for name in packages}
     token = _gitlab_token(cfg.gitlab)
+    # ключ NVD, как и токен GitLab, срезаем: файл и копипаста приносят перевод строки
+    nvd_key = ((os.environ.get(cfg.ranges.nvd_key_env) or "").strip() or None
+               if cfg.ranges is not None else None)
     _header(args, cfg, _Run(rhel, hub, tag, records, tasks, rejects, wanted, cves, packages,
-                            streams, aliases, token))
+                            streams, aliases, token, nvd_key))
     _warn_rejects(rejects)
 
     # выход открываем до сети: неверный путь должен падать сразу, и не
@@ -431,6 +482,7 @@ def _run(args) -> int:
     try:
         nvrs, indices, failures = {}, {}, {}
         found = patches.Result({}, ())
+        range_notes, range_failed = {}, set()
         if unique:
             session = kojiclient.connect(hub)
             nvrs = kojiclient.latest_builds(session, tag, packages)
@@ -438,10 +490,11 @@ def _run(args) -> int:
                 cache_dir=vex.prepare_cache(cfg.vex.cache_dir or _cache_dir()))
             indices, failures = vex.fetch_all(cves, settings)
             found = _patches(session, nvrs, cfg.gitlab, token)
+            range_notes, range_failed = _range_notes(cfg, unique, nvrs, nvd_key)
         verdicts = {(cve, name): vex.Verdict(state=vex.FETCH_ERROR) if cve in failures
                     else vex.lookup(indices[cve], name, rhel, streams[name], aliases[name])
                     for cve, name in unique}
-        outcome = _merge(records, tasks, merge.Fresh(nvrs, verdicts, found.notes))
+        outcome = _merge(records, tasks, merge.Fresh(nvrs, verdicts, found.notes, range_notes))
         report.write(outcome.rows, out)
     except BaseException:
         if tmp_path is not None:
@@ -460,7 +513,7 @@ def _run(args) -> int:
     if args.blocks is not None:
         _write_rejects(rejects_path(args.output, args.rejects), rejects)
     _warn_outcome(outcome)
-    reasons = _reasons(rejects, nvrs, failures, found, outcome)
+    reasons = _reasons(rejects, nvrs, failures, found, range_failed, outcome)
     _footer(args, cfg, rejects, found, outcome, reasons)
     return EXIT_PARTIAL if reasons else EXIT_OK
 

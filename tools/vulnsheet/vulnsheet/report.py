@@ -28,7 +28,10 @@ MISSING = "Missing"  # Task state строки, чьей задачи больш
 # фрагменты среди текста людей и заменяет их; «патч присутствует» писала
 # версия 1.1.
 _NOTE_STARTS = ("патч найден:", "патч убран из ветки", "патч есть в ветке",
-                "патч присутствует", "спек, ")
+                "патч присутствует", "спек, ", "диапазон версий неизвестен")
+# фрагмент о диапазоне узнаётся строже, чем по «версия »: иначе «версия
+# обновлена до 1.27», написанное людьми, сошло бы за свой фрагмент
+_RANGE_NOTE = re.compile(r"^версия \S+ (в уязвимом диапазоне|вне уязвим(ого|ых) диапазон)")
 _SEPARATOR = "; "
 
 # Группы колонок для режимов обновления: что в каком режиме откуда берётся,
@@ -97,8 +100,21 @@ def _fragment(source: str, note) -> str:
     return "спек, %s: %s" % (entry, item.url)
 
 
+def range_note(note) -> str:
+    """Фрагмент о диапазоне версий (ranges.RangeNote)."""
+    if note.inside is None:
+        return "диапазон версий неизвестен"
+    ranges = ", ".join(interval.text() for interval in note.intervals)
+    if note.inside:
+        where = "в уязвимом диапазоне"
+    else:
+        where = "вне уязвимого диапазона" if len(note.intervals) == 1 else "вне уязвимых диапазонов"
+    return "версия %s %s %s (%s)" % (note.version, where, ranges, note.source)
+
+
 def _is_note(segment: str) -> bool:
-    return segment.strip().startswith(_NOTE_STARTS)
+    segment = segment.strip()
+    return segment.startswith(_NOTE_STARTS) or bool(_RANGE_NOTE.match(segment))
 
 
 def has_patch_note(comment: str) -> bool:
