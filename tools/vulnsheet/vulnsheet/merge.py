@@ -13,6 +13,8 @@ from typing import Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 from . import report
 from .kojiclient import ERROR
 from .patches import PatchNote
+
+Found = Mapping[str, PatchNote]  # источник (patches.SRC_*) → что известно о CVE
 from .table import Record
 from .tasks import CVE_RE, Task
 from .vex import FETCH_ERROR, Verdict
@@ -24,11 +26,11 @@ Key = Tuple[str, str, str]   # (Task ID, CVE, компонент)
 class Fresh(NamedTuple):
     """Ответы источников: компонент → NVR (или NOT_FOUND/ERROR);
     (CVE, компонент) → вердикт (FETCH_ERROR — документ не получен);
-    компонент → CVE → что известно о патче в GitLab (нет — патча нет, или
-    патчи не проверялись, или не прочитались)."""
+    компонент → CVE → источник → что известно о CVE в GitLab (нет — CVE не
+    упомянута нигде, или GitLab не спрашивался, или не прочитан)."""
     nvrs: Mapping[str, str]
     verdicts: Mapping[Pair, Verdict]
-    patched: Mapping[str, Mapping[str, PatchNote]] = types.MappingProxyType({})
+    patched: Mapping[str, Mapping[str, Found]] = types.MappingProxyType({})
 
 
 # судьба пометки о патче в строке
@@ -54,8 +56,8 @@ class Outcome(NamedTuple):
     kept_koji: Tuple[Note, ...] = ()  # koji ERROR — оставлен прежний SL NVR
     kept_vex: Tuple[Note, ...] = ()   # fetch error — оставлены прежние VEX
     skipped: Tuple[Note, ...] = ()    # спрашивать нечего — строка как есть
-    # строк с пометкой о патче: по виду пометки (patches.FOUND…) и по её
-    # судьбе (ADDED…)
+    # строк с пометкой о CVE: по (источнику, виду) — (patches.SRC_PATCH,
+    # patches.FOUND)… — и по судьбе пометки (ADDED…)
     patch_kinds: Mapping[str, int] = types.MappingProxyType({})
     note_fates: Mapping[str, int] = types.MappingProxyType({})
 
@@ -65,8 +67,9 @@ class _Notes:
         self.kept_koji, self.kept_vex, self.skipped = [], [], []
         self.patch_kinds, self.note_fates = Counter(), Counter()
 
-    def note(self, patch: PatchNote, fate: str) -> None:
-        self.patch_kinds[patch.kind] += 1
+    def note(self, found: Found, fate: str) -> None:
+        for source, patch in found.items():
+            self.patch_kinds[(source, patch.kind)] += 1
         self.note_fates[fate] += 1
 
     def fields(self) -> dict:
@@ -198,7 +201,7 @@ def _fresh_row(task: Task, fresh: Fresh, notes: Optional["_Notes"] = None) -> Li
                       report.patch_note(patch) if patch else None)
 
 
-def _patch(pair: Pair, fresh: Fresh) -> Optional[PatchNote]:
+def _patch(pair: Pair, fresh: Fresh) -> Optional[Found]:
     return fresh.patched.get(pair[1], {}).get(pair[0])
 
 

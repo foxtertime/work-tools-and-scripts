@@ -5,7 +5,8 @@ from vulnsheet import report
 from vulnsheet.kojiclient import ERROR, NOT_FOUND
 from vulnsheet.merge import ADDED, UNCHANGED, Fresh, Note, build, pairs, refresh, sync
 from vulnsheet.merge import UPDATED as NOTE_UPDATED
-from vulnsheet.patches import BRANCH_ONLY, FOUND, REMOVED, PatchNote
+from vulnsheet.patches import (BRANCH_ONLY, FOUND, REMOVED, SRC_CHANGELOG, SRC_PATCH, Item,
+                               PatchNote)
 from vulnsheet.table import Record
 from vulnsheet.tasks import Task
 from vulnsheet.vex import FETCH_ERROR, Verdict
@@ -131,12 +132,19 @@ class RefreshTest(unittest.TestCase):
 
 
 URL = "https://gitlab.example.com/g/vim/-/blob/sl9/PATCH/vim-CVE-2026-0001.patch"
-VIM_NOTE = PatchNote(FOUND, "sl9", (URL,))
+
+
+def in_patch(kind=FOUND):
+    """Найдено в каталоге PATCH: источник → пометка."""
+    return {SRC_PATCH: PatchNote(kind, "sl9", (Item(None, URL),))}
+
+
+VIM_NOTE = in_patch()
 NOTE = "патч найден: " + URL
 # vim закрыт патчем под CVE-2026-0001, openssl — под чужую CVE
 PATCHED = FRESH._replace(patched=types.MappingProxyType({
     "vim": {"CVE-2026-0001": VIM_NOTE},
-    "openssl": {"CVE-2026-9999": PatchNote(FOUND, "sl9", (URL,))}}))
+    "openssl": {"CVE-2026-9999": in_patch()}}))
 
 
 def with_notes(**notes):
@@ -150,7 +158,7 @@ class PatchNoteTest(unittest.TestCase):
         self.assertEqual([r[report.COMMENT_INDEX] for r in rows], [NOTE, "-"])
 
     def test_each_kind_of_note_is_written(self):
-        removed = PatchNote(REMOVED, "sl9", (URL,))
+        removed = in_patch(REMOVED)
         row = build([task()], with_notes(vim={"CVE-2026-0001": removed})).rows[0]
         self.assertEqual(row[report.COMMENT_INDEX], report.patch_note(removed))
 
@@ -176,10 +184,13 @@ class PatchNoteTest(unittest.TestCase):
 
     def test_rows_are_counted_by_kind_of_note(self):
         fresh = with_notes(vim={"CVE-2026-0001": VIM_NOTE},
-                           bash={"CVE-2026-0002": PatchNote(REMOVED, "sl9", (URL,))},
-                           openssl={"CVE-2026-0003": PatchNote(BRANCH_ONLY, "sl9", (URL,))})
+                           bash={"CVE-2026-0002": in_patch(REMOVED)},
+                           openssl={"CVE-2026-0003": dict(in_patch(BRANCH_ONLY), **{
+                               SRC_CHANGELOG: PatchNote(FOUND, "sl9", (Item("1.0-2", URL),))})})
         out = sync([Record(2, OLD), Record(3, BASH)], [OPENSSL, task(), task()], fresh)
-        self.assertEqual(dict(out.patch_kinds), {FOUND: 1, REMOVED: 1, BRANCH_ONLY: 1})
+        self.assertEqual(dict(out.patch_kinds), {
+            (SRC_PATCH, FOUND): 1, (SRC_PATCH, REMOVED): 1, (SRC_PATCH, BRANCH_ONLY): 1,
+            (SRC_CHANGELOG, FOUND): 1})
 
     def test_fate_of_each_note_is_counted(self):
         same = changed(OLD, {report.COMMENT_INDEX: "ждём; " + NOTE})

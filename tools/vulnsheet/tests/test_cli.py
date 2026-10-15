@@ -1,3 +1,4 @@
+import base64
 import csv
 import io
 import json
@@ -392,7 +393,7 @@ class GitlabTest(CliCase):
         self.assertEqual(self.run_gitlab(), EXIT_OK)
         self.assertEqual(self.comment(), "патч найден: " + BLOB)
         self.assertEqual(self.session.build_calls, [VIM_NVR])
-        self.assertIn("    - патч найден 1", self.log)
+        self.assertIn("    - каталог PATCH: найден 1, убран из ветки 0, только в ветке 0", self.log)
 
     def test_token_from_the_environment_is_sent_stripped(self):
         self.run_gitlab()
@@ -440,17 +441,34 @@ class GitlabTest(CliCase):
         sha = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
         self.session.infos[VIM_NVR]["source"] = "git+ssh://git@gitlab.example.com/g/vim#" + sha
 
-        def tree_at(ref):
-            return (TREE_URL, (("path", "PATCH"), ("per_page", "100"),
+        def tree_at(ref, path="PATCH"):
+            return (TREE_URL, (("path", path), ("per_page", "100"),
                                ("recursive", "true"), ("ref", ref)))
         self.transport.routes = {
             tree_at(sha): Response(200, [{"type": "blob",
                                           "path": "PATCH/vim-CVE-2026-73070.patch"}], {}),
-            tree_at("sl9"): Response(200, [], {})}
+            tree_at("sl9"): Response(200, [], {}),
+            tree_at(sha, "SPECS"): Response(200, [], {}),
+            tree_at("sl9", "SPECS"): Response(200, [], {})}
         self.assertEqual(self.run_gitlab(), EXIT_OK)
         self.assertEqual(self.comment(), "патч убран из ветки sl9, возможно, не нужен после "
                                          "обновления пакета: " + BLOB.replace("/sl9/", "/%s/" % sha))
-        self.assertIn("    - убран из ветки 1", self.log)
+        self.assertIn("    - каталог PATCH: найден 0, убран из ветки 1, только в ветке 0", self.log)
+
+    def test_cve_in_the_spec_changelog_is_noted_too(self):
+        spec = ("Name: vim\n%changelog\n* Mon Jan 05 2026 A <a@b> - 8.2-26\n"
+                "- Fix CVE-2026-73070\n")
+        specs = (("path", "SPECS"), ("per_page", "100"), ("recursive", "true"), ("ref", "sl9"))
+        self.transport.routes[(TREE_URL, specs)] = Response(200, [
+            {"type": "blob", "path": "SPECS/vim.spec"}], {})
+        self.transport.routes[(TREE_URL.replace("tree", "files/SPECS%2Fvim.spec"),
+                               (("ref", "sl9"),))] = Response(200, {
+            "encoding": "base64", "content": base64.b64encode(spec.encode()).decode()}, {})
+        self.assertEqual(self.run_gitlab(), EXIT_OK)
+        self.assertEqual(self.comment(), "патч найден: %s; спек, %%changelog 8.2-26: "
+                         "https://gitlab.example.com/g/vim/-/blob/sl9/SPECS/vim.spec#L4" % BLOB)
+        self.assertIn("    - %changelog: найден 1, убран из ветки 0, только в ветке 0", self.log)
+        self.assertIn("    - спек прочитан 1", self.log)
 
     def test_without_gitlab_section_gitlab_is_not_asked(self):
         self.assertEqual(self.run_gitlab(config="rhel: \"9\"\n"), EXIT_OK)
@@ -610,11 +628,11 @@ class FooterTest(CliCase):
                          EXIT_OK)
         footer = self.footer()
         start = footer.index("  - GitLab, строки:")
-        self.assertEqual(footer[start:start + 12], [
+        self.assertEqual(footer[start:start + 15], [
             "  - GitLab, строки:",
-            "    - патч найден 2",
-            "    - убран из ветки 0",
-            "    - есть только в ветке 0",
+            "    - каталог PATCH: найден 2, убран из ветки 0, только в ветке 0",
+            "    - PatchN в спеке: найден 0, убран из ветки 0, только в ветке 0",
+            "    - %changelog: найден 0, убран из ветки 0, только в ветке 0",
             "    - пометка поставлена 2, обновлена 0, без изменений 0",
             "  - GitLab, компоненты:",
             "    - прочитано 1",
@@ -622,6 +640,9 @@ class FooterTest(CliCase):
             "    - без источника 1",
             "    - из SRPM 0",
             "    - ошибок 0",
+            "    - спек прочитан 0",
+            "    - спека нет 1",
+            "    - спеков несколько, не выбран 0",
             "  - код возврата 0",
         ])
 
