@@ -357,7 +357,7 @@ def _header(args, cfg, run) -> None:
     else:
         env = cfg.ranges.nvd_key_env
         key = ("NVD с ключом из $%s" % env if run.nvd_key else
-               "NVD без ключа ($%s пуст, пауза %g с)" % (env, ranges.PAUSE))
+               "NVD без ключа ($%s пуст, запрос раз в %g с)" % (env, ranges.PAUSE))
         logger.info("диапазоны: %s, CVE.org, кэш %s (живёт %d с), потоков %d", key,
                     _ranges_cache(cfg), cfg.ranges.cache_ttl, cfg.ranges.jobs)
     if not run.packages:

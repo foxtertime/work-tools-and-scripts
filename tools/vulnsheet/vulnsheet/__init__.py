@@ -1,3 +1,3 @@
 """vulnsheet — таблица задач по уязвимостям с данными Red Hat VEX, koji, GitLab, NVD и CVE.org."""
 
-__version__ = "1.6.0"
+__version__ = "1.6.1"
