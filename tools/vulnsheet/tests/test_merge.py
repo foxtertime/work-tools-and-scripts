@@ -1,3 +1,4 @@
+import types
 import unittest
 
 from vulnsheet import report
@@ -125,6 +126,38 @@ class RefreshTest(unittest.TestCase):
         self.assertEqual(row[report.CVE_ID], " cve-2026-0001")
         self.assertEqual(row[DATA], UPDATED)
         self.assertEqual(row[report.LINK], [LINK + "CVE-2026-0001"])
+
+
+# vim закрыт патчем под CVE-2026-0001, openssl — под чужую CVE
+PATCHED = FRESH._replace(patched=types.MappingProxyType({
+    "vim": frozenset({"CVE-2026-0001"}), "openssl": frozenset({"CVE-2026-9999"})}))
+NOTE = "патч присутствует"
+
+
+class PatchNoteTest(unittest.TestCase):
+    def test_new_row_gets_the_note_only_for_its_own_cve(self):
+        rows = build([task(), OPENSSL], PATCHED).rows
+        self.assertEqual([r[report.COMMENT_INDEX] for r in rows], [NOTE, "-"])
+
+    def test_refresh_appends_the_note_to_the_old_comment(self):
+        row = refresh([Record(2, OLD)], PATCHED).rows[0]
+        self.assertEqual(row[report.COMMENT_INDEX], "ждём апстрим; " + NOTE)
+
+    def test_refresh_without_patch_keeps_the_old_comment(self):
+        row = refresh([Record(2, OLD)], FRESH).rows[0]
+        self.assertEqual(row[report.COMMENT_INDEX], "ждём апстрим")
+
+    def test_sync_marks_matched_missing_and_new_rows(self):
+        patched = PATCHED._replace(patched=types.MappingProxyType({
+            "vim": frozenset({"CVE-2026-0001"}), "bash": frozenset({"CVE-2026-0002"}),
+            "openssl": frozenset({"CVE-2026-0003"})}))
+        out = sync([Record(2, OLD), Record(3, BASH)], [OPENSSL, task()], patched)
+        self.assertEqual([r[report.COMMENT_INDEX] for r in out.rows],
+                         ["ждём апстрим; " + NOTE, NOTE, NOTE])
+
+    def test_row_with_nothing_to_ask_gets_no_note(self):
+        cells = changed(OLD, {report.CVE_ID: "-"})
+        self.assertEqual(refresh([Record(2, cells)], PATCHED).rows, [cells])
 
 
 class SyncTest(unittest.TestCase):

@@ -1,3 +1,4 @@
+import csv
 import io
 import json
 import os
@@ -8,7 +9,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
-from tests.fakes import APPSTREAM96, RHEL9, FakeKojiSession, csaf, pid
+from tests.fakes import APPSTREAM96, RHEL9, FakeKojiSession, FakeTransport, Response, csaf, pid
 from vulnsheet import __version__
 from vulnsheet.cli import EXIT_FATAL, EXIT_OK, EXIT_PARTIAL, main, rejects_path
 from vulnsheet.report import COLUMNS
@@ -346,6 +347,97 @@ GONE_MISSING = ("Петров;Готово;-;-;-;TASKID-100000;CVE-2026-73071;Mi
 NEW_BLOCK = BLOCK.replace("181229", "181230").replace("73070", "73071").replace("vim", "openssl")
 NEW_ROW = ("-;-;-;-;-;TASKID-181230;CVE-2026-73071;Отменен;22.09.2026;КМ;openssl;NOT_FOUND;"
            "-;-;no VEX record;-;-;-;https://access.redhat.com/security/cve/CVE-2026-73071;-")
+
+
+VIM_NVR = "vim-8.2.2637-26.sl9_8.6^4"
+GITLAB_CONFIG = """\
+gitlab:
+  retries: 1
+  token_env: VULNSHEET_TEST_TOKEN
+  hosts:
+    gitlab.example.com:
+      api: https://gitlab.example.com/api/v4
+"""
+TREE_URL = "https://gitlab.example.com/api/v4/projects/g%2Fvim/repository/tree"
+
+
+class GitlabTest(CliCase):
+    """Проверка патчей: koji getBuild → коммит → каталог PATCH в GitLab."""
+
+    def setUp(self):
+        super().setUp()
+        self.session.infos[VIM_NVR] = {
+            "nvr": VIM_NVR,
+            "extra": {"source": {"original_url": "git+https://gitlab.example.com/g/vim.git#sl9"}}}
+        self.transport = FakeTransport({TREE_URL: Response(200, [
+            {"type": "blob", "path": "PATCH/vim-CVE-2026-73070.patch"}], {})})
+        self.made = mock.patch("vulnsheet.cli.httpclient.UrllibTransport",
+                               return_value=self.transport).start()
+        mock.patch.dict(os.environ, {"VULNSHEET_TEST_TOKEN": " glpat-t0ken-secret\n"}).start()
+
+    def run_gitlab(self, *extra, config=GITLAB_CONFIG):
+        path = self.path("vulnsheet.yaml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(config)
+        return self.run_cli("--config", path, *extra)
+
+    def comment(self):
+        # ячейка с «; » внутри уходит в CSV в кавычках
+        return next(csv.reader(self.report_lines()[1:], delimiter=";"))[-1]
+
+    def test_patch_in_the_tree_is_noted_in_the_comment(self):
+        self.assertEqual(self.run_gitlab(), EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER, EXPECTED[:-1] + "патч присутствует"])
+        self.assertEqual(self.session.build_calls, [VIM_NVR])
+        self.assertIn("патчи GitLab: прочитано 1", self.log)
+
+    def test_token_from_the_environment_is_sent_stripped(self):
+        self.run_gitlab()
+        url, params, headers = self.transport.requests[0]
+        self.assertEqual(headers["PRIVATE-TOKEN"], "glpat-t0ken-secret")
+        self.assertEqual(params["ref"], "sl9")
+        self.assertEqual(self.made.call_args.kwargs["timeout"], 30)
+
+    def test_without_a_patch_the_comment_stays_empty(self):
+        self.transport.routes[TREE_URL] = Response(200, [
+            {"type": "blob", "path": "PATCH/vim-CVE-2026-11111.patch"}], {})
+        self.assertEqual(self.run_gitlab(), EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER, EXPECTED])
+
+    def test_gitlab_failure_is_partial_and_leaves_the_comment(self):
+        self.transport.routes[TREE_URL] = Response(500, {"message": "boom"}, {})
+        self.assertEqual(self.run_gitlab(), EXIT_PARTIAL)
+        self.assertEqual(self.report_lines(), [HEADER, EXPECTED])
+        self.assertIn("vim: патчи не проверены", self.log)
+        self.assertNotIn("glpat-t0ken-secret", self.log)
+
+    def test_koji_without_build_details_is_partial(self):
+        del self.session.infos[VIM_NVR]
+        self.assertEqual(self.run_gitlab(), EXIT_PARTIAL)
+        self.assertEqual(self.comment(), "-")
+
+    def test_package_missing_from_koji_is_not_looked_up(self):
+        self.session.builds.clear()
+        self.assertEqual(self.run_gitlab(), EXIT_OK)
+        self.assertEqual(self.session.build_calls, [])
+        self.assertEqual(self.transport.requests, [])
+
+    def test_refresh_appends_the_note_to_the_human_comment(self):
+        table = self.path("old.csv")
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write(HEADER + "\n" + EXPECTED[:-1] + "ждём апстрим\n")
+        path = self.path("vulnsheet.yaml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(GITLAB_CONFIG)
+        code = self.run_main("--config", path, "--table", table, "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(self.comment(), "ждём апстрим; патч присутствует")
+
+    def test_without_gitlab_section_gitlab_is_not_asked(self):
+        self.assertEqual(self.run_gitlab(config="rhel: \"9\"\n"), EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER, EXPECTED])
+        self.assertEqual(self.session.build_calls, [])
+        self.made.assert_not_called()
 
 
 class UsageTest(CliCase):

@@ -3,23 +3,41 @@
 Модуль читает и проверяет файл; сводит его с флагами командной строки cli.
 PyYAML импортируется только при заданном файле: без конфига тулзе хватает
 стандартной библиотеки и koji.
+
+Секция gitlab включает проверку патчей: без неё GitLab не спрашивается.
 """
 import math
 import os
 import types
 from typing import Dict, Mapping, NamedTuple, Optional, Tuple
 
+from .gitlabclient import GitlabHost
 from .vex import VexSettings, parse_rhel
 
 ENV_VAR = "VULNSHEET_CONFIG"
 
-_TOP_KEYS = {"koji", "rhel", "vex", "vex_streams", "vex_names"}
+_TOP_KEYS = {"koji", "rhel", "vex", "vex_streams", "vex_names", "gitlab"}
 _KOJI_KEYS = {"hub", "tag"}
 _VEX_KEYS = {"cache_dir", "cache_ttl", "jobs", "retries", "timeout"}
+_GITLAB_KEYS = {"hosts", "default_host", "token_env", "patch_dir", "jobs", "retries", "timeout"}
+# web не используется: допускается, чтобы блок хостов можно было взять из
+# конфига dashboard как есть
+_HOST_KEYS = {"api", "web"}
 
 
 class ConfigError(Exception):
     """Конфиг не найден, не читается или не проходит проверку."""
+
+
+class GitlabSettings(NamedTuple):
+    """Где искать каталог патчей. Токен — в переменной token_env, не в файле."""
+    hosts: Mapping[str, GitlabHost]
+    default_host: Optional[str] = None
+    token_env: str = "GITLAB_TOKEN"
+    patch_dir: str = "PATCH"
+    jobs: int = 8
+    retries: int = 3
+    timeout: float = 30
 
 
 class Config(NamedTuple):
@@ -34,6 +52,8 @@ class Config(NamedTuple):
     # пакет из входа → другие его имена в VEX (бинарные пакеты), для всех
     # версий RHEL
     vex_names: Mapping[str, Tuple[str, ...]] = types.MappingProxyType({})
+    # None — секции gitlab нет, патчи не проверяются
+    gitlab: Optional[GitlabSettings] = None
 
     def stream_for(self, component: str, rhel: str) -> Optional[str]:
         """Стрим VEX для компонента — только из набора ровно этой версии RHEL.
@@ -68,7 +88,7 @@ def load_config(path: Optional[str]) -> Config:
         cache_ttl=_integer(vex, "cache_ttl", "vex.cache_ttl", path, 0, defaults.cache_ttl),
         jobs=_integer(vex, "jobs", "vex.jobs", path, 1, defaults.jobs),
         retries=_integer(vex, "retries", "vex.retries", path, 1, defaults.retries),
-        timeout=_timeout(vex, path, defaults.timeout),
+        timeout=_timeout(vex, "vex.timeout", path, defaults.timeout),
     )
     return Config(
         path=path,
@@ -78,6 +98,7 @@ def load_config(path: Optional[str]) -> Config:
         vex=settings,
         vex_streams=_streams(raw.get("vex_streams"), path),
         vex_names=_names(raw.get("vex_names"), path),
+        gitlab=_gitlab(_section(raw, "gitlab", path), path),
     )
 
 
@@ -159,14 +180,50 @@ def _integer(section, key, name, path, minimum, default):
     return value
 
 
-def _timeout(section, path, default):
+def _timeout(section, name, path, default):
     value = section.get("timeout")
     if value is None:
         return default
     if (isinstance(value, bool) or not isinstance(value, (int, float))
             or not math.isfinite(value) or value <= 0):
-        raise ConfigError("%s: vex.timeout должен быть числом больше нуля" % path)
+        raise ConfigError("%s: %s должен быть числом больше нуля" % (path, name))
     return value
+
+
+def _gitlab(section, path) -> Optional[GitlabSettings]:
+    """Секция gitlab; пустая или отсутствующая — проверка патчей выключена."""
+    if not section:
+        return None
+    _check_keys(section, _GITLAB_KEYS, "gitlab.", path)
+    raw_hosts = section.get("hosts")
+    if not isinstance(raw_hosts, dict) or not raw_hosts:
+        raise ConfigError("%s: gitlab.hosts — словарь хост → {api: ...}, хотя бы один хост"
+                          % path)
+    hosts = {}
+    for host, spec in raw_hosts.items():
+        name = "gitlab.hosts.%s" % host
+        if not isinstance(spec, dict):
+            raise ConfigError("%s: %s должен быть словарём с ключом api" % (path, name))
+        _check_keys(spec, _HOST_KEYS, name + ".", path)
+        api = _string(spec, "api", name + ".api", path)
+        if api is None:
+            raise ConfigError("%s: %s.api — нужен адрес API, например "
+                              "https://gitlab.example.com/api/v4" % (path, name))
+        web = _string(spec, "web", name + ".web", path) or api.split("/api/")[0]
+        hosts[str(host)] = GitlabHost(api=api, web=web)
+    default_host = _string(section, "default_host", "gitlab.default_host", path)
+    if default_host is not None and default_host not in hosts:
+        raise ConfigError("%s: gitlab.default_host %s нет в gitlab.hosts" % (path, default_host))
+    defaults = GitlabSettings(hosts={})
+    return GitlabSettings(
+        hosts=types.MappingProxyType(hosts),
+        default_host=default_host,
+        token_env=_string(section, "token_env", "gitlab.token_env", path) or defaults.token_env,
+        patch_dir=_string(section, "patch_dir", "gitlab.patch_dir", path) or defaults.patch_dir,
+        jobs=_integer(section, "jobs", "gitlab.jobs", path, 1, defaults.jobs),
+        retries=_integer(section, "retries", "gitlab.retries", path, 1, defaults.retries),
+        timeout=_timeout(section, "gitlab.timeout", path, defaults.timeout),
+    )
 
 
 def _rhel(value, name, path):

@@ -3,7 +3,8 @@ import unittest
 from unittest import mock
 
 from tests.fakes import FakeKojiSession
-from vulnsheet.kojiclient import ERROR, NOT_FOUND, KojiError, connect, latest_builds
+from vulnsheet.kojiclient import (ERROR, NOT_FOUND, KojiError, build_infos, connect,
+                                  latest_builds)
 
 
 class LatestBuildsTest(unittest.TestCase):
@@ -45,6 +46,30 @@ class LatestBuildsTest(unittest.TestCase):
             latest_builds(session, "sl9", ["vim"])
         joined = "\n".join(caught.output)
         self.assertIn("https://koji.example.com/kojihub", joined)
+
+
+class BuildInfosTest(unittest.TestCase):
+    def test_details_by_nvr_and_none_where_hub_failed(self):
+        info = {"nvr": "vim-8.2-1.sl9", "extra": {"source": {"original_url": "x"}}}
+        session = FakeKojiSession(infos={"vim-8.2-1.sl9": info},
+                                  errors={"bash-5.1-1.sl9": "boom"})
+        with self.assertLogs("vulnsheet", "WARNING") as caught:
+            got = build_infos(session, ["vim-8.2-1.sl9", "bash-5.1-1.sl9", "zsh-5-1.sl9"])
+        self.assertEqual(got, {"vim-8.2-1.sl9": info, "bash-5.1-1.sl9": None,
+                               "zsh-5-1.sl9": None})
+        self.assertIn("boom", "\n".join(caught.output))
+
+    def test_each_build_is_asked_once(self):
+        session = FakeKojiSession()
+        build_infos(session, ["vim-8.2-1.sl9", "vim-8.2-1.sl9"])
+        self.assertEqual(session.build_calls, ["vim-8.2-1.sl9"])
+
+    def test_no_builds_means_no_calls(self):
+        self.assertEqual(build_infos(FakeKojiSession(multicall_down=True), []), {})
+
+    def test_failed_multicall_is_fatal(self):
+        with self.assertRaises(KojiError):
+            build_infos(FakeKojiSession(multicall_down=True), ["vim-8.2-1.sl9"])
 
 
 class ConnectTest(unittest.TestCase):
