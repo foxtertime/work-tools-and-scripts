@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-15
+
+### Добавлено
+
+- `vulnsheet` (1.2.0): шапка прогона — до первого запроса в сеть журнал
+  показывает конфиг, режим со входом и выходом, настройки koji, VEX и
+  GitLab (или что GitLab не задан) и план запросов. Подхватилась ли
+  проверка патчей, видно сразу, а не через десять минут в конце прогона.
+
 ## [0.4.0] - 2026-10-15
 
 ### Добавлено
@@ -67,7 +76,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.1.0...v0.2.0

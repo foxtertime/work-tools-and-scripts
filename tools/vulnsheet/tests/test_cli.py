@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import os
+import re
 import shutil
 import stat
 import tempfile
@@ -264,7 +265,8 @@ class ConfigTest(CliCase):
         self.assertIn(";Affected;", line)
         self.assertEqual(self.session.calls, [("sl9", "nginx")])
         self.assertIn("nginx → nginx:1.26 (1)", self.log)
-        self.assertIn("хаб https://koji.example.com/kojihub, тег sl9, RHEL 9", self.log)
+        self.assertIn("koji: хаб https://koji.example.com/kojihub, тег sl9", self.log)
+        self.assertIn("VEX: RHEL 9,", self.log)
 
     def test_without_mapping_plain_package_is_used(self):
         text = CONFIG.split("vex_streams:")[0]
@@ -440,6 +442,108 @@ class GitlabTest(CliCase):
         self.made.assert_not_called()
 
 
+class HeaderTest(CliCase):
+    """Шапка прогона: до первого запроса в сеть — что прочитано, куда пишем,
+    какие источники с какими настройками и сколько будет спрашиваться."""
+
+    def header(self):
+        """Сообщения шапки, без времени и уровня: от версии до плана."""
+        messages = [line.split(" cli: ", 1)[1] for line in self.log.splitlines()
+                    if re.search(r" INFO +cli: ", line)]
+        start = messages.index("vulnsheet " + __version__)
+        end = next(i for i, m in enumerate(messages) if m.startswith("план: "))
+        return messages[start:end + 1]
+
+    def write_config(self, text):
+        path = self.path("vulnsheet.yaml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        return path
+
+    def test_new_table_without_config(self):
+        self.assertEqual(self.run_cli(), EXIT_OK)
+        cache = self.path("cache/vulnsheet")
+        self.assertEqual(self.header(), [
+            "vulnsheet " + __version__,
+            "без конфига",
+            "режим: новая таблица — блоки %s → %s" % (self.path("tasks.txt"),
+                                                    self.path("report.csv")),
+            "вход: блоков 1, отбраковано 0",
+            "koji: хаб https://koji.example.com/kojihub, тег sl9",
+            "VEX: RHEL 9, кэш %s (живёт 3600 с), потоков 8" % cache,
+            "GitLab: не задан в конфиге — патчи не проверяются",
+            "план: koji — пакетов 1, VEX — CVE 1",
+        ])
+
+    def test_gitlab_hosts_token_and_plan(self):
+        path = self.write_config(GITLAB_CONFIG.replace(
+            "gitlab:\n", "gitlab:\n  default_host: gitlab.example.com\n  jobs: 3\n"))
+        with mock.patch.dict(os.environ, {"VULNSHEET_TEST_TOKEN": "glpat-t0ken-secret"}), \
+                mock.patch("vulnsheet.cli.httpclient.UrllibTransport",
+                           return_value=FakeTransport()):
+            self.run_cli("--config", path)
+        header = self.header()
+        self.assertEqual(header[1], "конфиг: " + path)
+        self.assertIn("GitLab: gitlab.example.com (по умолчанию), каталог PATCH, "
+                      "токен из $VULNSHEET_TEST_TOKEN, потоков 3", header)
+        self.assertEqual(header[-1], "план: koji — пакетов 1, VEX — CVE 1, "
+                                     "GitLab — патчи по билдам из koji (до 1)")
+        self.assertNotIn("glpat-t0ken-secret", self.log)
+
+    def test_gitlab_without_token_says_so(self):
+        path = self.write_config(GITLAB_CONFIG)
+        with mock.patch.dict(os.environ, {"VULNSHEET_TEST_TOKEN": " "}), \
+                mock.patch("vulnsheet.cli.httpclient.UrllibTransport",
+                           return_value=FakeTransport()):
+            self.run_cli("--config", path)
+        self.assertIn("GitLab: gitlab.example.com, каталог PATCH, без токена "
+                      "($VULNSHEET_TEST_TOKEN пуст) — видны только публичные проекты, "
+                      "потоков 8", self.header())
+
+    def test_sync_names_table_blocks_output_and_rejects(self):
+        table = self.path("old.csv")
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write(HEADER + "\n" + EXPECTED + "\n")
+        src = self.path("tasks.txt")
+        with open(src, "w", encoding="utf-8") as handle:
+            handle.write(BLOCK + "\n\n" + BAD + "\n")
+        self.run_main("--table", table, "--blocks", src, "-o", self.path("report.csv"))
+        header = self.header()
+        self.assertEqual(header[2], "режим: синхронизация с блоками — таблица %s (строк 1) "
+                                    "+ блоки %s → %s" % (table, src, self.path("report.csv")))
+        self.assertEqual(header[3], "вход: блоков 2, отбраковано 1 → %s"
+                         % self.path("report.rejected.txt"))
+
+    def test_refresh_to_stdout_with_cache_off(self):
+        table = self.path("old.csv")
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write(HEADER + "\n" + EXPECTED + "\n")
+        path = self.write_config("vex:\n  cache_ttl: 0\n  jobs: 2\n")
+        with redirect_stdout(io.StringIO()):
+            self.run_main("--config", path, "--table", table)
+        header = self.header()
+        self.assertEqual(header[2], "режим: обновление koji и VEX — таблица %s (строк 1) → stdout"
+                         % table)
+        self.assertNotIn("вход:", " ".join(header))
+        self.assertEqual(header[4], "VEX: RHEL 9, кэш %s (не читается), потоков 2"
+                         % self.path("cache/vulnsheet"))
+
+    def test_nothing_to_ask_means_no_network(self):
+        table = self.path("old.csv")
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write(HEADER + "\n")
+        self.run_main("--table", table, "-o", self.path("report.csv"))
+        self.assertEqual(self.header()[-1], "план: спрашивать нечего — в сеть не идём")
+
+    def test_header_comes_before_network_and_reject_warnings(self):
+        # NOT_FOUND от koji — первая строка, которую пишет уже сеть
+        second = BLOCK.replace("vim", "openssl").replace("181229", "181230")
+        self.run_cli(text=BLOCK + "\n\n" + BAD + "\n\n" + second + "\n")
+        plan = self.log.index("план: ")
+        self.assertLess(plan, self.log.index("отбракован:"))
+        self.assertLess(plan, self.log.index("в теге sl9 нет пакетов"))
+
+
 class UsageTest(CliCase):
     def assertUsageError(self, argv, needle):
         with redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit) as caught:
@@ -479,7 +583,7 @@ class UpdateModesTest(CliCase):
         self.assertEqual(code, EXIT_OK)
         self.assertEqual(self.report_lines(), [HEADER, REFRESHED])
         self.assertIn("режим: обновление koji и VEX", self.log)
-        self.assertIn("old.csv: строк 1", self.log)
+        self.assertIn("old.csv (строк 1)", self.log)
 
     def test_refresh_in_place(self):
         table = self.write_table(OLD_ROW, name="report.csv")
