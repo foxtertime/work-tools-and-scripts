@@ -175,17 +175,58 @@ def _write_rejects(path: str, rejects) -> None:
             logger.info("удалён %s от прошлого прогона: битых блоков нет", path)
 
 
-def _summary(rows) -> None:
-    """Сводка по строкам выхода; прочерки — строки, где спрашивать было нечего."""
-    states = Counter(r[report.RHEL_STATE].split(" (", 1)[0] for r in rows
-                     if r[report.RHEL_STATE] != report.EMPTY)
-    if states:
-        logger.info("RHEL state: %s", ", ".join(
-            "%s %d" % item for item in sorted(states.items(), key=lambda kv: (-kv[1], kv[0]))))
+def _reasons(rejects, nvrs, failures, found, outcome) -> List[str]:
+    """Почему код возврата 1; пусто — код 0."""
+    counts = (("битых блоков", len(rejects)),
+              ("пакетов с ERROR от koji", sum(1 for nvr in nvrs.values() if nvr == kojiclient.ERROR)),
+              ("CVE без документа VEX", len(failures)),
+              ("компонентов с непроверенными патчами", len(found.failed)),
+              ("строк без CVE-ID или компонента", len(outcome.skipped)))
+    return ["%s %d" % item for item in counts if item[1]]
+
+
+def _footer(args, cfg, rejects, found, outcome, reasons) -> None:
+    """Итог прогона — последним блоком, с теми же метками, что у шапки: что
+    сделано и сколько чего найдено. Прочерки в колонках — строки, где
+    спрашивать было нечего, они не считаются."""
+    rows = outcome.rows
+    where = ("выведено в stdout" if args.output == STDIO else "написан %s" % args.output)
+    line = "итог: %s, строк %d" % (where, len(rows))
+    if args.table is not None and args.blocks is not None:
+        line += " — совпало %d, Missing %d, новых %d" % (outcome.matched, outcome.missing,
+                                                          outcome.added)
+        if outcome.repeated:
+            line += ", повторов троек в блоках %d — действует первый блок" % outcome.repeated
+    logger.info("%s", line)
+
     marks = Counter(r[report.SL_NVR] if r[report.SL_NVR] in (kojiclient.NOT_FOUND, kojiclient.ERROR)
                     else "found" for r in rows if r[report.SL_NVR] != report.EMPTY)
-    logger.info("SL NVR: найдено %d, NOT_FOUND %d, ERROR %d", marks["found"],
-                marks[kojiclient.NOT_FOUND], marks[kojiclient.ERROR])
+    line = "koji: найдено %d, NOT_FOUND %d, ERROR %d" % (
+        marks["found"], marks[kojiclient.NOT_FOUND], marks[kojiclient.ERROR])
+    if outcome.kept_koji:
+        line += " (в %d строках оставлен прежний SL NVR)" % len(outcome.kept_koji)
+    logger.info("%s", line)
+
+    states = Counter(r[report.RHEL_STATE].split(" (", 1)[0] for r in rows
+                     if r[report.RHEL_STATE] != report.EMPTY)
+    line = "VEX: %s" % (", ".join("%s %d" % item for item in sorted(
+        states.items(), key=lambda kv: (-kv[1], kv[0]))) or "строк нет")
+    if outcome.kept_vex:
+        line += " (в %d строках оставлены прежние данные VEX)" % len(outcome.kept_vex)
+    logger.info("%s", line)
+
+    if cfg.gitlab is None:
+        logger.info("GitLab: не задан — патчи не проверялись")
+    else:
+        logger.info("GitLab: патч найден в %d строках — пометка поставлена в %d, уже стояла в %d; "
+                    "компонентов %s", outcome.patched, outcome.notes_added,
+                    outcome.patched - outcome.notes_added,
+                    ", ".join("%s %d" % (kind, found.kinds.get(kind, 0))
+                              for kind in patches.KINDS))
+    if rejects:
+        logger.info("вход: отбраковано блоков %d → %s", len(rejects),
+                    rejects_path(args.output, args.rejects))
+    logger.info("код возврата %s", "1: " + ", ".join(reasons) if reasons else "0")
 
 
 def _settings(args):
@@ -316,13 +357,8 @@ def _merge(records, tasks, fresh):
     return merge.sync(records, tasks, fresh)
 
 
-def _report_outcome(outcome, synced: bool) -> None:
-    if synced:
-        logger.info("совпало %d, Missing %d, новых %d",
-                    outcome.matched, outcome.missing, outcome.added)
-        if outcome.repeated:
-            logger.info("повторов троек в блоках %d — действует первый блок",
-                        outcome.repeated)
+def _warn_outcome(outcome) -> None:
+    """Строки, с которыми что-то не так, — по одной, до итога."""
     for note in outcome.kept_koji:
         logger.warning("запись %d (%s %s): koji не ответил — оставлен прежний SL NVR",
                        note.number, note.cve, note.component)
@@ -397,17 +433,13 @@ def _run(args) -> int:
             out.close()
             _match_permissions(tmp_path, final_path)
             os.replace(tmp_path, final_path)
-    if args.output != STDIO:
-        logger.info("написан %s", args.output)
-
     # файл отбраковки — дело блоков: в режиме 2 его не трогаем
     if args.blocks is not None:
         _write_rejects(rejects_path(args.output, args.rejects), rejects)
-    _report_outcome(outcome, synced=records is not None and tasks is not None)
-    _summary(outcome.rows)
-    partial = (rejects or failures or kojiclient.ERROR in nvrs.values()
-               or found.failed or outcome.skipped)
-    return EXIT_PARTIAL if partial else EXIT_OK
+    _warn_outcome(outcome)
+    reasons = _reasons(rejects, nvrs, failures, found, outcome)
+    _footer(args, cfg, rejects, found, outcome, reasons)
+    return EXIT_PARTIAL if reasons else EXIT_OK
 
 
 def _fatal(message: str) -> int:

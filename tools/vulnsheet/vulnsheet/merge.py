@@ -45,15 +45,19 @@ class Outcome(NamedTuple):
     kept_koji: Tuple[Note, ...] = ()  # koji ERROR — оставлен прежний SL NVR
     kept_vex: Tuple[Note, ...] = ()   # fetch error — оставлены прежние VEX
     skipped: Tuple[Note, ...] = ()    # спрашивать нечего — строка как есть
+    patched: int = 0                  # строк, чья CVE нашлась в каталоге патчей
+    notes_added: int = 0              # из них — где пометку поставил этот прогон
 
 
 class _Notes:
     def __init__(self):
         self.kept_koji, self.kept_vex, self.skipped = [], [], []
+        self.patched = self.notes_added = 0
 
     def fields(self) -> dict:
         return {"kept_koji": tuple(self.kept_koji), "kept_vex": tuple(self.kept_vex),
-                "skipped": tuple(self.skipped)}
+                "skipped": tuple(self.skipped), "patched": self.patched,
+                "notes_added": self.notes_added}
 
 
 def pairs(records: Optional[Sequence[Record]],
@@ -78,7 +82,8 @@ def pairs(records: Optional[Sequence[Record]],
 
 def build(tasks: Sequence[Task], fresh: Fresh) -> Outcome:
     """Режим 1: строка на каждый блок, в порядке блоков, с повторами."""
-    return Outcome(rows=[_fresh_row(task, fresh) for task in tasks])
+    notes = _Notes()
+    return Outcome(rows=[_fresh_row(task, fresh, notes) for task in tasks], **notes.fields())
 
 
 def refresh(records: Sequence[Record], fresh: Fresh) -> Outcome:
@@ -125,7 +130,7 @@ def sync(records: Sequence[Record], tasks: Sequence[Task], fresh: Fresh) -> Outc
             cells[report.TASK_STATE] = report.MISSING
             rows.append(cells)
     new = [task for key, task in first.items() if key not in seen]
-    rows.extend(_fresh_row(task, fresh) for task in new)
+    rows.extend(_fresh_row(task, fresh, notes) for task in new)
     return Outcome(rows=rows, matched=matched, missing=missing, added=len(new),
                    repeated=repeated, **notes.fields())
 
@@ -167,9 +172,15 @@ def _as_task(record: Record, pair: Pair) -> Task:
                 assignee=cells[report.ASSIGNEE])
 
 
-def _fresh_row(task: Task, fresh: Fresh) -> List[str]:
+def _fresh_row(task: Task, fresh: Fresh, notes: Optional["_Notes"] = None) -> List[str]:
+    """Строка с нуля; notes=None — строку собирают поверх прежней (_updated),
+    и пометку о патче считает уже он."""
     pair = _task_pair(task)
-    return report.row(task, fresh.nvrs[pair[1]], fresh.verdicts[pair], _patched(pair, fresh))
+    patched = _patched(pair, fresh)
+    if patched and notes is not None:
+        notes.patched += 1
+        notes.notes_added += 1
+    return report.row(task, fresh.nvrs[pair[1]], fresh.verdicts[pair], patched)
 
 
 def _patched(pair: Pair, fresh: Fresh) -> bool:
@@ -186,8 +197,12 @@ def _updated(record: Record, task: Task, pair: Pair, fresh: Fresh, notes: _Notes
     old = record.cells
     cells = _fresh_row(task, fresh)
     cells[report.DEVELOPER] = old[report.DEVELOPER]
-    cells[report.COMMENT_INDEX] = report.with_patch_note(old[report.COMMENT_INDEX],
-                                                         _patched(pair, fresh))
+    patched = _patched(pair, fresh)
+    cells[report.COMMENT_INDEX] = report.with_patch_note(old[report.COMMENT_INDEX], patched)
+    if patched:
+        notes.patched += 1
+        if cells[report.COMMENT_INDEX] != old[report.COMMENT_INDEX]:
+            notes.notes_added += 1
     if fresh.nvrs[pair[1]] == ERROR:
         cells[report.KOJI] = old[report.KOJI]
         notes.kept_koji.append(_note(record))
