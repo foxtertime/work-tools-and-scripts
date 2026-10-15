@@ -229,14 +229,18 @@ def _footer(args, cfg, rejects, found, outcome, reasons) -> None:
     else:
         kinds, fates = outcome.patch_kinds, outcome.note_fates
         _item(1, "GitLab, строки:")
-        _item(2, "патч найден %d" % kinds.get(patches.FOUND, 0))
-        _item(2, "убран из ветки %d" % kinds.get(patches.REMOVED, 0))
-        _item(2, "есть только в ветке %d" % kinds.get(patches.BRANCH_ONLY, 0))
+        for source in patches.SOURCES:
+            _item(2, "%s: найден %d, убран из ветки %d, только в ветке %d" % (
+                source, kinds.get((source, patches.FOUND), 0),
+                kinds.get((source, patches.REMOVED), 0),
+                kinds.get((source, patches.BRANCH_ONLY), 0)))
         _item(2, "пометка " + ", ".join("%s %d" % (fate, fates.get(fate, 0))
                                          for fate in merge.FATES))
         _item(1, "GitLab, компоненты:")
         for kind in patches.KINDS:
             _item(2, "%s %d" % (kind, found.kinds.get(kind, 0)))
+        for kind in patches.SPEC_KINDS:
+            _item(2, "%s %d" % (kind, found.spec_kinds.get(kind, 0)))
     if rejects:
         _item(1, "отбраковано блоков %d → %s" % (len(rejects),
                                                  rejects_path(args.output, args.rejects)))

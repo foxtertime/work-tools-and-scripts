@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-15
+
+### Добавлено
+
+- `vulnsheet` (1.5.0): CVE ищется и в спеке пакета — в строках `PatchN` и в
+  `%changelog` единственного `.spec` из `SPECS`, со сверкой билда с веткой и
+  ссылками на строки спека. Все найденные источники пишутся в комментарий
+  вместе.
+
 ## [0.7.0] - 2026-10-15
 
 ### Добавлено
@@ -96,7 +105,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.4.0...v0.5.0

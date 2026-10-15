@@ -10,7 +10,7 @@ import csv
 import re
 from typing import Iterable, List, Optional
 
-from .patches import BRANCH_ONLY, FOUND, REMOVED
+from .patches import BRANCH_ONLY, REMOVED, SOURCES, SRC_CHANGELOG, SRC_PATCH, SRC_SPEC
 from .vex import FIXED
 
 EMPTY = "-"
@@ -24,10 +24,11 @@ COLUMNS = [
 ]
 
 MISSING = "Missing"  # Task state строки, чьей задачи больше нет в блоках
-# Пометки о патче в комментарии. По этим началам тулза узнаёт свою пометку
-# среди текста людей и заменяет её; «патч присутствует» писала версия 1.1.
+# Фрагменты пометки о CVE в комментарии. По этим началам тулза узнаёт свои
+# фрагменты среди текста людей и заменяет их; «патч присутствует» писала
+# версия 1.1.
 _NOTE_STARTS = ("патч найден:", "патч убран из ветки", "патч есть в ветке",
-                "патч присутствует")
+                "патч присутствует", "спек, ")
 _SEPARATOR = "; "
 
 # Группы колонок для режимов обновления: что в каком режиме откуда берётся,
@@ -61,16 +62,39 @@ def format_date(value: str) -> str:
     return "%s.%s.%s" % (day, month, year)
 
 
-def patch_note(note) -> str:
-    """Текст пометки о патче (patches.PatchNote)."""
-    links = " ".join(note.urls)
+def patch_note(found) -> str:
+    """Пометка о CVE: фрагмент на каждый источник, где она нашлась (каталог
+    PATCH, PatchN спека, %changelog), через «; », в этом порядке.
+
+    found — источник → patches.PatchNote."""
+    return _SEPARATOR.join(_fragment(source, found[source])
+                           for source in SOURCES if source in found)
+
+
+def _fragment(source: str, note) -> str:
+    if source == SRC_PATCH:
+        links = " ".join(item.url for item in note.items)
+        if note.kind == REMOVED:
+            return ("патч убран из ветки %s, возможно, не нужен после обновления пакета: %s"
+                    % (note.branch, links))
+        if note.kind == BRANCH_ONLY:
+            return "патч есть в ветке %s, но не в билде: %s" % (note.branch, links)
+        return "патч найден: %s" % links
+    if source == SRC_SPEC:
+        lines = ", ".join("%s %s" % (item.label, item.url) for item in note.items)
+        if note.kind == REMOVED:
+            return "спек, убрано из ветки %s: %s" % (note.branch, lines)
+        if note.kind == BRANCH_ONLY:
+            return "спек, есть в ветке %s, но не в билде: %s" % (note.branch, lines)
+        return "спек, %s" % lines
+    assert source == SRC_CHANGELOG, source
+    item = note.items[0]
+    entry = "%changelog " + item.label if item.label else "%changelog"
     if note.kind == REMOVED:
-        return ("патч убран из ветки %s, возможно, не нужен после обновления пакета: %s"
-                % (note.branch, links))
+        return "спек, %s — в ветке %s уже нет: %s" % (entry, note.branch, item.url)
     if note.kind == BRANCH_ONLY:
-        return "патч есть в ветке %s, но не в билде: %s" % (note.branch, links)
-    assert note.kind == FOUND, note.kind
-    return "патч найден: %s" % links
+        return "спек, %s есть в ветке %s, но не в билде: %s" % (entry, note.branch, item.url)
+    return "спек, %s: %s" % (entry, item.url)
 
 
 def _is_note(segment: str) -> bool:
@@ -82,11 +106,11 @@ def has_patch_note(comment: str) -> bool:
 
 
 def with_patch_note(comment: str, note: Optional[str]) -> str:
-    """Комментарий с пометкой о патче.
+    """Комментарий с пометкой о CVE (patch_note).
 
     Пустую ячейку пометка заменяет, к тексту людей дописывается через «; ».
-    Своя пометка прошлых прогонов заменяется на месте, текст людей вокруг
-    остаётся; если своих пометок несколько, остаётся одна. Без пометки
+    Свои фрагменты прошлых прогонов убираются, а пометка встаёт на место
+    первого из них; текст людей вокруг остаётся. Без пометки
     (патча нет или проверить не удалось) ячейка не трогается — пометку
     прошлого прогона тулза не снимает: патча могли просто не увидеть."""
     if not note:

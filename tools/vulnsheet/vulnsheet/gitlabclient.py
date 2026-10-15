@@ -1,13 +1,15 @@
 """Чтение каталога патчей из GitLab через REST v4. Доступ только на чтение.
 
 Перенесено из тулзы dashboard (тулзы общего кода не делят) в урезанном
-виде: нужны только дерево каталога патчей и ссылка на файл, без сравнения
-коммитов.
+виде: нужны только дерево каталога, содержимое файла и ссылка на файл, без
+сравнения коммитов.
 
 Сам разговор по HTTP — повторы, паузы, чистка токена из сообщений — живёт
 в httpclient.py. Здесь только знание о GitLab: как спросить дерево ветки и
 как отличить «ветки нет» от «сервер не ответил».
 """
+import base64
+import binascii
 import logging
 import threading
 from typing import Dict, List, NamedTuple, Optional
@@ -29,6 +31,13 @@ class TreeResult(NamedTuple):
     нет; warning — дерево есть, но с оговоркой (подменён хост)."""
     present: Optional[bool]
     paths: List[str]
+    problem: Optional[str]
+    level: str = "error"
+
+
+class FileResult(NamedTuple):
+    """text — содержимое файла; None — не прочитан, problem объясняет почему."""
+    text: Optional[str]
     problem: Optional[str]
     level: str = "error"
 
@@ -83,24 +92,57 @@ class GitlabClient:
                                        _path(ref), _path(path))
 
     def patch_files(self, host, project, ref) -> TreeResult:
-        """Пути файлов внутри каталога патчей ref; результат мемоизируется."""
+        """Пути файлов внутри каталога патчей ref."""
+        return self.tree(host, project, ref, self._patch_dir)
+
+    def tree(self, host, project, ref, path) -> TreeResult:
+        """Пути файлов внутри каталога path на ref, рекурсивно; результат
+        мемоизируется."""
         if not ref:
             return _tree_problem("gitlab: no ref in source url")
-        key = (host, project, ref)
+        return self._cached((host, project, ref, path), "%s %s@%s:%s" % (host, project, ref, path),
+                            lambda: self._fetch(host, project, ref, path))
+
+    def file_text(self, host, project, ref, path) -> FileResult:
+        """Содержимое файла на ref; результат мемоизируется."""
+        return self._cached(("file", host, project, ref, path),
+                            "%s %s@%s:%s" % (host, project, ref, path),
+                            lambda: self._fetch_file(host, project, ref, path))
+
+    def _cached(self, key, note, compute):
         with self._lock:
             if key in self._cache:
-                logger.debug("кэш: %s %s@%s", host, project, ref)
+                logger.debug("кэш: %s", note)
                 return self._cache[key]
-        result = self._fetch(host, project, ref)
+        result = compute()
         with self._lock:
             self._cache[key] = result
         return result
 
-    def _fetch(self, host, project, ref) -> TreeResult:
+    def _fetch_file(self, host, project, ref, path) -> FileResult:
+        cfg = self._resolve_host(host)[0]
+        if cfg is None:
+            return FileResult(None, "gitlab: unknown host %s" % host)
+        url = "%s/projects/%s/repository/files/%s" % (
+            cfg.api.rstrip("/"), quote(project, safe=""), quote(path, safe=""))
+        headers = {"PRIVATE-TOKEN": self._token} if self._token else {}
+        response = self._http.get(url, headers, {"ref": ref})
+        if isinstance(response, str):
+            return FileResult(None, response)
+        if response.status >= 400:
+            return FileResult(None, "gitlab: %s %s" % (response.status, server_message(response)))
+        body = response.body if isinstance(response.body, dict) else {}
+        try:
+            data = base64.b64decode(body.get("content") or "", validate=False)
+        except (binascii.Error, ValueError) as exc:
+            return FileResult(None, "gitlab: %s не раскодирован: %s" % (path, exc))
+        return FileResult(data.decode("utf-8", errors="replace"), None)
+
+    def _fetch(self, host, project, ref, path) -> TreeResult:
         cfg, note = self._resolve_host(host)
         if cfg is None:
             return _tree_problem("gitlab: unknown host %s" % host)
-        result = self._fetch_tree(cfg, project, ref)
+        result = self._fetch_tree(cfg, project, ref, path)
         if not note:
             return result
         # заметка о подмене хоста не отменяет удачное чтение: present
@@ -112,7 +154,7 @@ class GitlabClient:
         level = result.level if result.problem else "warning"
         return TreeResult(result.present, result.paths, problem, level)
 
-    def _fetch_tree(self, cfg, project, ref) -> TreeResult:
+    def _fetch_tree(self, cfg, project, ref, path) -> TreeResult:
         url = "%s/projects/%s/repository/tree" % (
             cfg.api.rstrip("/"), quote(project, safe=""))
         headers = {"PRIVATE-TOKEN": self._token} if self._token else {}
@@ -120,7 +162,7 @@ class GitlabClient:
         paths = []
         page = None
         while True:
-            params = {"ref": ref, "path": self._patch_dir,
+            params = {"ref": ref, "path": path,
                       "recursive": "true", "per_page": "100"}
             if page:
                 params["page"] = page
@@ -136,7 +178,7 @@ class GitlabClient:
                 # зависит от версии GitLab — «404 Tree Not Found», «404
                 # invalid revision or path Not Found», иногда пустое тело.
                 # Поэтому решает не текст, а отдельный запрос к ветке.
-                return self._resolve_missing_tree(cfg, project, ref, headers)
+                return self._resolve_missing_tree(cfg, project, ref, path, headers)
             if response.status >= 400:
                 return _tree_problem("gitlab: %s %s" % (response.status,
                                                         server_message(response)))
@@ -148,7 +190,7 @@ class GitlabClient:
                 break
         return TreeResult(True, sorted(paths), None)
 
-    def _resolve_missing_tree(self, cfg, project, ref, headers) -> TreeResult:
+    def _resolve_missing_tree(self, cfg, project, ref, path, headers) -> TreeResult:
         """404 на дереве неоднозначен: либо в ветке просто нет каталога
         патчей, либо самой ветки нет. Уточняем через /repository/commits/<ref>."""
         url = "%s/projects/%s/repository/commits/%s" % (
@@ -163,12 +205,12 @@ class GitlabClient:
             return _tree_problem(response)
         if response.status == 404:
             logger.debug("%s: ветки %s нет, поэтому и каталога %s не нашлось",
-                         project, ref, self._patch_dir)
+                         project, ref, path)
             return _tree_problem("gitlab: ref not found")
         if 200 <= response.status < 300:
             logger.debug("%s: ветка %s есть, каталога %s в ней нет — это не "
-                         "ошибка, патчей у билда просто нет",
-                         project, ref, self._patch_dir)
+                         "ошибка, у билда его просто нет",
+                         project, ref, path)
             return TreeResult(False, [], None)
         logger.debug("%s: ветка %s — не удалось выяснить, есть ли она: %s %s",
                      project, ref, response.status, server_message(response))
