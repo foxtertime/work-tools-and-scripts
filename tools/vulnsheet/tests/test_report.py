@@ -2,7 +2,8 @@ import io
 import unittest
 
 from vulnsheet import report
-from vulnsheet.patches import BRANCH_ONLY, FOUND, REMOVED, PatchNote
+from vulnsheet.patches import (BRANCH_ONLY, FOUND, REMOVED, SRC_CHANGELOG, SRC_PATCH, SRC_SPEC,
+                               Item, PatchNote)
 from vulnsheet.report import COLUMNS, format_date, row, write
 from vulnsheet.tasks import Task
 from vulnsheet.vex import Verdict
@@ -58,19 +59,62 @@ L2 = "https://gitlab.example.com/g/vim/-/blob/sl9/PATCH/b.patch"
 FOUND_TEXT = "патч найден: " + L1
 
 
+def found_in_patch(*urls, kind=FOUND, branch="sl9"):
+    return {SRC_PATCH: PatchNote(kind, branch, tuple(Item(None, url) for url in urls))}
+
+
+SPEC_URL = "https://gitlab.example.com/g/vim/-/blob/sl9/SPECS/vim.spec"
+
+
 class PatchNoteTextTest(unittest.TestCase):
     def test_found(self):
-        self.assertEqual(report.patch_note(PatchNote(FOUND, "sl9", (L1, L2))),
+        self.assertEqual(report.patch_note(found_in_patch(L1, L2)),
                          "патч найден: %s %s" % (L1, L2))
 
     def test_removed_from_the_branch(self):
-        self.assertEqual(report.patch_note(PatchNote(REMOVED, "sl9", (L1,))),
+        self.assertEqual(report.patch_note(found_in_patch(L1, kind=REMOVED)),
                          "патч убран из ветки sl9, возможно, не нужен после обновления "
                          "пакета: " + L1)
 
     def test_only_in_the_branch(self):
-        self.assertEqual(report.patch_note(PatchNote(BRANCH_ONLY, "sl9", (L1,))),
+        self.assertEqual(report.patch_note(found_in_patch(L1, kind=BRANCH_ONLY)),
                          "патч есть в ветке sl9, но не в билде: " + L1)
+
+    def test_spec_patch_lines(self):
+        items = (Item("Patch1: a-CVE-2024-1234.patch", SPEC_URL + "#L2"),
+                 Item("Patch2: b-CVE-2024-1234.patch", SPEC_URL + "#L3"))
+        cases = {FOUND: "спек, Patch1: a-CVE-2024-1234.patch %s#L2, "
+                        "Patch2: b-CVE-2024-1234.patch %s#L3" % (SPEC_URL, SPEC_URL),
+                 REMOVED: "спек, убрано из ветки sl9: Patch1: a-CVE-2024-1234.patch %s#L2, "
+                          "Patch2: b-CVE-2024-1234.patch %s#L3" % (SPEC_URL, SPEC_URL),
+                 BRANCH_ONLY: "спек, есть в ветке sl9, но не в билде: Patch1: "
+                              "a-CVE-2024-1234.patch %s#L2, Patch2: b-CVE-2024-1234.patch "
+                              "%s#L3" % (SPEC_URL, SPEC_URL)}
+        for kind, text in cases.items():
+            with self.subTest(kind=kind):
+                self.assertEqual(report.patch_note({SRC_SPEC: PatchNote(kind, "sl9", items)}),
+                                 text)
+
+    def test_changelog(self):
+        item = (Item("9.0-2", SPEC_URL + "#L6"),)
+        cases = {FOUND: "спек, %%changelog 9.0-2: %s#L6" % SPEC_URL,
+                 REMOVED: "спек, %%changelog 9.0-2 — в ветке sl9 уже нет: %s#L6" % SPEC_URL,
+                 BRANCH_ONLY: "спек, %%changelog 9.0-2 есть в ветке sl9, но не в билде: %s#L6"
+                              % SPEC_URL}
+        for kind, text in cases.items():
+            with self.subTest(kind=kind):
+                self.assertEqual(report.patch_note({SRC_CHANGELOG: PatchNote(kind, "sl9", item)}),
+                                 text)
+
+    def test_changelog_entry_without_a_version(self):
+        note = {SRC_CHANGELOG: PatchNote(FOUND, None, (Item(None, SPEC_URL + "#L6"),))}
+        self.assertEqual(report.patch_note(note), "спек, %changelog: " + SPEC_URL + "#L6")
+
+    def test_sources_follow_a_fixed_order(self):
+        note = {SRC_CHANGELOG: PatchNote(FOUND, "sl9", (Item("9.0-2", SPEC_URL + "#L6"),)),
+                SRC_PATCH: PatchNote(FOUND, "sl9", (Item(None, L1),))}
+        self.assertEqual(report.patch_note(note),
+                         "патч найден: %s; спек, %%changelog 9.0-2: %s#L6" % (L1, SPEC_URL))
 
 
 class PatchNoteTest(unittest.TestCase):
@@ -105,6 +149,12 @@ class PatchNoteTest(unittest.TestCase):
         cell = "ждём апстрим; " + FOUND_TEXT
         self.assertEqual(report.with_patch_note(cell, FOUND_TEXT), cell)
 
+    def test_several_own_fragments_are_replaced_together(self):
+        cell = ("ждём; патч найден: %s; спек, %%changelog 9.0-1: %s; проверить"
+                % (L2, SPEC_URL))
+        note = "патч найден: %s; спек, %%changelog 9.0-2: %s" % (L1, SPEC_URL)
+        self.assertEqual(report.with_patch_note(cell, note), "ждём; %s; проверить" % note)
+
     def test_two_own_notes_collapse_into_one(self):
         cell = "патч присутствует; ждём; патч найден: " + L2
         self.assertEqual(report.with_patch_note(cell, FOUND_TEXT), FOUND_TEXT + "; ждём")
@@ -117,6 +167,7 @@ class PatchNoteTest(unittest.TestCase):
     def test_own_note_is_recognised(self):
         self.assertTrue(report.has_patch_note("ждём; патч присутствует"))
         self.assertTrue(report.has_patch_note(FOUND_TEXT))
+        self.assertTrue(report.has_patch_note("ждём; спек, %changelog 9.0-2: x"))
         self.assertFalse(report.has_patch_note("патч пишем сами"))
 
 
