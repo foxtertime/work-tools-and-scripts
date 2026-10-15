@@ -391,7 +391,7 @@ class GitlabTest(CliCase):
         self.assertEqual(self.run_gitlab(), EXIT_OK)
         self.assertEqual(self.report_lines(), [HEADER, EXPECTED[:-1] + "патч присутствует"])
         self.assertEqual(self.session.build_calls, [VIM_NVR])
-        self.assertIn("патчи GitLab: прочитано 1", self.log)
+        self.assertIn("компонентов прочитано 1", self.log)
 
     def test_token_from_the_environment_is_sent_stripped(self):
         self.run_gitlab()
@@ -542,6 +542,103 @@ class HeaderTest(CliCase):
         plan = self.log.index("план: ")
         self.assertLess(plan, self.log.index("отбракован:"))
         self.assertLess(plan, self.log.index("в теге sl9 нет пакетов"))
+
+
+class FooterTest(CliCase):
+    """Итог прогона: последним блоком — что сделано и сколько чего найдено."""
+
+    def footer(self):
+        """Сообщения итога, без времени и уровня: от «итог:» до конца."""
+        messages = [line.split(" cli: ", 1)[1] for line in self.log.splitlines()
+                    if re.search(r" INFO +cli: ", line)]
+        start = next(i for i, m in enumerate(messages) if m.startswith("итог: "))
+        return messages[start:]
+
+    def gitlab(self, routes):
+        path = self.path("vulnsheet.yaml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(GITLAB_CONFIG)
+        self.session.infos[VIM_NVR] = {
+            "nvr": VIM_NVR,
+            "extra": {"source": {"original_url": "git+https://gitlab.example.com/g/vim.git#sl9"}}}
+        mock.patch("vulnsheet.cli.httpclient.UrllibTransport",
+                   return_value=FakeTransport(routes)).start()
+        return path
+
+    def test_clean_run_without_gitlab(self):
+        self.assertEqual(self.run_cli(), EXIT_OK)
+        footer = self.footer()
+        self.assertEqual(footer[:-1], [
+            "итог: написан %s, строк 1" % self.path("report.csv"),
+            "koji: найдено 1, NOT_FOUND 0, ERROR 0",
+            "VEX: Under investigation 1",
+            "GitLab: не задан — патчи не проверялись",
+            "код возврата 0",
+        ])
+        self.assertRegex(footer[-1], r"^всего за \d+\.\d с$")
+
+    def test_patches_are_counted_by_rows_and_components(self):
+        path = self.gitlab({TREE_URL: Response(200, [
+            {"type": "blob", "path": "PATCH/CVE-2026-73070.patch"}], {})})
+        self.session.builds["bash"] = "bash-5.1-1.sl9"
+        self.session.infos["bash-5.1-1.sl9"] = {"nvr": "bash-5.1-1.sl9", "extra": {}}
+        bash = BLOCK.replace("181229", "181231").replace("vim", "bash")
+        self.assertEqual(self.run_cli("--config", path,
+                                      text=BLOCK + "\n\n" + BLOCK + "\n\n" + bash + "\n"),
+                         EXIT_OK)
+        self.assertIn("GitLab: патч найден в 2 строках — пометка поставлена в 2, уже стояла в 0; "
+                      "компонентов прочитано 1, без каталога патчей 0, без источника 1, "
+                      "из SRPM 0, ошибок 0", self.footer())
+
+    def test_failures_are_listed_as_reasons_for_exit_code_1(self):
+        path = self.gitlab({TREE_URL: Response(500, {"message": "boom"}, {})})
+        self.docs[vex_url("CVE-2026-73071")] = IOError("сеть")
+        self.session.errors["openssl"] = "хаб споткнулся"
+        openssl = (BLOCK.replace("181229", "181230").replace("73070", "73071")
+                   .replace("vim", "openssl"))
+        code = self.run_cli("--config", path,
+                            text=BLOCK + "\n\n" + BAD + "\n\n" + openssl + "\n")
+        self.assertEqual(code, EXIT_PARTIAL)
+        footer = self.footer()
+        self.assertIn("koji: найдено 1, NOT_FOUND 0, ERROR 1", footer)
+        self.assertIn("VEX: Under investigation 1, fetch error 1", footer)
+        self.assertIn("вход: отбраковано блоков 1 → %s" % self.path("report.rejected.txt"),
+                      footer)
+        self.assertIn("код возврата 1: битых блоков 1, пакетов с ERROR от koji 1, "
+                      "CVE без документа VEX 1, компонентов с непроверенными патчами 1",
+                      footer)
+
+    def test_sync_counts_and_kept_values(self):
+        table = self.path("old.csv")
+        old = EXPECTED[:-1] + "ждём апстрим"
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write(HEADER + "\n" + old + "\n" + old.replace("181229", "181000") + "\n")
+        self.session.errors["vim"] = "хаб споткнулся"
+        src = self.path("tasks.txt")
+        with open(src, "w", encoding="utf-8") as handle:
+            handle.write(BLOCK + "\n")
+        code = self.run_main("--table", table, "--blocks", src, "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_PARTIAL)
+        footer = self.footer()
+        self.assertEqual(footer[0], "итог: написан %s, строк 2 — совпало 1, Missing 1, новых 0"
+                         % self.path("report.csv"))
+        self.assertEqual(footer[1], "koji: найдено 2, NOT_FOUND 0, ERROR 0 "
+                                    "(в 2 строках оставлен прежний SL NVR)")
+
+    def test_stdout_and_rows_with_nothing_to_ask(self):
+        table = self.path("old.csv")
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write(HEADER + "\n" + EXPECTED.replace("CVE-2026-73070;", "-;", 1) + "\n")
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(self.run_main("--table", table), EXIT_PARTIAL)
+        footer = self.footer()
+        self.assertEqual(footer[0], "итог: выведено в stdout, строк 1")
+        self.assertIn("код возврата 1: строк без CVE-ID или компонента 1", footer)
+
+    def test_footer_is_the_last_block(self):
+        self.run_cli(text=BLOCK + "\n\n" + BAD + "\n")
+        self.assertLess(self.log.index("отбракован:"), self.log.index("итог: "))
+        self.assertLess(self.log.index("битые блоки (1) записаны"), self.log.index("итог: "))
 
 
 class UsageTest(CliCase):

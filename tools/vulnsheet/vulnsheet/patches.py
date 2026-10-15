@@ -8,6 +8,7 @@ PATCH, и из имён файлов берутся CVE-идентификато
 """
 import logging
 import re
+import types
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, FrozenSet, Iterable, Mapping, NamedTuple, Optional, Tuple
@@ -33,9 +34,14 @@ SRPM = "из SRPM"
 FAILED = "ошибок"
 
 
+# порядок, в каком исходы перечисляет итог прогона
+KINDS = (READ, NO_DIR, NO_SOURCE, SRPM, FAILED)
+
+
 class Result(NamedTuple):
     cves: Dict[str, FrozenSet[str]]   # компонент → CVE из имён файлов; только прочитанные
     failed: Tuple[str, ...]           # компоненты, которые проверить не удалось
+    kinds: Mapping[str, int] = types.MappingProxyType({})  # исход → компонентов; итог пишет cli
 
 
 def cves_in(paths: Iterable[str]) -> FrozenSet[str]:
@@ -60,10 +66,7 @@ def find(builds: Mapping[str, Optional[dict]], client, jobs: int = 8) -> Result:
             failed.append(name)
         elif found is not None:
             cves[name] = found
-    if items:
-        logger.info("патчи GitLab: %s", ", ".join(
-            "%s %d" % (kind, kinds[kind]) for kind in (READ, NO_DIR, NO_SOURCE, SRPM, FAILED)))
-    return Result(cves, tuple(failed))
+    return Result(cves, tuple(failed), kinds)
 
 
 def _check(name: str, info: Optional[dict], client):
