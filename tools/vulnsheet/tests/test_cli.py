@@ -515,7 +515,7 @@ class RangesTest(CliCase):
         self.assertEqual(self.run_ranges(), EXIT_OK)
         self.assertEqual(self.comment(),
                          "версия 8.2.2637 в уязвимом диапазоне <9.0.2106 (NVD)")
-        self.assertIn("диапазоны: NVD без ключа ($NVD_API_KEY пуст, пауза 6 с), CVE.org",
+        self.assertIn("диапазоны: NVD без ключа ($NVD_API_KEY пуст, запрос раз в 6 с), CVE.org",
                       self.log)
         self.assertIn("диапазоны — CVE 1", self.log)
 
