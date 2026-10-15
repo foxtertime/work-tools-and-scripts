@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-15
+
 ### Исправлено
 
 - `vulnsheet` (1.6.1): неверный ключ NVD больше не проходит молча — NVD
@@ -123,7 +125,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.6.0...v0.7.0
