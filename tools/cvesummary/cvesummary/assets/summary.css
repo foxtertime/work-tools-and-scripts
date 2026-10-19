@@ -233,10 +233,18 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .stack > *{grid-area:1/1;min-width:0}
 .stack > .off{visibility:hidden}
 /* лишняя высота прогноза уходит в главную строку */
-/* лишняя высота — поровну всем строкам прогноза, текст в каждой по центру */
-.pace-right .fc > *{flex:1 0 auto}
-.pace-right .fc-main{justify-content:center}
-.pace-right .fc-row{align-content:center}
+/* прогноз: строки обоих режимов в одной сетке — n-я строка одного режима
+   в той же ячейке, что n-я другого; высота строки — по большему, текст
+   прижат к верху, поэтому при переключении ничего не сдвигается. Лишняя
+   высота делится между строками поровну */
+.fc.fc-stack{display:grid;grid-template-columns:minmax(0,1fr)}
+.fc-set{display:contents}
+.fc-set.off{visibility:hidden}
+.fc-set > *{grid-column:1}
+.fc-set > :nth-child(1){grid-row:1}
+.fc-set > :nth-child(2){grid-row:2}
+.fc-set > :nth-child(3){grid-row:3}
+.fc-stack .fc-row{align-content:start}
 .pace-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
 @media (max-width:640px){.pace-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .ps{background:var(--panel);padding:10px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
