@@ -105,6 +105,14 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 @media (max-width:560px){.cve-rows{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px 10px}.cve-rows .k{grid-column:1/-1;margin-top:8px}.cve-rows .b{grid-column:1/-1}.cve-rows .h.l,.cve-rows .h.bar{display:none}.cve-rows .h{white-space:normal;font-size:10px;letter-spacing:.02em}}
 .sevlegend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--hero-muted);margin-top:10px}
 .comp-leg{color:var(--muted);margin-top:-4px}
+/* шапка карточки с переключателем справа */
+.card-h{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
+/* переключатель-пилюля */
+.seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:999px;background:var(--bg)}
+.seg button{font:500 12.5px var(--f-body);color:var(--muted);background:transparent;border:0;border-radius:999px;padding:4px 12px;cursor:pointer}
+.seg button:hover{color:var(--fg)}
+.seg button[aria-pressed="true"]{background:var(--panel);color:var(--fg);box-shadow:0 0 0 1px var(--line)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .mix{display:flex;flex-direction:column;gap:10px}
 .mix-h{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline}
 .mix-h b{font-family:var(--f-display);font-weight:500;font-size:16px}

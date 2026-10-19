@@ -344,13 +344,31 @@
     }
   }
 
-  function renderBars() {
+  /* вердикт RHEL — RHEL state как есть; цвета общие для «Компонентов» и
+     графика RHEL state, незнакомые значения — серые */
+  const NO_VERDICT = 'не указано';
+  const verdictOf = r => r.rstate || NO_VERDICT;
+  const VERDICT_COLOR = { fixed: '--ok', affected: '--bad', 'under investigation': '--warn', 'fix deferred': '--c2', 'will not fix': '--c5', 'not affected': '--c1' };
+  const verdictColor = k => VERDICT_COLOR[k.toLowerCase()] || '--sev-none';
+  /* разбивка «Компонентов»: по критичности или по вердикту; выбор помнится */
+  let compBy = LS.get('cve.compBy') === 'verdict' ? 'verdict' : 'sev';
+
+  function renderComps() {
+    const cats = compBy === 'verdict'
+      ? count(recs, verdictOf).map(([k]) => ({ k, c: verdictColor(k) })).sort((a, b) => (a.k === NO_VERDICT) - (b.k === NO_VERDICT))
+      : SEV;
+    const of = compBy === 'verdict' ? verdictOf : r => r.sevN;
     const comps = count(recs, r => r.comp);
-    hbars('components', comps.map(([c, n]) => ({ label: c, n, segs: SEV.map(s => ({ name: s.k, color: s.c, n: recs.filter(r => r.comp === c && r.sevN === s.k).length })) })), comps.length ? comps[0][1] : 1);
-    legend('compleg', SEV);
-    const rs = count(recs, r => r.rstate || 'не указано');
-    const rsColor = k => ({ fixed: '--ok', affected: '--bad', 'under investigation': '--warn', 'fix deferred': '--warn' })[k.toLowerCase()] || '--sev-none';
-    hbars('rhel', rs.map(([k, n]) => ({ label: k, n, segs: [{ n, color: rsColor(k), name: '' }] })), rs.length ? rs[0][1] : 1);
+    hbars('components', comps.map(([c, n]) => ({ label: c, n, segs: cats.map(s => ({ name: s.k, color: s.c, n: recs.filter(r => r.comp === c && of(r) === s.k).length })) })), comps.length ? comps[0][1] : 1);
+    legend('compleg', cats);
+    $('comp-sub').textContent = `Сколько CVE приходится на пакет, с разбивкой по ${compBy === 'verdict' ? 'вердикту RHEL (RHEL state)' : 'критичности'}. Все пакеты, по убыванию; список листается.`;
+    for (const b of $('comp-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === compBy));
+  }
+
+  function renderBars() {
+    renderComps();
+    const rs = count(recs, verdictOf);
+    hbars('rhel', rs.map(([k, n]) => ({ label: k, n, segs: [{ n, color: verdictColor(k), name: '' }] })), rs.length ? rs[0][1] : 1);
     const ds = count(recs, statusKey);
     const dsColor = k => roleColor(recs.find(r => statusKey(r) === k));
     hbars('devstatus', ds.map(([k, n]) => ({ label: k, n, segs: [{ n, color: dsColor(k), name: '' }] })), ds.length ? ds[0][1] : 1);
@@ -519,6 +537,11 @@
     LS.set('cve.stopDate', $('stop-date').value); LS.set('cve.targetDate', $('target-date').value); LS.set('cve.paceWin', $('pace-win').value);
     render();
   }));
+  $('comp-by').addEventListener('click', e => {
+    const b = e.target.closest('button[data-by]');
+    if (!b || b.dataset.by === compBy) return;
+    compBy = b.dataset.by; LS.set('cve.compBy', compBy); renderComps();
+  });
   let rT; addEventListener('resize', () => { resizing = true; clearTimeout(rT); rT = setTimeout(() => { render(); setTimeout(() => { resizing = false; }, 100); }, 150); });
   { const w = LS.get('cve.paceWin'); if (['7', '14', '30'].includes(w)) $('pace-win').value = w; }
   render();
