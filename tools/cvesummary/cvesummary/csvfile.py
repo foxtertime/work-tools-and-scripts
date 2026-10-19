@@ -1,21 +1,24 @@
 """CSV таблицы процесса — в тот же Sheet, что и xlsx; все ячейки текстовые.
 
 Кодировка — UTF-8 (с BOM или без), иначе cp1251: так CSV сохраняет русский
-Excel. Разделитель — тот из «;», «,» и табуляции, которого больше всего в
-строке шапки (первой строке с «CVE ID»); если там нет ни одного, «;», как
-пишет vulnsheet. Номер строки — номер записи с 1: поле в кавычках с
+Excel. Разделитель — тот из «;», «,» и табуляции, при котором в разобранной
+записи находится ячейка «CVE ID», а из таких — с самой длинной шапкой: так
+не сбивают ни запятые в кавычках, ни строка-заголовок со словами «CVE ID»
+над шапкой. Шапки нет ни при каком — «;», как пишет vulnsheet. Номер строки — номер записи с 1: поле в кавычках с
 переводом строки остаётся одной строкой, как в Excel. Ошибки — CsvError без
 пути к файлу; путь добавляет вызывающий.
 """
 import csv
 import io
-from typing import NamedTuple
+from typing import List, NamedTuple, Optional
 
 from .xlsx import Cell, Row, Sheet
 
 DELIMITERS = (";", ",", "\t")
 DEFAULT_DELIMITER = ";"
 _HEADER_KEY = "cve id"
+# у csv предел поля 128 КиБ — длинный комментарий в него не влезает
+_FIELD_LIMIT = 2 ** 31 - 1
 
 
 class CsvError(Exception):
@@ -40,11 +43,15 @@ def read(path: str) -> CsvFile:
         raise CsvError("в файле нулевые байты — это не CSV в UTF-8 или cp1251 "
                        "(xlsx с расширением .csv? UTF-16?)")
     text, encoding = _decode(data)
-    delimiter = _delimiter(text)
+    # предел поля в csv общий на процесс — возвращаем прежний
+    limit = csv.field_size_limit(_FIELD_LIMIT)
     try:
-        records = list(csv.reader(io.StringIO(text, newline=""), delimiter=delimiter))
+        delimiter = _delimiter(text)
+        records = list(_records(text, delimiter))
     except csv.Error as exc:
         raise CsvError("не разбирается как CSV: %s" % exc)
+    finally:
+        csv.field_size_limit(limit)
     rows = [Row(n, [Cell(value) for value in record]) for n, record in enumerate(records, 1)]
     return CsvFile(Sheet("", rows, False), delimiter, encoding)
 
@@ -60,8 +67,21 @@ def _decode(data: bytes):
         raise CsvError("кодировка не UTF-8 и не cp1251: %s" % exc)
 
 
+def _records(text: str, delimiter: str):
+    return csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
+
+
+def _header(text: str, delimiter: str) -> Optional[List[str]]:
+    for record in _records(text, delimiter):
+        if any(" ".join(value.split()).lower() == _HEADER_KEY for value in record):
+            return record
+    return None
+
+
 def _delimiter(text: str) -> str:
-    line = next((line for line in text.splitlines() if _HEADER_KEY in line.lower()), "")
-    counts = {sep: line.count(sep) for sep in DELIMITERS}
-    best = max(DELIMITERS, key=lambda sep: counts[sep])
-    return best if counts[best] else DEFAULT_DELIMITER
+    best, width = DEFAULT_DELIMITER, 0
+    for sep in DELIMITERS:
+        header = _header(text, sep)
+        if header is not None and len(header) > width:
+            best, width = sep, len(header)
+    return best

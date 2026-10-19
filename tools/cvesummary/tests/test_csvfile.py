@@ -1,3 +1,4 @@
+import csv
 import os
 import tempfile
 import unittest
@@ -44,6 +45,25 @@ class ReadTest(Base):
         found = csvfile.read(self.path)
         self.assertEqual(found.delimiter, ";")
         self.assertEqual(self.texts(found)[2], ["1", "CVE-1", "bash"])
+
+    def test_quoted_commas_in_header_do_not_win(self):
+        self.put(b'CVE ID;"Comp, x, y, z"\nCVE-1;bash\n')
+        found = csvfile.read(self.path)
+        self.assertEqual(found.delimiter, ";")
+        self.assertEqual(self.texts(found)[0], ["CVE ID", "Comp, x, y, z"])
+
+    def test_title_line_mentioning_cve_id_is_not_the_header(self):
+        self.put("Список CVE ID, выгрузка\nCVE ID;Компонент;RHEL state;RHEL severity\n"
+                 "CVE-1;bash;Affected;Low\n".encode("utf-8"))
+        found = csvfile.read(self.path)
+        self.assertEqual(found.delimiter, ";")
+        self.assertEqual(table.build(found.sheet).header_row, 2)
+
+    def test_field_longer_than_csv_default_limit(self):
+        big = "x" * 200000
+        self.put(("CVE ID;Комментарий\nCVE-1;%s\n" % big).encode("utf-8"))
+        self.assertEqual(self.texts(csvfile.read(self.path))[1], ["CVE-1", big])
+        self.assertEqual(csv.field_size_limit(), 131072)  # общий предел восстановлен
 
     def test_no_delimiter_defaults_to_semicolon(self):
         self.put(b"CVE ID\nCVE-1\n")
