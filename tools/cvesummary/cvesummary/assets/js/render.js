@@ -21,6 +21,7 @@
   const count = (arr, f) => { const m = new Map(); for (const x of arr) { const k = f(x); if (k == null || k === '') continue; m.set(k, (m.get(k) || 0) + 1); } return [...m].sort((a, b) => b[1] - a[1]); };
   const plural = (n, a, b, c) => { n = Math.abs(n) % 100; const n1 = n % 10; return n > 10 && n < 20 ? c : n1 > 1 && n1 < 5 ? b : n1 === 1 ? a : c; };
   const days = n => `${n} ${plural(n, 'день', 'дня', 'дней')}`;
+  const tasks = n => `${n} ${plural(n, 'задачу', 'задачи', 'задач')}`;
   const LS = { get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* без хранилища поля просто не запоминаются */ } } };
   const SEV_COLOR = { Critical: '--sev-crit', Important: '--sev-imp', Moderate: '--sev-mod', Low: '--sev-low' };
   const sevColor = k => SEV_COLOR[k] || '--sev-none';
@@ -378,7 +379,8 @@
       /* главная строка при нуле открытых — «завершено»; у остальных строк
          ноль значит другое и пока подписан по-старому */
       const dt = d === 0 ? (main ? el('div', 'd ok', 'завершено 🎉') : el('div', 'd', 'уже 0')) : d === null ? el('div', 'd bad', 'не завершится') : el('div', 'd', fmt(AS_OF + d));
-      const meta = el('div', 's', (d ? `${n} задач · ≈ ${days(d)}. ` : '') + sub);
+      /* sub-функция пишет описание целиком, строка — после «N задач · ≈ дни» */
+      const meta = el('div', 's', typeof sub === 'function' ? sub(d) : (d ? `${n} задач · ≈ ${days(d)}. ` : '') + sub);
       if (main) r.append(el('div', 'e', title), dt, meta); else r.append(el('div', 't', title), dt, meta);
       fc.append(r);
     };
@@ -390,7 +392,13 @@
     } else {
       row('При текущем темпе, без сканфриза', R.open === 0 || R.net > 0 ? pace.simulate(R.open, R.inR, R.outR, AS_OF) : null, R.open === 0 ? 'Открытых задач нет.' : R.net > 0 ? 'Новые задачи продолжают поступать в том же темпе.' : 'Приходит не меньше, чем закрывается. Укажите дату сканфриза.', true, R.open);
     }
-    row('Без задач с готовым решением', pace.simulate(R.open - ready, R.inR, R.outR, AS_OF, stop === null ? null : stop), `Если ${ready} задач с готовым решением закрыть сразу.` + (stop === null ? ' Без новых.' : ` С новыми до ${fmt(stop)}.`), false, R.open - ready);
+    const rest = R.open - ready;
+    row('Без задач с готовым решением', pace.simulate(rest, R.inR, R.outR, AS_OF, stop === null ? null : stop), d => {
+      if (d === 0) return `Все открытые задачи (${R.open}) — с готовым решением.`;
+      const head = `Если сразу закрыть ${tasks(ready)} с готовым решением, останется ${rest}`;
+      if (d === null) return `${head}, и при текущем темпе их не закрыть.`;
+      return `${head}. ` + (stop === null ? `Без новых задач — ≈ ${days(d)} работы.` : `С новыми до сканфриза ${fmt(stop)} — ≈ ${days(d)} работы.`);
+    }, false, rest);
     if (target !== null) {
       const r = el('div', 'fc-row need'); r.append(el('div', 't', `Закончить к ${fmt(target)}`));
       const nd = pace.need(R.open, R.inR, AS_OF, stop, target);
