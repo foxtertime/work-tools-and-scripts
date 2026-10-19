@@ -166,6 +166,15 @@ class PatchMarkTest(unittest.TestCase):
         self.assertEqual(out.rows[0][report.PATCH], "-")
         self.assertEqual((out.kept_patch, out.patch_unchecked), ((), 1))
 
+    def test_kept_value_other_than_plus_or_minus_becomes_minus(self):
+        # колонки вставили руками и оставили пустыми, а GitLab упал
+        rows = [Record(2, changed(OLD, {report.PATCH: ""})),
+                Record(3, changed(OLD, {report.PATCH: " + "})),
+                Record(4, changed(OLD, {report.PATCH: "?"}))]
+        out = refresh(rows, PATCHED._replace(patched={}))
+        self.assertEqual([r[report.PATCH] for r in out.rows], ["-", "+", "-"])
+        self.assertEqual(dict(out.patch_marks), {"+": 1, "-": 2})
+
     def test_package_not_in_koji_has_no_patch(self):
         cells = changed(OLD, {report.COMPONENT: "openssl", report.CVE_ID: "CVE-2026-0003"})
         out = refresh([Record(2, cells)], PATCHED)

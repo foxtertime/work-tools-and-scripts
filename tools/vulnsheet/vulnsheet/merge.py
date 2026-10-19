@@ -1,10 +1,9 @@
 """Строки выхода из блоков, прежней таблицы и свежих данных koji и VEX.
 
 Чистые функции — ни файлов, ни сети. cli сначала спрашивает pairs(), какие
-пары (CVE, компонент) нужны строкам выхода, получает по ним ответы koji и
-VEX и отдаёт их сюда записью Fresh. Что в каком режиме откуда берётся —
-таблица групп колонок в
-docs/superpowers/specs/2026-09-24-vulnsheet-update-modes-design.md.
+пары (CVE, компонент) нужны строкам выхода, получает по ним ответы koji,
+VEX, GitLab и диапазонов и отдаёт их сюда записью Fresh. Что в каком режиме
+откуда берётся — таблица колонок в README, «Режимы».
 """
 import types
 from collections import Counter
@@ -218,6 +217,12 @@ def _fresh_row(task: Task, fresh: Fresh, notes: Optional["_Notes"] = None) -> Li
                       patch or report.NO, ranged or report.NO)
 
 
+def _kept_mark(cell: str) -> str:
+    """Прежнее значение P или D: «+» или «-»; пустое и всё прочее — «-»,
+    значение по умолчанию (колонки могли вставить руками и не заполнить)."""
+    return report.YES if cell.strip() == report.YES else report.NO
+
+
 def _patch_mark(pair: Pair, fresh: Fresh) -> Optional[str]:
     """P: «+» — патч под CVE в каталоге PATCH билда, «-» — нет или билда
     нет; None — неизвестно."""
@@ -261,7 +266,7 @@ def _updated(record: Record, task: Task, pair: Pair, fresh: Fresh, notes: _Notes
              notes.patch_marks, notes.kept_patch),
             (report.RANGE, _range_mark(pair, fresh), fresh.ranges is not None,
              notes.range_marks, notes.kept_range)):
-        cells[index] = mark or old[index]
+        cells[index] = mark or _kept_mark(old[index])
         if checked:
             marks[cells[index]] += 1
             if mark is None:

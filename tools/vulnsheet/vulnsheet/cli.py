@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 EXIT_OK = 0
 # CSV записан, но есть отбраковка, ERROR koji, fetch error (в том числе там,
 # где из-за сбоя оставлены прежние koji или VEX), компоненты, чьи патчи в
-# GitLab проверить не удалось, CVE без диапазонов из-за сбоя, строки таблицы, по которым нечего спрашивать,
-# либо читатель оборвал stdout (broken pipe) — таблица дописана не до конца
+# GitLab проверить не удалось, CVE без диапазонов из-за сбоя, строки
+# таблицы, по которым нечего спрашивать, либо читатель оборвал stdout
+# (broken pipe) — таблица дописана не до конца
 EXIT_PARTIAL = 1
 EXIT_FATAL = 2
 
@@ -55,7 +56,7 @@ def _parser() -> argparse.ArgumentParser:
                         help="файл с блоками задач; - — stdin")
     parser.add_argument("--table", metavar="FILE",
                         help="прежняя таблица vulnsheet: без --blocks — обновить в ней "
-                             "koji и VEX, с --blocks — сверить с блоками")
+                             "koji, VEX, P и D, с --blocks — сверить с блоками")
     parser.add_argument("--config",
                         help="YAML-конфиг (по умолчанию — из $%s, иначе без конфига)"
                              % config.ENV_VAR)
@@ -389,7 +390,7 @@ def _range_notes(cfg, unique, nvrs, nvd_key):
     notes, failed = {}, set()
     for cve, name in unique:
         nvr = nvrs.get(name, "")
-        if nvr in (kojiclient.NOT_FOUND, kojiclient.ERROR) or cve not in docs:
+        if nvr in (kojiclient.NOT_FOUND, kojiclient.ERROR):
             continue
         version = ranges.upstream_version(nvr)
         if version is None:

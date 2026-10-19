@@ -45,7 +45,7 @@ def read(path: str) -> List[Record]:
     header, rows = records[0], records[1:]
     names = [cell.strip() for cell in header.cells]
     if names == _COLUMNS_1:
-        raise TableError("%s: таблица vulnsheet 1.x — в ней нет колонок P и D; "
+        raise TableError("%s: формат vulnsheet 1.x — нет колонок P и D; "
                          "добавьте их перед «SL NVR (latest build)» (значение «-»)"
                          % path)
     if names != COLUMNS:

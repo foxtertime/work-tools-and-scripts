@@ -33,7 +33,9 @@ def _group(first: str, last: str) -> slice:
 
 
 # Группы колонок для режимов обновления: что в каком режиме откуда берётся,
-# см. docs/superpowers/specs/2026-09-24-vulnsheet-update-modes-design.md.
+# см. таблицу в README, «Режимы» (дизайн-документ
+# docs/superpowers/specs/2026-09-24-vulnsheet-update-modes-design.md писался
+# до колонок P и D).
 DEVELOPER = _group("Разработчик", "Принятая мера")
 TASK = _group("Task ID", "Компонент")
 MARKS = _group("P", "D")
