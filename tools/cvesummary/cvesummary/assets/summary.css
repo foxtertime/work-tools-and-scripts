@@ -210,6 +210,10 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .foot div{margin-bottom:4px}
 
 .pace-head .sub{margin:4px 0 0}
+.pace-title{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+/* режим «Когда начать»: вместо периода темпа — разработчики и темп на одного */
+.pace-ctl .plan,#pace.plan .pace-ctl .fact{display:none}
+#pace.plan .pace-ctl .plan{display:flex}
 /* четыре поля в две строки: сканфриз и цель, затем период темпа */
 .pace-ctl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;align-items:end;min-width:0}
 .pace-ctl label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--muted);min-width:0;white-space:nowrap}

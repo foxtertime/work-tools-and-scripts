@@ -130,8 +130,8 @@
   /* Отметки дат на графиках темпа — отчёт, сканфриз, цель: пунктирная
      вертикаль и подпись на подложке цвета фона; близкие отметки разносятся
      по строкам. Подписи возвращаются — их добавляют поверх линий в конце. */
-  function dateMarks(F, x, first, end, stop, target) {
-    const marks = [[AS_OF, 'отчёт'], [stop, 'сканфриз'], [target, 'цель']]
+  function dateMarks(F, x, first, end, stop, target, start = null) {
+    const marks = [[AS_OF, 'отчёт'], [stop, 'сканфриз'], [target, 'цель'], [start, 'старт']]
       .filter(([d]) => d !== null && d >= first && d <= end).sort((a, b) => a[0] - b[0]);
     const xs = marks.map(([d]) => x(d - first)), rows = timeline.lanes(xs, 64);
     return marks.map(([, label], j) => {
@@ -156,12 +156,29 @@
   /* будущая дата в пределах двух лет — иначе ось до даты отчёта */
   const nearDay = d => (d !== null && d > AS_OF && d <= AS_OF + 2 * 365 ? d : AS_OF);
 
-  function drawPace(series, win, stop, target) {
+  /* Плановые дни после отчёта для «Потока»: поступление и закрытие по
+     дням из pace.project и их среднее за 7 дней — окно захватывает
+     последние дни факта, чтобы линия не прыгала на стыке */
+  function planDaily(series, proj) {
+    const out = [], tail = series.slice(-6);
+    let pi = 0, po = 0;
+    proj.forEach(p => {
+      const d = { day: p.day, i: p.inc - pi, o: p.out - po, plan: true }; pi = p.inc; po = p.out;
+      const w = tail.concat(out, [d]).slice(-7);
+      d.ia = w.reduce((a, y) => a + y.i, 0) / w.length; d.oa = w.reduce((a, y) => a + y.o, 0) / w.length;
+      out.push(d);
+    });
+    return out;
+  }
+
+  function drawPace(series, win, stop, target, plan) {
     const host = $('pace-chart');
     if (!series.length) { host.replaceChildren(el('div', 'empty', 'Нет дат в Task date и End date')); return; }
-    const { yMax, yStep } = scale(maxOf(series.map(s => Math.max(s.i, s.o)), 0));
+    /* в режиме «Когда начать» после отчёта — симуляция пунктиром */
+    const fut = plan ? planDaily(series, plan.proj) : [], all = series.concat(fut);
+    const { yMax, yStep } = scale(maxOf(all.map(s => Math.max(s.i, s.o)), 0));
     /* ось продолжается до сканфриза или цели — будущее пустое, но отметки видны */
-    const first = series[0].day, end = Math.max(AS_OF, nearDay(stop), nearDay(target)), n = end - first + 1;
+    const first = series[0].day, end = Math.max(AS_OF, nearDay(stop), nearDay(target), fut.length ? nearDay(fut[fut.length - 1].day) : AS_OF), n = end - first + 1;
     const fresh = !POS.has(host.id);
     const F = frame(host, { count: n, minStep: DAY_STEP, height: 230, yMax, yStep, pad: { t: 8, b: 22 } });
     const x = i => F.step * i + F.step / 2;
@@ -170,11 +187,12 @@
     const fi = Math.max(0, win.from - first), li = Math.min(series.length - 1, win.to - first);
     if (li >= fi) F.plot.prepend(mk('rect', { x: F.step * fi, y: 8, width: F.step * (li - fi + 1), height: 230 - 30, fill: 'var(--accent-soft)' }));
     weekends(F, first, n, 8, 208);
-    const labels = dateMarks(F, x, first, end, stop, target);
+    const labels = dateMarks(F, x, first, end, stop, target, plan ? plan.start : null);
     const path = (k, c, w, op) => F.plot.append(mk('path', { d: series.map((s, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + F.y(s[k]).toFixed(1)).join(''), fill: 'none', stroke: c, 'stroke-width': w, 'stroke-opacity': op, 'stroke-linejoin': 'round' }));
     path('i', 'var(--sev-imp)', 1, 0.4); path('o', 'var(--ok)', 1, 0.4);
     path('ia', 'var(--sev-imp)', 2.5, 1); path('oa', 'var(--ok)', 2.5, 1);
     const l = series.length - 1;
+    if (fut.length) [['ia', 'var(--sev-imp)'], ['oa', 'var(--ok)']].forEach(([k, c]) => F.plot.append(mk('path', { d: all.slice(l).map((s, j) => (j ? 'L' : 'M') + x(l + j).toFixed(1) + ',' + F.y(s[k]).toFixed(1)).join(''), fill: 'none', stroke: c, 'stroke-width': 2, 'stroke-dasharray': '6 4', 'stroke-linejoin': 'round' })));
     [['ia', 'var(--sev-imp)'], ['oa', 'var(--ok)']].forEach(([k, c]) => F.plot.append(mk('circle', { cx: x(l), cy: F.y(series[l][k]), r: 4, fill: c, stroke: 'var(--panel)', 'stroke-width': 2 })));
     const every = Math.ceil(48 / F.step);
     /* метка дня под курсором: направляющая и точки на всех линиях; одна на
@@ -185,7 +203,7 @@
       .map(([k, c, r]) => { const d = mk('circle', { r, fill: c, stroke: 'var(--panel)', 'stroke-width': 2 }); mark.append(d); return [k, d]; });
     const show = i => {
       mark.firstChild.setAttribute('x1', x(i)); mark.firstChild.setAttribute('x2', x(i));
-      dots.forEach(([k, d]) => { d.setAttribute('cx', x(i)); d.setAttribute('cy', F.y(series[i][k])); });
+      dots.forEach(([k, d]) => { d.setAttribute('cx', x(i)); d.setAttribute('cy', F.y(all[i][k])); });
       mark.classList.add('on');
     };
     F.plot.addEventListener('pointerover', e => { const h = e.target.closest('rect[data-i]'); if (h) show(+h.dataset.i); });
@@ -196,9 +214,10 @@
       const t = mk('text', { x: edge ? F.width - 2 : start ? 2 : x(i), y: 230 - 8, 'text-anchor': edge ? 'end' : start ? 'start' : 'middle' });
       t.textContent = fmt(first + i).slice(0, 5); F.plot.append(t);
     }
-    series.forEach((s, i) => {
+    all.forEach((s, i) => {
       const hit = mk('rect', { x: F.step * i, y: 8, width: F.step, height: 200, fill: 'transparent', 'data-i': i });
-      hit.dataset.tip = `${fmt(s.day)}: поступило ${s.i}, закрыто ${s.o} · среднее за 7 дней ${f1(s.ia)} / ${f1(s.oa)}`;
+      hit.dataset.tip = s.plan ? `${fmt(s.day)} · симуляция: поступит ${f1(s.i)}, закроем ${f1(s.o)} · среднее за 7 дней ${f1(s.ia)} / ${f1(s.oa)}`
+        : `${fmt(s.day)}: поступило ${s.i}, закрыто ${s.o} · среднее за 7 дней ${f1(s.ia)} / ${f1(s.oa)}`;
       F.plot.append(hit);
     });
     labels.forEach(t => F.plot.append(t));
@@ -217,9 +236,10 @@
     if (!paceCtx) return;
     for (const b of $('pace-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === paceBy));
     if (paceBy === 'flow') {
-      paceLegend([['поступило', 'background:var(--sev-imp)'], ['закрыто', 'background:var(--ok)'], ['по дням', 'background:var(--muted);height:1px;opacity:.6'], ['среднее за 7 дней', 'background:var(--muted)'], ['окно расчёта', 'background:var(--accent-soft);height:10px;vertical-align:-1px']]);
+      paceLegend([['поступило', 'background:var(--sev-imp)'], ['закрыто', 'background:var(--ok)'], ['по дням', 'background:var(--muted);height:1px;opacity:.6'], ['среднее за 7 дней', 'background:var(--muted)'],
+        ...(paceCtx.plan ? [['симуляция', 'background:repeating-linear-gradient(90deg,var(--muted) 0 5px,transparent 5px 8px)']] : []), ['окно расчёта', 'background:var(--accent-soft);height:10px;vertical-align:-1px']]);
       $('pace-chart').setAttribute('aria-label', 'Поступление и закрытие задач по дням');
-      drawPace(FIRST === null ? [] : pace.daily(recs, FIRST, AS_OF), paceCtx.WINDOW, paceCtx.stop, paceCtx.target);
+      drawPace(FIRST === null ? [] : pace.daily(recs, FIRST, AS_OF), paceCtx.WINDOW, paceCtx.stop, paceCtx.target, paceCtx.plan);
     } else drawBurn(paceBy);
   }
 
@@ -231,20 +251,23 @@
     const host = $('pace-chart'), up = mode === 'up';
     const legendFor = forecast => paceLegend(up
       ? [['всего поступило', 'background:var(--sev-imp)'], ['всего закрыто', 'background:var(--ok)'], [forecast, 'background:repeating-linear-gradient(90deg,var(--muted) 0 5px,transparent 5px 8px)']]
-      : [['открыто', 'background:var(--accent)'], [forecast, 'background:repeating-linear-gradient(90deg,var(--accent) 0 5px,transparent 5px 8px)'], ['идеально к цели', 'background:repeating-linear-gradient(90deg,var(--muted) 0 2px,transparent 2px 5px)']]);
-    legendFor('прогноз');
+      : [['открыто', 'background:var(--accent)'], [forecast, 'background:repeating-linear-gradient(90deg,var(--accent) 0 5px,transparent 5px 8px)'],
+        ...(paceCtx.plan ? [] : [['идеально к цели', 'background:repeating-linear-gradient(90deg,var(--muted) 0 2px,transparent 2px 5px)']])]);
+    const plan = paceCtx.plan, word = plan ? 'симуляция' : 'прогноз';
+    legendFor(word);
     host.setAttribute('aria-label', up ? 'Burn-up: всего поступило и всего закрыто по дням' : 'Burn-down: открытые задачи по дням');
     if (FIRST === null) { host.replaceChildren(el('div', 'empty', 'Нет дат в Task date и End date')); return; }
     const { R, stop, target } = paceCtx;
     const hist = pace.cumulative(recs, FIRST, AS_OF), last = hist[hist.length - 1];
-    const proj = pace.project(last.open, R.inR, R.outR, AS_OF, stop !== null ? stop : undefined, BURN_HORIZON);
-    if (proj.length && proj[proj.length - 1].open > 0) legendFor('прогноз — не сходится, показан год');
+    const proj = plan ? plan.proj : pace.project(last.open, R.inR, R.outR, AS_OF, stop !== null ? stop : undefined, BURN_HORIZON);
+    if (proj.length && proj[proj.length - 1].open > 0) legendFor(`${word} — не сходится, показан год`);
     /* цель и сканфриз — в пределах двух лет, чтобы идеальная линия дошла до нуля */
     const end = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, nearDay(stop), nearDay(target));
     const n = end - FIRST + 1, ai = AS_OF - FIRST;
     const at = i => (i <= ai ? hist[i] : proj[i - ai - 1]
       ? { inc: last.inc + proj[i - ai - 1].inc, out: last.out + proj[i - ai - 1].out, open: proj[i - ai - 1].open } : null);
-    const ideal = i => (target !== null && target > AS_OF && i >= ai && FIRST + i <= target ? last.open * (1 - (i - ai) / (target - AS_OF)) : null);
+    /* идеальная линия — только в прогнозе: в симуляции до старта не закрываем */
+    const ideal = i => (!plan && target !== null && target > AS_OF && i >= ai && FIRST + i <= target ? last.open * (1 - (i - ai) / (target - AS_OF)) : null);
     const keys = up ? ['inc', 'out'] : ['open'];
     let top = 0;
     for (let i = 0; i < n; i++) { const v = at(i); if (v) keys.forEach(k => { top = Math.max(top, v[k]); }); }
@@ -256,7 +279,7 @@
     if (first) { const box = F.plot.parentNode; box.scrollLeft = Math.max(0, x(ai) - box.clientWidth * 0.7); timeline.sync(box); }
     const line = (pts, color, w, dash) => { if (pts.length < 2) return; F.plot.append(mk('path', Object.assign({ d: pts.map(([i, v], j) => (j ? 'L' : 'M') + x(i).toFixed(1) + ',' + F.y(v).toFixed(1)).join(''), fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linejoin': 'round' }, dash ? { 'stroke-dasharray': dash } : {}))); };
     weekends(F, FIRST, n, 8, 208);
-    const labels = dateMarks(F, x, FIRST, end, stop, target);
+    const labels = dateMarks(F, x, FIRST, end, stop, target, plan ? plan.start : null);
     const color = { inc: 'var(--sev-imp)', out: 'var(--ok)', open: 'var(--accent)' };
     const factPts = k => hist.map((v, i) => [i, v[k]]);
     const projPts = k => { const p = [[ai, last[k]]]; for (let i = ai + 1; i < n; i++) { const v = at(i); if (v) p.push([i, v[k]]); } return p; };
@@ -284,7 +307,7 @@
       }
       if (!v) continue;
       const hit = mk('rect', { x: F.step * i, y: 8, width: F.step, height: 200, fill: 'transparent', 'data-i': i });
-      const when = fmt(day) + (day > AS_OF ? ' · прогноз' : '');
+      const when = fmt(day) + (day > AS_OF ? ` · ${word}` : '');
       const id = ideal(i);
       hit.dataset.tip = up ? `${when}: всего поступило ${R0(v.inc)}, закрыто ${R0(v.out)}, открыто ${R0(v.inc) - R0(v.out)}`
         : `${when}: открыто ${R0(v.open)}` + (id !== null && day > AS_OF ? ` · по идеальной линии ${R0(id)}` : '');
@@ -629,6 +652,80 @@
     return out('d', `${per}/день`, (R.open === 0 ? 'Открытых задач нет. ' : '') + head + now);
   }
 
+  /* Режим «Когда начать»: поступление — реальное за период темпа, закрытие —
+     заданное: разработчиков × задач в рабочий день на одного, со дня
+     старта; до старта задачи только копятся. Остальная страница — по факту. */
+  let paceMode = LS.get('cve.paceMode') === 'plan' ? 'plan' : 'fact';
+  function renderPlan(R, WINDOW, stop, target) {
+    /* по умолчанию — сколько людей закрывали задачи в период темпа и их
+       средний темп; никто не закрывал — 1 человек по 1 задаче */
+    const active = new Set(recs.filter(r => r.done && r.devKey && r.endD !== null && r.endD >= WINDOW.from && r.endD <= WINDOW.to).map(r => r.devKey)).size;
+    const devs0 = active || 1, rate0 = active && R.outR ? Math.max(0.01, Math.round(R.outR / active * 100) / 100) : 1;
+    const pdI = $('plan-devs'), prI = $('plan-rate');
+    if (!pdI.value) pdI.value = LS.get('cve.planDevs') || devs0;
+    if (!prI.value) prI.value = LS.get('cve.planRate') || rate0;
+    let devs = Math.round(+pdI.value); if (!(devs >= 1)) devs = devs0;
+    let rate = +String(prI.value).replace(',', '.'); if (!(rate > 0)) rate = rate0;
+    const P = devs * rate, inflow = stop === null ? undefined : stop;
+    const people = `${devs} ${plural(devs, 'разработчик', 'разработчика', 'разработчиков')}`;
+    const f2 = x => String(Math.round(x * 100) / 100).replace('.', ',');  // темп на одного — до сотых, как в поле
+
+    $('pace-sub').textContent = `На ${fmt(AS_OF)} · симуляция: ${people} по ${f2(rate)} — ${f1(P)} в рабочий день; поступление — по факту с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}`;
+    $('pace-note').textContent = `Симуляция на дату отчёта ${fmt(AS_OF)}: до старта задачи только поступают, со старта закрываем заданным темпом по рабочим дням, Пн–Пт, без учёта праздников. Новые приходят каждый календарный день в темпе периода с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)} (если задан сканфриз — до него). «Начать не позднее» — самый поздний день старта, при котором всё закрывается к цели. Разработчики и остальные блоки страницы считаются по фактическим данным.`;
+    $('p-out').textContent = f1(P); $('p-out-l').textContent = 'закрываем в рабочий день по плану';
+    $('p-out').parentElement.dataset.tip = `${people} × ${f2(rate)} в рабочий день`;
+    const wk = Math.round(R.inR * 7 - P * 5), pn = $('p-net');
+    pn.textContent = (wk > 0 ? '+' : wk < 0 ? '−' : '') + Math.abs(wk); pn.className = 'v ' + (wk < 0 ? 'ok' : wk > 0 ? 'bad' : '');
+    $('p-net-l').textContent = wk > 0 ? 'бэклог растёт за неделю работы' : wk < 0 ? 'бэклог сокращается за неделю работы' : 'бэклог не меняется за неделю работы';
+    pn.parentElement.dataset.tip = `За неделю работы по плану: придёт ≈ ${f1(R.inR * 7)}, закроем ${f1(P * 5)}`;
+
+    const fc = $('forecast');
+    const line = (main, title, cls, text, sub) => { const r = el('div', main ? 'fc-main' : 'fc-row'); r.append(el('div', main ? 'e' : 't', title), el('div', cls, text), el('div', 's', sub)); fc.append(r); };
+    const wd = (a, b) => wdays(dates.workdays(a, b));
+    const noTarget = target === null || target <= AS_OF;
+    const askTarget = target === null ? 'Укажите дату «Хотим закончить к» — от неё считается старт.' : `Выберите дату «Хотим закончить к» позже ${fmt(AS_OF)}.`;
+    const S = R.open === 0 || noTarget ? null : pace.latestStart(R.open, R.inR, P, AS_OF, stop, target);
+
+    /* 1. самый поздний старт */
+    const T1 = 'Начать не позднее';
+    if (R.open === 0) line(true, T1, 'd ok', 'не нужно', 'Открытых задач нет.');
+    else if (noTarget) line(true, T1, 'd bad', target === null ? 'нет цели' : 'дата прошла', askTarget);
+    else if (S === null) line(true, T1, 'd bad', 'не успеть', `Даже со старта завтра по ${f1(P)} в рабочий день к ${fmt(target)} не закрыть. Сколько людей нужно — ниже.`);
+    else {
+      const end = AS_OF + pace.simulate(R.open, R.inR, P, AS_OF, inflow, S);
+      const c = Math.round(R.inR * Math.max(0, (stop === null ? end : Math.min(end, stop - 1)) - AS_OF));
+      const fresh = c ? ` и ≈ ${c} ${plural(c, 'новую', 'новые', 'новых')}${stop !== null && stop <= end ? ' до сканфриза' : ''}` : '';
+      line(true, T1, 'd', fmt(S), `Закрыть ${tasks(R.open)}${fresh} по ${f1(P)} в рабочий день — ≈ ${wd(S, end)}, до ${fmt(end)}.` + (S === AS_OF + 1 ? ' Начинать нужно уже завтра.' : ''));
+    }
+
+    /* 2. старт завтра */
+    const T2 = 'Если начать завтра';
+    const d1 = pace.simulate(R.open, R.inR, P, AS_OF, inflow, AS_OF + 1);
+    if (d1 === 0) line(false, T2, 'd ok', 'завершено', 'Открытых задач нет.');
+    else if (d1 === null) line(false, T2, 'd bad', 'не завершится', `Задач приходит не меньше, чем закрываем по ${f1(P)} в рабочий день. ` + (stop === null ? 'Задайте сканфриз или увеличьте темп.' : 'Увеличьте темп.'));
+    else {
+      const end = AS_OF + d1, z = noTarget ? 0 : dates.workdays(end + 1, target);
+      const vs = noTarget ? '' : end > target ? ` Опоздание к цели — ${wd(target + 1, end)}.` : z ? ` Запас до цели — ${wdays(z)}.` : ' Укладываемся к цели.';
+      line(false, T2, !noTarget && end > target ? 'd bad' : 'd', fmt(end), `≈ ${wd(AS_OF + 1, end)}.${vs}`);
+    }
+
+    /* 3. сколько людей нужно со старта завтра */
+    const T3 = 'Разработчиков нужно';
+    if (R.open === 0) line(false, T3, 'd ok', '0', 'Открытых задач нет.');
+    else if (noTarget) line(false, T3, 'd', '—', askTarget);
+    else {
+      const k = pace.devsNeeded(R.open, R.inR, rate, AS_OF, stop, target);
+      if (k === null) line(false, T3, 'd bad', 'не успеть', `До ${fmt(target)} не осталось рабочих дней.`);
+      else line(false, T3, k <= devs ? 'd ok' : 'd bad', String(k), `Чтобы закончить к ${fmt(target)}, начав завтра, по ${f2(rate)} в рабочий день на одного. ` + (k <= devs ? `Задано ${devs} — хватает.` : `Задано ${devs} — не хватает ${k - devs}.`));
+    }
+
+    /* старт для графика: самый поздний, а если его нет — завтра */
+    const start = S !== null ? S : AS_OF + 1;
+    const proj = R.open > 0 ? pace.project(R.open, R.inR, P, AS_OF, inflow, BURN_HORIZON, start) : [];
+    paceCtx = { R, stop, target, WINDOW, plan: { P, start: R.open > 0 ? start : null, proj } };
+    drawPaceChart();
+  }
+
   function renderPace() {
     /* период темпа — две даты: конец не позже даты отчёта, начало не раньше
        начала работы разработчиков; перепутаны — меняются местами */
@@ -641,6 +738,9 @@
     if (wa > wb) [wa, wb] = [wb, wa];
     const R = pace.rates(recs, AS_OF, wb - wa + 1, START, wb);
     const WINDOW = { from: wb - R.days + 1, to: wb };
+    $('pace').classList.toggle('plan', paceMode === 'plan');
+    for (const b of $('pace-mode').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === paceMode));
+    $('p-out-l').textContent = 'закрывается в рабочий день';
     const ready = recs.filter(r => r.open && r.reasons.length).length;
     const fc = $('forecast'); fc.replaceChildren();
     $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}: ${days(R.days)}, из них ${wdays(R.work)}` + (WINDOW.from > wa ? ` — начало прижато к началу работы` : '');
@@ -661,6 +761,7 @@
     if (!sd.value) sd.value = LS.get('cve.stopDate');
     if (!td.value) td.value = LS.get('cve.targetDate') || dates.isoOf(AS_OF + 30);
     const stop = dates.dayOf(sd.value), target = dates.dayOf(td.value);
+    if (paceMode === 'plan') { renderPlan(R, WINDOW, stop, target); return WINDOW; }
     /* row — из образца, дни вместо миллисекунд */
     const row = (title, d, sub, main, n) => {
       const r = el('div', main ? 'fc-main' : 'fc-row');
@@ -858,6 +959,18 @@
     if (!b || b.dataset.by === burnBy) return;
     burnBy = b.dataset.by; LS.set('cve.burnBy', burnBy); renderBurn();
   });
+  $('pace-mode').addEventListener('click', e => {
+    const b = e.target.closest('button[data-by]');
+    if (!b || b.dataset.by === paceMode) return;
+    paceMode = b.dataset.by; LS.set('cve.paceMode', paceMode);
+    /* ось у режимов разной длины — график снова встаёт на дату отчёта */
+    ['pace-chart', 'pace:up', 'pace:down'].forEach(k => POS.delete(k));
+    renderPace();
+  });
+  ['plan-devs', 'plan-rate'].forEach(id => $(id).addEventListener('change', () => {
+    LS.set('cve.planDevs', $('plan-devs').value); LS.set('cve.planRate', $('plan-rate').value);
+    renderPace();
+  }));
   $('pace-by').addEventListener('click', e => {
     const b = e.target.closest('button[data-by]');
     if (!b || b.dataset.by === paceBy) return;

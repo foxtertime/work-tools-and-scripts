@@ -52,14 +52,16 @@
     return { inR, outR, net: outR * 5 - inR * 7, open: rows.filter(roles.isOpen).length, days, work };
   }
 
-  function simulate(n, inR, outR, asOf, inflowUntil) {
+  /* start — день, с которого закрываем (по умолчанию завтра): до него
+     задачи только поступают */
+  function simulate(n, inR, outR, asOf, inflowUntil, start) {
     if (n <= 0) return 0;
     if (outR <= 0) return null;
     let left = n;
     for (let d = 1; d <= HORIZON; d++) {
       const day = asOf + d;
       if (inflowUntil === undefined || (inflowUntil !== null && day < inflowUntil)) left += inR;
-      if (dates.isWeekend(day)) continue;
+      if (dates.isWeekend(day) || (start !== undefined && day < start)) continue;
       left -= outR;
       if (left <= EPS) return d;
     }
@@ -116,19 +118,47 @@
      каждый день до inflowUntil, закрытие по рабочим дням. inc и out —
      прибавка к накопленному на asOf; ряд кончается, когда открытых не
      осталось, или на горизонте. */
-  function project(n, inR, outR, asOf, inflowUntil, horizon) {
+  function project(n, inR, outR, asOf, inflowUntil, horizon, start) {
     const s = [];
     if (n <= 0) return s;
     let left = n, inc = 0, out = 0;
     for (let d = 1; d <= horizon; d++) {
       const day = asOf + d;
       if (inflowUntil === undefined || (inflowUntil !== null && day < inflowUntil)) { left += inR; inc += inR; }
-      if (!dates.isWeekend(day)) { const c = Math.min(outR, left); left -= c; out += c; }
+      if (!dates.isWeekend(day) && (start === undefined || day >= start)) { const c = Math.min(outR, left); left -= c; out += c; }
       if (left <= EPS) { s.push({ day, inc, out: out + left, open: 0 }); return s; }
       s.push({ day, inc, out, open: left });
     }
     return s;
   }
 
-  return { workStart, rates, simulate, need, daily, cumulative, project };
+  /* Режим «Когда начать». latestStart — самый поздний день старта (от
+     завтра до цели), при котором n открытых и новые до сканфриза stop
+     закрываются к target темпом rate в рабочий день; не успеть и со
+     старта завтра — null. Чем позже старт, тем позже конец, поэтому
+     идём от цели назад до первого подходящего дня. */
+  function fits(n, inR, rate, asOf, stop, target, start) {
+    // сканфриза нет — новые приходят всё время, как в need()
+    const d = simulate(n, inR, rate, asOf, stop === null ? undefined : stop, start);
+    return d !== null && asOf + d <= target;
+  }
+  function latestStart(n, inR, rate, asOf, stop, target) {
+    if (target <= asOf) return null;
+    for (let s = target; s > asOf; s--) if (fits(n, inR, rate, asOf, stop, target, s)) return s;
+    return null;
+  }
+  /* Сколько разработчиков по perDev задач в рабочий день нужно, чтобы со
+     старта завтра закончить к target; рабочих дней до цели нет или темп
+     нулевой — null. Оценка — из need(), дальше проверка симуляцией. */
+  function devsNeeded(n, inR, perDev, asOf, stop, target) {
+    if (n <= 0) return 0;
+    if (perDev <= 0 || target <= asOf) return null;
+    const nd = need(n, inR, asOf, stop, target);
+    if (!nd.left) return null;
+    let k = Math.max(1, Math.ceil(nd.perDay / perDev - EPS));
+    while (!fits(n, inR, k * perDev, asOf, stop, target, asOf + 1)) k++;
+    return k;
+  }
+
+  return { workStart, rates, simulate, need, daily, cumulative, project, latestStart, devsNeeded };
 }));

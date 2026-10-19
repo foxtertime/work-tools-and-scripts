@@ -113,3 +113,37 @@ test('rates: окно может кончаться раньше даты отч
   var late = pace.rates(rows, D + 9, 3, null, D + 30);   // конец после отчёта — как отчёт
   assert.deepStrictEqual([late.days, late.inR], [3, 2 / 3]);
 });
+
+test('simulate со стартом: до него задачи только копятся, закрываем с даты старта', function () {
+  assert.strictEqual(pace.simulate(10, 0, 5, D, null, D + 3), 4);  // чт и пт
+  assert.strictEqual(pace.simulate(5, 0, 5, D, null, D + 5), 7);   // старт в субботу — закрываем с понедельника
+  assert.strictEqual(pace.simulate(2, 1, 5, D, undefined, D + 3), 3);  // до старта пришло 3, в чт закрыли 5
+  assert.strictEqual(pace.simulate(10, 0, 2, D, null, D + 1), pace.simulate(10, 0, 2, D, null));
+});
+
+test('project со стартом: до старта out не растёт', function () {
+  var got = pace.project(2, 1, 5, D, undefined, 365, D + 3);
+  assert.deepStrictEqual(got.map(function (s) { return [s.day - D, s.inc, s.out, s.open]; }),
+    [[1, 1, 0, 3], [2, 2, 0, 4], [3, 3, 5, 0]]);
+});
+
+test('latestStart: самая поздняя дата старта, чтобы закончить к цели', function () {
+  assert.strictEqual(pace.latestStart(10, 0, 5, D, null, D + 4), D + 3);     // чт и пт
+  assert.strictEqual(pace.latestStart(10, 0, 5, D, null, D + 7), D + 4);     // пт и пн: выходные не в счёт
+  assert.strictEqual(pace.latestStart(4, 1, 5, D, D + 3, D + 4), D + 3);     // +2 новых до сканфриза
+  assert.strictEqual(pace.latestStart(4, 1, 5, D, null, D + 4), D + 3);      // без сканфриза новые идут до конца: к пт 8
+  assert.strictEqual(pace.latestStart(4, 1, 5, D, D + 2, D + 4), D + 4);     // сканфриз в среду — 1 новая, 5 за пт
+  assert.strictEqual(pace.latestStart(100, 0, 5, D, null, D + 4), null);     // не успеть и со стартом завтра
+  assert.strictEqual(pace.latestStart(10, 0, 0, D, null, D + 4), null);      // темп нулевой
+  assert.strictEqual(pace.latestStart(10, 0, 5, D, null, D), null);          // цель не позже даты отчёта
+  assert.strictEqual(pace.latestStart(0, 1, 5, D, null, D + 4), D + 4);      // делать нечего
+});
+
+test('devsNeeded: сколько людей, чтобы со старта завтра успеть к цели', function () {
+  assert.strictEqual(pace.devsNeeded(10, 0, 1, D, null, D + 4), 3);          // 4 рабочих дня, 10 задач
+  assert.strictEqual(pace.devsNeeded(10, 1, 1, D, null, D + 4), 4);          // и 4 новых
+  assert.strictEqual(pace.devsNeeded(0, 0, 1, D, null, D + 4), 0);           // делать нечего
+  assert.strictEqual(pace.devsNeeded(10, 0, 0, D, null, D + 4), null);       // темп на одного нулевой
+  assert.strictEqual(pace.devsNeeded(10, 0, 1, D + 4, null, D + 6), null);   // до цели одни выходные
+  assert.strictEqual(pace.devsNeeded(10, 0, 1, D, null, D), null);
+});
