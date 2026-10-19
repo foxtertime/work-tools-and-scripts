@@ -673,7 +673,6 @@
   function renderPeople(WIN) {
     const devs = count(recs, r => r.devKey);
     const devColor = new Map(devs.map(([d], i) => [d, i < 8 ? `--c${i + 1}` : '--sev-none']));
-    legend('statleg', [{ k: 'Готово', c: '--ok' }, { k: 'В работе', c: '--accent' }, { k: 'Ожидает ревью', c: '--c7' }, { k: 'На паузе', c: '--warn' }, { k: 'Есть проблема / Нужна доработка', c: '--bad' }]);
     const doneKeys = recs.filter(r => r.taken && r.done);
     const measKeys = roles.measureOrder(doneKeys.map(r => r.measureN));
     const ppl = $('people'); ppl.replaceChildren();
