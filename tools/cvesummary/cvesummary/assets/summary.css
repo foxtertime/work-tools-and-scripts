@@ -143,9 +143,11 @@ h2{font-family:var(--f-display);font-weight:500;font-size:18px;margin:0;letter-s
 .hbars .val{text-align:right;color:var(--muted)}
 /* компоненты — все; выше ~12 строк список листается внутри карточки */
 #components{max-height:340px;overflow-y:auto;overscroll-behavior:contain;padding-right:6px;scrollbar-width:thin}
-.track{display:flex;gap:2px;height:14px}
-.track span{display:block;height:100%;min-width:2px}
-.track span:last-child{border-radius:0 4px 4px 0}
+/* полоса как в разрезах блока CVE: дорожка во всю ширину, на ней —
+   скруглённая полоса длиной по значению, сегменты разбивки через зазор */
+.track{display:flex;height:10px;border-radius:3px;background:var(--bg);overflow:hidden}
+.track > span{display:flex;gap:2px;height:100%;border-radius:3px;overflow:hidden}
+.track > span > span{display:block;height:100%;min-width:2px}
 .fill-accent{background:var(--accent)}
 
 
@@ -274,12 +276,12 @@ img{max-width:100%}
 /* подсветка того, на что указывает курсор: в составной полосе или графике
    блок под курсором остаётся ярким, соседи приглушаются; одиночная полоса
    светлеет; на линейном графике — направляющая и точки дня */
-.hl,.mixbar span,.sevstrip span,.pbar span,.hbars .track span,.cve-rows .b,.kv .b{transition:opacity .1s}
+.hl,.mixbar span,.sevstrip span,.pbar span,.hbars .track span span,.cve-rows .b,.kv .b{transition:opacity .1s}
 .hlg:has(.hl:hover) .hl:not(:hover),
 .mixbar:has(span:hover) span:not(:hover),
 .sevstrip:has(span:hover) span:not(:hover),
 .pbar:has(span:hover) span:not(:hover),
-.hbars:has(.track span:hover) .track span:not(:hover),
+.hbars:has(.track span span:hover) .track span span:not(:hover),
 .cve-rows:has(.b:hover) .b:not(:hover),
 .kv:has(.b:hover) .b:not(:hover){opacity:.45}
 .mini i{transition:filter .1s}

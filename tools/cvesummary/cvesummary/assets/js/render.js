@@ -47,11 +47,11 @@
     if (!items.length) { box.append(el('div', 'empty', 'Нет данных')); return; }
     for (const it of items) {
       box.append(el('div', 'lab', it.label));
-      const tr = el('div', 'track');
+      const tr = el('div', 'track'), w = el('span'); w.style.width = (it.n / max * 100) + '%'; tr.append(w);
       const segs = it.segs || [{ n: it.n, color: opts.color || '--accent', name: '' }];
       for (const s of segs) { if (!s.n) continue;
-        const sp = el('span'); sp.style.flexBasis = (s.n / max * 100) + '%'; sp.style.background = css(s.color);
-        sp.dataset.tip = `${it.label}${s.name ? ' · ' + s.name : ''}: ${s.n}`; tr.append(sp); }
+        const sp = el('span'); sp.style.flexGrow = s.n; sp.style.background = css(s.color);
+        sp.dataset.tip = `${it.label}${s.name ? ' · ' + s.name : ''}: ${s.n}`; w.append(sp); }
       box.append(tr);
       box.append(el('div', 'val num', it.valText ?? String(it.n)));
     }
