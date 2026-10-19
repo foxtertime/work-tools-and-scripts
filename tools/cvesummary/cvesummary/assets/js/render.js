@@ -228,16 +228,19 @@
      (накопленные итоги) или burn-down (остаток); выбор помнится */
   let paceBy = ['flow', 'up', 'down'].includes(LS.get('cve.paceBy')) ? LS.get('cve.paceBy') : 'flow', paceCtx = null;
   const BURN_HORIZON = 365, BURN_STEP = 3;
+  /* третий элемент пункта — спрятать, но оставить место: легенда в обоих
+     режимах одной высоты */
   function paceLegend(items) {
     const leg = $('pace-leg'); leg.replaceChildren();
-    for (const [label, style] of items) { const s = el('span'); const i = el('i'); i.setAttribute('style', style); s.append(i, label); leg.append(s); }
+    for (const [label, style, hide] of items) { const s = el('span'); const i = el('i'); i.setAttribute('style', style); s.append(i, label); if (hide) { s.style.visibility = 'hidden'; s.setAttribute('aria-hidden', 'true'); } leg.append(s); }
   }
   function drawPaceChart() {
     if (!paceCtx) return;
     for (const b of $('pace-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === paceBy));
     if (paceBy === 'flow') {
       paceLegend([['поступило', 'background:var(--sev-imp)'], ['закрыто', 'background:var(--ok)'], ['по дням', 'background:var(--muted);height:1px;opacity:.6'], ['среднее за 7 дней', 'background:var(--muted)'],
-        ...(paceCtx.plan ? [['симуляция', 'background:repeating-linear-gradient(90deg,var(--muted) 0 5px,transparent 5px 8px)']] : []), ['окно расчёта', 'background:var(--accent-soft);height:10px;vertical-align:-1px']]);
+        ['окно расчёта', 'background:var(--accent-soft);height:10px;vertical-align:-1px'],
+        ['симуляция', 'background:repeating-linear-gradient(90deg,var(--muted) 0 5px,transparent 5px 8px)', !paceCtx.plan]]);
       $('pace-chart').setAttribute('aria-label', 'Поступление и закрытие задач по дням');
       drawPace(FIRST === null ? [] : pace.daily(recs, FIRST, AS_OF), paceCtx.WINDOW, paceCtx.stop, paceCtx.target, paceCtx.plan);
     } else drawBurn(paceBy);
@@ -252,7 +255,7 @@
     const legendFor = forecast => paceLegend(up
       ? [['всего поступило', 'background:var(--sev-imp)'], ['всего закрыто', 'background:var(--ok)'], [forecast, 'background:repeating-linear-gradient(90deg,var(--muted) 0 5px,transparent 5px 8px)']]
       : [['открыто', 'background:var(--accent)'], [forecast, 'background:repeating-linear-gradient(90deg,var(--accent) 0 5px,transparent 5px 8px)'],
-        ...(paceCtx.plan ? [] : [['идеально к цели', 'background:repeating-linear-gradient(90deg,var(--muted) 0 2px,transparent 2px 5px)']])]);
+        ['идеально к цели', 'background:repeating-linear-gradient(90deg,var(--muted) 0 2px,transparent 2px 5px)', !!paceCtx.plan]]);
     const plan = paceCtx.plan, word = plan ? 'симуляция' : 'прогноз';
     legendFor(word);
     host.setAttribute('aria-label', up ? 'Burn-up: всего поступило и всего закрыто по дням' : 'Burn-down: открытые задачи по дням');
@@ -656,7 +659,7 @@
      заданное: разработчиков × задач в рабочий день на одного, со дня
      старта; до старта задачи только копятся. Остальная страница — по факту. */
   let paceMode = LS.get('cve.paceMode') === 'plan' ? 'plan' : 'fact';
-  function renderPlan(R, WINDOW, stop, target) {
+  function renderPlan(R, WINDOW, stop, target, shown) {
     /* по умолчанию — сколько людей закрывали задачи в период темпа и их
        средний темп; никто не закрывал — 1 человек по 1 задаче */
     const active = new Set(recs.filter(r => r.done && r.devKey && r.endD !== null && r.endD >= WINDOW.from && r.endD <= WINDOW.to).map(r => r.devKey)).size;
@@ -674,16 +677,18 @@
     const people = `${devs} ${plural(devs, 'разработчик', 'разработчика', 'разработчиков')}`;
     const f2 = x => String(Math.round(x * 100) / 100).replace('.', ',');  // темп — до сотых, как в поле
 
-    $('pace-sub').textContent = `На ${fmt(AS_OF)} · симуляция: ${people} по ${f2(rate)} — ${f2(P)} в рабочий день; поступление — по факту с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}`;
-    $('pace-note').textContent = `Симуляция на дату отчёта ${fmt(AS_OF)}: до старта задачи только поступают, со старта закрываем заданным темпом по рабочим дням, Пн–Пт, без учёта праздников. Новые приходят каждый календарный день в темпе периода с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)} (если задан сканфриз — до него). «Начать не позднее» — самый поздний день старта, при котором всё закрывается к цели. Разработчики и остальные блоки страницы считаются по фактическим данным.`;
-    $('p-out').textContent = f2(P); $('p-out-l').textContent = 'закрываем в рабочий день по плану';
-    $('p-out').parentElement.dataset.tip = `${people} × ${f2(rate)} в рабочий день`;
-    const wk = Math.round(R.inR * 7 - P * 5), pn = $('p-net');
-    pn.textContent = (wk > 0 ? '+' : wk < 0 ? '−' : '') + Math.abs(wk); pn.className = 'v ' + (wk < 0 ? 'ok' : wk > 0 ? 'bad' : '');
-    $('p-net-l').textContent = wk > 0 ? 'бэклог растёт за неделю работы' : wk < 0 ? 'бэклог сокращается за неделю работы' : 'бэклог не меняется за неделю работы';
-    pn.parentElement.dataset.tip = `За неделю работы по плану: придёт ≈ ${f1(R.inR * 7)}, закроем ${f1(P * 5)}`;
+    $('pace-sub-plan').textContent = `На ${fmt(AS_OF)} · симуляция: ${people} по ${f2(rate)} — ${f2(P)} в рабочий день; поступление — по факту с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}`;
+    $('pace-note-plan').textContent = `Симуляция на дату отчёта ${fmt(AS_OF)}: до старта задачи только поступают, со старта закрываем заданным темпом по рабочим дням, Пн–Пт, без учёта праздников. Новые приходят каждый календарный день в темпе периода с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)} (если задан сканфриз — до него). «Начать не позднее» — самый поздний день старта, при котором всё закрывается к цели. Разработчики и остальные блоки страницы считаются по фактическим данным.`;
+    if (shown) {
+      $('p-out').textContent = f2(P); $('p-out-l').textContent = 'по плану в рабочий день';
+      $('p-out').parentElement.dataset.tip = `${people} × ${f2(rate)} в рабочий день`;
+      const wk = Math.round(R.inR * 7 - P * 5), pn = $('p-net');
+      pn.textContent = (wk > 0 ? '+' : wk < 0 ? '−' : '') + Math.abs(wk); pn.className = 'v ' + (wk < 0 ? 'ok' : wk > 0 ? 'bad' : '');
+      $('p-net-l').textContent = 'бэклог за неделю по плану';  // знак и цвет — куда
+      pn.parentElement.dataset.tip = `За неделю работы по плану: придёт ≈ ${f1(R.inR * 7)}, закроем ${f2(P * 5)}`;
+    }
 
-    const fc = $('forecast');
+    const fc = $('forecast-plan'); fc.replaceChildren();
     const line = (main, title, cls, text, sub) => { const r = el('div', main ? 'fc-main' : 'fc-row'); r.append(el('div', main ? 'e' : 't', title), el('div', cls, text), el('div', 's', sub)); fc.append(r); };
     const wd = (a, b) => wdays(dates.workdays(a, b));
     /* цель дальше горизонта симуляции (10 лет) не считаем: огромный год в
@@ -733,8 +738,7 @@
     const proj = R.open > 0 ? pace.project(R.open, R.inR, P, AS_OF, inflow, start - AS_OF + BURN_HORIZON, start) : [];
     /* ось симуляции — до конца ряда и до цели, если она в горизонте */
     const pend = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, noTarget ? AS_OF : target);
-    paceCtx = { R, stop, target, WINDOW, plan: { P, start: R.open > 0 ? start : null, proj, end: pend } };
-    drawPaceChart();
+    return { P, start: R.open > 0 ? start : null, proj, end: pend };
   }
 
   function renderPace() {
@@ -772,7 +776,6 @@
     if (!sd.value) sd.value = LS.get('cve.stopDate');
     if (!td.value) td.value = LS.get('cve.targetDate') || dates.isoOf(AS_OF + 30);
     const stop = dates.dayOf(sd.value), target = dates.dayOf(td.value);
-    if (paceMode === 'plan') { renderPlan(R, WINDOW, stop, target); return WINDOW; }
     /* row — из образца, дни вместо миллисекунд */
     const row = (title, d, sub, main, n) => {
       const r = el('div', main ? 'fc-main' : 'fc-row');
@@ -808,7 +811,11 @@
       r.append(...needText(pace.need(R.open, R.inR, AS_OF, stop, target), R, stop, target));
       fc.append(r);
     }
-    paceCtx = { R, stop, target, WINDOW };
+    /* оба режима собираются всегда — видимый один, другой держит место */
+    const plan = paceMode === 'plan', pctx = renderPlan(R, WINDOW, stop, target, plan);
+    [['pace-sub', !plan], ['pace-sub-plan', plan], ['forecast', !plan], ['forecast-plan', plan], ['pace-note', !plan], ['pace-note-plan', plan]]
+      .forEach(([id, on]) => { $(id).classList.toggle('off', !on); $(id).setAttribute('aria-hidden', String(!on)); });
+    paceCtx = { R, stop, target, WINDOW, plan: plan ? pctx : null };
     drawPaceChart();
     return WINDOW;
   }

@@ -91,7 +91,7 @@
               <button type="button" data-by="plan" aria-pressed="false">Когда начать</button>
             </div>
           </div>
-          <p class="sub" id="pace-sub">—</p>
+          <div class="stack"><p class="sub" id="pace-sub">—</p><p class="sub off" id="pace-sub-plan" aria-hidden="true"></p></div>
         </div>
       </div>
       <div class="pace-body">
@@ -123,10 +123,10 @@
             <label for="plan-devs" class="plan">Разработчиков<input type="number" id="plan-devs" min="1" step="1" inputmode="numeric"></label>
             <label for="plan-rate" class="plan">Задач в день на одного<input type="number" id="plan-rate" min="0.01" step="any" inputmode="decimal"></label>
           </div>
-          <div class="fc" id="forecast"></div>
+          <div class="stack fc-stack"><div class="fc" id="forecast"></div><div class="fc off" id="forecast-plan" aria-hidden="true"></div></div>
         </div>
       </div>
-      <p class="pace-note" id="pace-note"></p>
+      <div class="stack"><p class="pace-note" id="pace-note"></p><p class="pace-note off" id="pace-note-plan" aria-hidden="true"></p></div>
     </section>
 
     <section class="card wide" id="attention">

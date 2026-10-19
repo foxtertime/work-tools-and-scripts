@@ -225,8 +225,13 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .pace-stats{grid-column:1;grid-row:1}
 .pace-chart{grid-column:1;grid-row:2}
 .pace-ctl{grid-column:2;grid-row:1;align-self:end}
-.pace-right .fc{grid-column:2;grid-row:2}
-@media (max-width:900px){.pace-body{grid-template-columns:minmax(0,1fr)}.pace-stats,.pace-chart,.pace-ctl,.pace-right .fc{grid-column:auto;grid-row:auto}}
+.pace-right .fc-stack{grid-column:2;grid-row:2}
+@media (max-width:900px){.pace-body{grid-template-columns:minmax(0,1fr)}.pace-stats,.pace-chart,.pace-ctl,.pace-right .fc-stack{grid-column:auto;grid-row:auto}}
+/* тексты обоих режимов лежат в одной ячейке, невидимый держит место:
+   высота — по большему, и при переключении блок не прыгает */
+.stack{display:grid;min-width:0}
+.stack > *{grid-area:1/1;min-width:0}
+.stack > .off{visibility:hidden}
 /* лишняя высота прогноза уходит в главную строку */
 .pace-right .fc-main{flex:1 0 auto}
 .pace-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
