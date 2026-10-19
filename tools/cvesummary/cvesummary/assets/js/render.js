@@ -71,6 +71,11 @@
   const closedWithHours = list => list.filter(r => r.done && r.endD !== null && r.hours !== null).map(r => r.hours);
   const SEV_KEYS = roles.sevOrder(recs.map(r => r.sevN));
   const SEV = SEV_KEYS.map(k => ({ k, c: sevColor(k) }));
+  /* меры — в порядке справочника, цвета общие для разреза мер и «Компонентов» */
+  const MEAS_KEYS = roles.measureOrder(recs.map(r => r.measureN));
+  /* 11 разных цветов — по числу мер в справочнике; чужие меры идут по кругу */
+  const MEAS_PALETTE = ['--accent', '--c3', '--c4', '--c7', '--c5', '--c2', '--c1', '--c6', '--c8', '--sev-crit', '--muted'];
+  const measColor = k => (k === roles.NO_MEASURE ? '--sev-none' : MEAS_PALETTE[MEAS_KEYS.filter(x => x !== roles.NO_MEASURE).indexOf(k) % MEAS_PALETTE.length]);
   const allDays = recs.flatMap(r => [r.tdateD, r.startD, r.endD]).filter(d => d !== null && d <= AS_OF);
   const FIRST = allDays.length ? minOf(allDays, Infinity) : null;
   const statusKey = r => String(r.status || '').trim() || (r.taken ? 'Без статуса' : 'Не взята');
@@ -296,9 +301,7 @@
     const strip = $('sevstrip'); strip.replaceChildren();
     for (const s of sevC) { if (!s.recs.length) continue; const sp = el('span'); sp.style.flexGrow = s.recs.length; sp.style.background = css(s.c); sp.dataset.tip = `${s.k}: ${s.recs.length} (${Math.round(s.recs.length / N * 100)}%)`; strip.append(sp); }
     statTable('sevrows', 'Критичность', sevC);
-    const palette = ['--accent', '--c3', '--c4', '--c7', '--c5', '--c2'];
-    const keys = roles.measureOrder(recs.map(r => r.measureN)).filter(k => k !== roles.NO_MEASURE);
-    const mg = keys.map((k, i) => ({ k, c: palette[i % palette.length], recs: recs.filter(r => r.measureN === k) }));
+    const mg = MEAS_KEYS.filter(k => k !== roles.NO_MEASURE).map(k => ({ k, c: measColor(k), recs: recs.filter(r => r.measureN === k) }));
     statTable('measrows', 'Мера', mg);
     const st = $('measstrip'); st.replaceChildren(); const tot = mg.reduce((a, g) => a + g.recs.length, 0);
     for (const g of mg) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${tot ? Math.round(g.recs.length / tot * 100) : 0}%)`; st.append(sp); }
@@ -351,17 +354,19 @@
   const VERDICT_COLOR = { fixed: '--ok', affected: '--bad', 'under investigation': '--warn', 'fix deferred': '--c2', 'will not fix': '--c5', 'not affected': '--c1' };
   const verdictColor = k => VERDICT_COLOR[k.toLowerCase()] || '--sev-none';
   /* разбивка «Компонентов»: по критичности или по вердикту; выбор помнится */
-  let compBy = LS.get('cve.compBy') === 'verdict' ? 'verdict' : 'sev';
+  const COMP_BY = {
+    sev: { of: r => r.sevN, cats: () => SEV, sub: 'критичности' },
+    verdict: { of: verdictOf, cats: () => count(recs, verdictOf).map(([k]) => ({ k, c: verdictColor(k) })).sort((a, b) => (a.k === NO_VERDICT) - (b.k === NO_VERDICT)), sub: 'вердикту RHEL (RHEL state)' },
+    measure: { of: r => r.measureN, cats: () => MEAS_KEYS.map(k => ({ k, c: measColor(k) })), sub: 'принятой мере' },
+  };
+  let compBy = COMP_BY[LS.get('cve.compBy')] ? LS.get('cve.compBy') : 'sev';
 
   function renderComps() {
-    const cats = compBy === 'verdict'
-      ? count(recs, verdictOf).map(([k]) => ({ k, c: verdictColor(k) })).sort((a, b) => (a.k === NO_VERDICT) - (b.k === NO_VERDICT))
-      : SEV;
-    const of = compBy === 'verdict' ? verdictOf : r => r.sevN;
+    const mode = COMP_BY[compBy], cats = mode.cats(), of = mode.of;
     const comps = count(recs, r => r.comp);
     hbars('components', comps.map(([c, n]) => ({ label: c, n, segs: cats.map(s => ({ name: s.k, color: s.c, n: recs.filter(r => r.comp === c && of(r) === s.k).length })) })), comps.length ? comps[0][1] : 1);
     legend('compleg', cats);
-    $('comp-sub').textContent = `Сколько CVE приходится на пакет, с разбивкой по ${compBy === 'verdict' ? 'вердикту RHEL (RHEL state)' : 'критичности'}. Все пакеты, по убыванию; список листается.`;
+    $('comp-sub').textContent = `Сколько CVE приходится на пакет, с разбивкой по ${mode.sub}. Все пакеты, по убыванию; список листается.`;
     for (const b of $('comp-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === compBy));
   }
 
