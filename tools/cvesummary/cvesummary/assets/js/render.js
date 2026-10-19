@@ -631,11 +631,17 @@
     const ready = recs.filter(r => r.open && r.reasons.length).length;
     const fc = $('forecast'); fc.replaceChildren();
     $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}: ${days(R.days)}, из них ${wdays(R.work)}` + (WINDOW.from > wa ? ` — начало прижато к началу работы` : '');
-    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Закрытая задача — со статусом «Готов» и заполненным End date. Новые задачи приходят каждый календарный день (до сканфриза — в текущем темпе), закрываем по рабочим дням, Пн–Пт, без учёта праздников. Баланс — за неделю.`;
+    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Закрытая задача — со статусом «Готов» и заполненным End date. Новые задачи приходят каждый календарный день (до сканфриза — в текущем темпе), закрываем по рабочим дням, Пн–Пт, без учёта праздников.`;
+    /* средние — за период, в подсказке — сколько это задач; баланс — сколько
+       реально пришло минус закрыто за выбранный период */
+    const inN = Math.round(R.inR * R.days), outN = Math.round(R.outR * R.work), bal = inN - outN;
     $('p-in').textContent = f1(R.inR);
+    $('p-in').parentElement.dataset.tip = `За период поступило ${inN} за ${days(R.days)}`;
     $('p-out').textContent = f1(R.outR);
-    const pn = $('p-net'); pn.textContent = (R.net > 0 ? '−' : R.net < 0 ? '+' : '') + f1(Math.abs(R.net)); pn.className = 'v ' + (R.net > 0 ? 'ok' : R.net < 0 ? 'bad' : '');
-    $('p-net-l').textContent = R.net > 0 ? 'бэклог сокращается за неделю' : R.net < 0 ? 'бэклог растёт за неделю' : 'бэклог не меняется';
+    $('p-out').parentElement.dataset.tip = `За период закрыто ${outN} за ${wdays(R.work)}`;
+    const pn = $('p-net'); pn.textContent = (bal > 0 ? '+' : bal < 0 ? '−' : '') + Math.abs(bal); pn.className = 'v ' + (bal < 0 ? 'ok' : bal > 0 ? 'bad' : '');
+    $('p-net-l').textContent = bal > 0 ? 'бэклог вырос за период' : bal < 0 ? 'бэклог сократился за период' : 'бэклог не изменился за период';
+    pn.parentElement.dataset.tip = `Поступило ${inN}, закрыто ${outN}`;
     $('p-open').textContent = R.open;
     const sd = $('stop-date'), td = $('target-date');
     if (!sd.value) sd.value = LS.get('cve.stopDate');
