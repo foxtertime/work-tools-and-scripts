@@ -640,7 +640,8 @@
     $('p-out').textContent = f1(R.outR);
     $('p-out').parentElement.dataset.tip = `За период закрыто ${outN} за ${wdays(R.work)}`;
     const pn = $('p-net'); pn.textContent = (bal > 0 ? '+' : bal < 0 ? '−' : '') + Math.abs(bal); pn.className = 'v ' + (bal < 0 ? 'ok' : bal > 0 ? 'bad' : '');
-    $('p-net-l').textContent = bal > 0 ? 'бэклог вырос за период' : bal < 0 ? 'бэклог сократился за период' : 'бэклог не изменился за период';
+    const span = `за ${days(R.days)}`;
+    $('p-net-l').textContent = bal > 0 ? `бэклог вырос ${span}` : bal < 0 ? `бэклог сократился ${span}` : `бэклог не изменился ${span}`;
     pn.parentElement.dataset.tip = `Поступило ${inN}, закрыто ${outN}`;
     $('p-open').textContent = R.open;
     const sd = $('stop-date'), td = $('target-date');
