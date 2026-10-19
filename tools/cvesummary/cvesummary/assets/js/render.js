@@ -750,14 +750,25 @@
            как график поступления, только меньше */
         const sh = el('div', 'tl dev-tl'); c4.append(sh);
         card.append(c4); ppl.append(card);
-        const first = minOf(starts, Infinity);
+        /* ось у всех личных графиков общая — от начала работы, чтобы один
+           день стоял на одной вертикали; прокрутка связана (см. ниже) */
+        const first = START !== null ? START : minOf(starts, Infinity);
         const mcats = measKeys.map(k => ({ k, c: measColor(k) }));
-        stackChart(sh, daysOf(done.map(r => [r.endD, r.measureN]), mcats, first), mcats, 'закрыто', true, { height: 130, key: 'dev:' + d, window: { from: AS_OF - WIN + 1, to: AS_OF } });
+        stackChart(sh, daysOf(done.map(r => [r.endD, r.measureN]), mcats, first), mcats, 'закрыто', true, { height: 130, key: 'dev:all', window: { from: AS_OF - WIN + 1, to: AS_OF } });
         c4.append(el('div', 'cap', `закрыто по дням с ${fmt(first)} по ${fmt(AS_OF)}`));
         continue;
       }
       card.append(c4); ppl.append(card);
     }
+    /* личные графики листаются вместе: прокрутка одного двигает остальные */
+    const boxes = [...ppl.querySelectorAll('.dev-tl .tl-scroll')];
+    let syncing = false;
+    boxes.forEach(b => b.addEventListener('scroll', () => {
+      if (syncing) return;
+      syncing = true;
+      boxes.forEach(o => { if (o !== b && o.scrollLeft !== b.scrollLeft) { o.scrollLeft = b.scrollLeft; timeline.sync(o); } });
+      syncing = false;
+    }, { passive: true }));
     const names = [...devColor.keys()];
     const cats = names.slice(0, 8).map(k => ({ k, c: devColor.get(k) }));
     if (names.length > 8) cats.push({ k: 'Другие', c: '--sev-none' });
