@@ -33,16 +33,17 @@
           <div class="grp-h"><b>Состояние</b></div>
           <div class="tiles">
             <div class="kpi" style="--k:#5CC48A"><span class="v" id="k-closed">—</span><span class="l">готово</span></div>
-            <div class="kpi" style="--k:#FF8A6B"><span class="v" id="k-work">—</span><span class="l" id="k-work-l">в работе</span></div>
+            <div class="kpi" style="--k:#5DB3D6"><span class="v" id="k-work">—</span><span class="l" id="k-work-l">в работе</span></div>
             <div class="kpi" style="--k:#4A5B6A"><span class="v" id="k-free">—</span><span class="l">не взято</span></div>
           </div>
         </div>
         <div class="grp">
           <div class="grp-h"><b>Можно закрыть</b><span id="k-ready">—</span></div>
-          <div class="tiles">
-            <div class="kpi" style="--k:#BFE3F2"><span class="v" id="k-fixed">—</span><span class="l">фикс в RHEL (Fixed)</span></div>
-            <div class="kpi" style="--k:#7FC6E4"><span class="v" id="k-own">—</span><span class="l">есть свой патч (P = +)</span></div>
-            <div class="kpi" style="--k:#3E9CC4"><span class="v" id="k-out">—</span><span class="l">версия вне диапазона (D = +)</span></div>
+          <div class="tiles four">
+            <div class="kpi" style="--k:#BFE3F2"><span class="v" id="k-fixed">—</span><span class="l">фикс в RHEL</span></div>
+            <div class="kpi" style="--k:#7FC6E4"><span class="v" id="k-own">—</span><span class="l">устранено ранее (P&nbsp;=&nbsp;+)</span></div>
+            <div class="kpi" style="--k:#3E9CC4"><span class="v" id="k-out">—</span><span class="l">версия вне диапазона (D&nbsp;=&nbsp;+)</span></div>
+            <div class="kpi" style="--k:#9AA9D6"><span class="v" id="k-dup">—</span><span class="l">дубликат</span></div>
           </div>
         </div>
         <div class="grp">
@@ -83,26 +84,35 @@
     <section class="card wide" id="pace">
       <div class="pace-head">
         <div><h2>Темп и прогноз</h2><p class="sub" id="pace-sub">—</p></div>
-        <div class="pace-ctl">
-          <label for="stop-date">Сканфриз<input type="date" id="stop-date"></label>
-          <label for="target-date">Хотим закончить к<input type="date" id="target-date"></label>
-          <label for="pace-win">Темп за<select id="pace-win"><option value="7">7 дней</option><option value="14" selected>14 дней</option><option value="30">30 дней</option></select></label>
-        </div>
       </div>
       <div class="pace-body">
         <div class="pace-left">
           <div class="pace-stats">
             <div class="ps"><span class="v" id="p-in">—</span><span class="l">поступает в день</span></div>
-            <div class="ps"><span class="v" id="p-out">—</span><span class="l">закрывается в день</span></div>
-            <div class="ps"><span class="v" id="p-net">—</span><span class="l" id="p-net-l">баланс в день</span></div>
+            <div class="ps"><span class="v" id="p-out">—</span><span class="l">закрывается в рабочий день</span></div>
+            <div class="ps"><span class="v" id="p-net">—</span><span class="l" id="p-net-l">баланс за неделю</span></div>
             <div class="ps"><span class="v" id="p-open">—</span><span class="l">открыто сейчас</span></div>
           </div>
           <div class="pace-chart">
-            <div class="pace-leg"><span><i style="background:var(--sev-imp)"></i>поступило</span><span><i style="background:var(--ok)"></i>закрыто</span><span><i style="background:var(--muted);height:1px;opacity:.6"></i>по дням</span><span><i style="background:var(--muted)"></i>среднее за 7 дней</span><span><i style="background:var(--accent-soft);height:10px;vertical-align:-1px"></i>окно расчёта</span></div>
+            <div class="pace-chart-h">
+              <div class="seg" role="group" aria-label="Вид графика" id="pace-by">
+                <button type="button" data-by="flow" aria-pressed="true">Поток</button>
+                <button type="button" data-by="up" aria-pressed="false">Burn-up</button>
+                <button type="button" data-by="down" aria-pressed="false">Burn-down</button>
+              </div>
+            </div>
             <div class="tl pace-tl" id="pace-chart" role="img" aria-label="Поступление и закрытие задач по дням"></div>
+            <div class="pace-leg" id="pace-leg"></div>
           </div>
         </div>
-        <div class="fc" id="forecast"></div>
+        <div class="pace-right">
+          <div class="pace-ctl">
+            <label for="stop-date">Сканфриз<input type="date" id="stop-date"></label>
+            <label for="target-date">Хотим закончить к<input type="date" id="target-date"></label>
+            <label for="pace-win">Темп за<select id="pace-win"><option value="7">7 дней</option><option value="14" selected>14 дней</option><option value="30">30 дней</option><option value="all">Весь период</option></select></label>
+          </div>
+          <div class="fc" id="forecast"></div>
+        </div>
       </div>
       <p class="pace-note" id="pace-note"></p>
     </section>
@@ -117,9 +127,14 @@
     </section>
 
     <section class="card wide" id="closable">
-      <h2>Можно закрыть<span class="cnt" id="close-n"></span></h2>
-      <p class="sub">Открытые задачи, по которым решение уже есть. Одна задача может иметь несколько оснований.</p>
-      <div class="hbars" id="close-why"></div>
+      <div class="cve-grid">
+        <div class="cve-sum">
+          <h2>Можно закрыть<span class="cnt" id="close-n"></span></h2>
+          <p class="sub" style="margin:0">открытые задачи, по которым решение уже есть; одна задача может иметь несколько оснований</p>
+          <div class="sevstrip" id="close-strip"></div>
+        </div>
+        <div class="cve-rows" id="close-why"></div>
+      </div>
       <div class="tablewrap"><table>
         <thead><tr><th>CVE</th><th>Компонент</th><th>Критичность</th><th>CVSS</th><th>Основание</th><th>Статус</th><th>Разработчик</th><th>Часов</th></tr></thead>
         <tbody id="close-body"></tbody>
@@ -127,34 +142,63 @@
     </section>
 
     <section class="card wide">
-      <h2>Компоненты</h2>
-      <p class="sub">Сколько CVE приходится на пакет, с разбивкой по критичности. Первые 12.</p>
+      <div class="card-h">
+        <h2>Компоненты</h2>
+        <div class="seg" role="group" aria-label="Разбивка" id="comp-by">
+          <button type="button" data-by="sev" aria-pressed="true">Критичность</button>
+          <button type="button" data-by="verdict" aria-pressed="false">Вердикт RHEL</button>
+          <button type="button" data-by="measure" aria-pressed="false">Принятая мера</button>
+        </div>
+      </div>
+      <p class="sub" id="comp-sub">Сколько CVE приходится на пакет, с разбивкой по критичности. Все пакеты, по убыванию; список листается.</p>
       <div class="sevlegend comp-leg" id="compleg"></div>
       <div class="hbars" id="components"></div>
     </section>
 
-    <section class="card">
-      <h2>Состояние в RHEL</h2>
-      <p class="sub">Поле RHEL state</p>
-      <div class="hbars" id="rhel"></div>
+    <section class="card wide states">
+      <div class="cve-grid">
+        <div class="cve-sum">
+          <h2>Состояние в RHEL</h2>
+          <p class="sub" style="margin:0">поле RHEL state</p>
+          <div class="sevstrip" id="rhelstrip"></div>
+        </div>
+        <div class="cve-rows" id="rhel"></div>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>Статус задач</h2>
-      <p class="sub">Статус у разработчика</p>
-      <div class="hbars" id="devstatus"></div>
+    <section class="card wide states">
+      <div class="cve-grid">
+        <div class="cve-sum">
+          <h2>Статус задач</h2>
+          <p class="sub" style="margin:0">статус у разработчика</p>
+          <div class="sevstrip" id="statusstrip"></div>
+        </div>
+        <div class="cve-rows" id="devstatus"></div>
+      </div>
     </section>
 
     <section class="card wide">
-      <h2>Поступление задач по неделям</h2>
-      <p class="sub">По полю Task date, неделя начинается в понедельник, с разбивкой по критичности (RHEL severity)</p>
+      <div class="card-h">
+        <h2>Поступление задач</h2>
+        <div class="seg" role="group" aria-label="Шаг" id="inflow-by">
+          <button type="button" data-by="day" aria-pressed="false">По дням</button>
+          <button type="button" data-by="week" aria-pressed="true">По неделям</button>
+        </div>
+      </div>
+      <p class="sub" id="weeks-sub">По полю Task date, неделя начинается в понедельник, с разбивкой по критичности (RHEL severity)</p>
       <div class="sevlegend comp-leg" id="weekleg"></div>
       <div class="tl" id="weeks" role="img" aria-label="Количество задач по неделям"></div>
     </section>
 
     <section class="card wide">
-      <h2>Разработчики</h2>
-      <p class="sub">Сжигание по неделям: задачи со статусом «Готов» по End date, с разбивкой по разработчикам</p>
+      <div class="card-h">
+        <h2>Разработчики</h2>
+        <div class="seg" role="group" aria-label="Шаг" id="burn-by">
+          <button type="button" data-by="day" aria-pressed="false">По дням</button>
+          <button type="button" data-by="week" aria-pressed="true">По неделям</button>
+        </div>
+      </div>
+      <p class="sub">Сжигание: задачи со статусом «Готов» по End date, с разбивкой по разработчикам</p>
       <div class="sevlegend comp-leg" id="burnleg"></div>
       <div class="tl" id="burn" role="img" aria-label="Закрытые задачи по неделям и разработчикам"></div>
       <div class="sevlegend comp-leg" id="statleg"></div>
@@ -177,7 +221,7 @@
       <div><dt>Не взято:</dt> <dd>разработчик не назначен.</dd></div>
       <div><dt>Требует внимания:</dt> <dd>«Есть проблема» или «Нужна доработка».</dd></div>
       <div><dt>Часы:</dt> <dd>в рабочий день разработчика его 8 часов делятся поровну между задачами, которые на нём висят — от Start date до End date включительно, у открытых до даты отчёта. Выходной рабочий, если в этот день он взял или закрыл задачу. Часы задачи — сумма её долей.</dd></div>
-      <div><dt>Можно закрыть:</dt> <dd>открытая задача, у которой RHEL state = Fixed, или P = + (патч уже у нас), или D = + (наша версия вне уязвимого диапазона).</dd></div>
+      <div><dt>Можно закрыть:</dt> <dd>открытая задача, у которой RHEL state = Fixed, или P = + (патч уже у нас), или D = + (наша версия вне уязвимого диапазона), или это дубликат — открытая строка с той же парой CVE ID + Компонент, что у основной.</dd></div>
       <div><dt>Флаги P и D</dt> <dd>по всем задачам: <span id="pd">—</span>.</dd></div>
       <div><dt>Пустые значения</dt> <dd>«-» и пустые ячейки считаются отсутствующими. Task state в расчётах не участвует.</dd></div>
       <div><dt>Источник:</dt> <dd id="src">—</dd></div>

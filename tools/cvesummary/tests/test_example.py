@@ -24,6 +24,8 @@ class ExampleTest(unittest.TestCase):
         self.assertEqual(len(data["rows"]), 100)
         self.assertEqual(data["meta"]["header_row"], 2)
         self.assertTrue(any(r["status"] == "Ожидает ревью" for r in data["rows"]))
+        pairs = [(r["cve"], r["comp"]) for r in data["rows"]]
+        self.assertGreater(len(pairs), len(set(pairs)))  # есть дубликаты задач
 
     def test_example_as_csv_gives_the_same_rows(self):
         pages = {}

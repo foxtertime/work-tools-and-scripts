@@ -22,6 +22,14 @@
   function weekday(day) { return (new Date(day * DAY_MS).getUTCDay() + 6) % 7; }
   function isWeekend(day) { return weekday(day) >= 5; }
   function mondayOf(day) { return day - weekday(day); }
+  /* рабочих дней Пн–Пт в [from, to] включительно; праздников не знаем */
+  function workdays(from, to) {
+    if (to < from) return 0;
+    const n = to - from + 1, full = Math.floor(n / 7);
+    let k = full * 5;
+    for (let d = from + full * 7; d <= to; d++) if (!isWeekend(d)) k++;
+    return k;
+  }
 
-  return { dayOf, isoOf, ruOf, weekday, isWeekend, mondayOf };
+  return { dayOf, isoOf, ruOf, weekday, isWeekend, mondayOf, workdays };
 }));
