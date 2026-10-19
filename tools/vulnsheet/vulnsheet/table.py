@@ -1,14 +1,19 @@
 """Чтение прежней таблицы vulnsheet — входа режимов обновления.
 
 Таблица — ровно то, что пишет report.write: UTF-8 (BOM допускается), ';',
-кавычки по правилам CSV, заголовок report.COLUMNS, в каждой записи 20
-ячеек. Ячейки отдаются дословно: в них ручные данные людей. Любое
-отклонение — TableError: выбросить «кривую» строку нельзя.
+кавычки по правилам CSV, заголовок report.COLUMNS, в каждой записи 22
+ячейки. Ячейки отдаются дословно: в них ручные данные людей. Любое
+отклонение — TableError: выбросить «кривую» строку нельзя. Таблицу
+vulnsheet 1.x (20 колонок, без P и D) не читаем: признаки в ней жили в
+комментарии, и перенести их можно только руками.
 """
 import csv
 from typing import List, NamedTuple
 
 from .report import COLUMNS
+
+# заголовок vulnsheet 1.x: те же колонки, но без P и D
+_COLUMNS_1 = [name for name in COLUMNS if name not in ("P", "D")]
 
 
 class TableError(Exception):
@@ -38,7 +43,12 @@ def read(path: str) -> List[Record]:
     if not records:
         raise TableError("%s: пустой файл, нет заголовка" % path)
     header, rows = records[0], records[1:]
-    if [cell.strip() for cell in header.cells] != COLUMNS:
+    names = [cell.strip() for cell in header.cells]
+    if names == _COLUMNS_1:
+        raise TableError("%s: формат vulnsheet 1.x — нет колонок P и D; "
+                         "добавьте их перед «SL NVR (latest build)» (значение «-»)"
+                         % path)
+    if names != COLUMNS:
         raise TableError("%s: запись %d: заголовок не как у vulnsheet "
                          "(разделитель ;, UTF-8?)" % (path, header.number))
     for record in rows:

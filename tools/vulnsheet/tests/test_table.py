@@ -10,7 +10,7 @@ from vulnsheet.table import Record, TableError, read
 
 HEADER = ";".join(COLUMNS)
 ROW = ["Иванов", "В работе", "01.09.2026", "-", "-",
-       "TASKID-1", "CVE-2026-0001", "В работу", "01.09.2026", "КМ", "vim",
+       "TASKID-1", "CVE-2026-0001", "В работу", "01.09.2026", "КМ", "vim", "+", "-",
        "vim-1-1.sl9", "-", "-", "Affected", "Low", "3.1", "-",
        "https://access.redhat.com/security/cve/CVE-2026-0001", "-"]
 LINE = ";".join(ROW)
@@ -59,12 +59,18 @@ class ReadTest(unittest.TestCase):
             ("", "нет заголовка"),
             ("\n \n", "нет заголовка"),
             (HEADER.replace("Task ID", "Task") + "\n", "заголовок"),
-            (HEADER + "\n" + ";".join(ROW[:19]) + "\n", "запись 2: ячеек 19"),
-            (HEADER + "\n" + LINE + ";x\n", "запись 2: ячеек 21"),
+            (HEADER + "\n" + ";".join(ROW[:21]) + "\n", "запись 2: ячеек 21"),
+            (HEADER + "\n" + LINE + ";x\n", "запись 2: ячеек 23"),
         ]
         for text, needle in cases:
             with self.subTest(text=text):
                 self.assertRejected(needle, text)
+
+    def test_table_of_vulnsheet_1_is_rejected_with_a_hint(self):
+        old = [c for c in COLUMNS if c not in ("P", "D")]
+        line = ";".join(ROW[:11] + ROW[13:])
+        error = self.assertRejected("vulnsheet 1.x", ";".join(old) + "\n" + line + "\n")
+        self.assertIn("P и D", str(error))
 
     def test_error_names_the_file(self):
         self.assertIn("old.csv", str(self.assertRejected("заголовок", "a;b\n")))

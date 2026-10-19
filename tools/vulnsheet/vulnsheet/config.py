@@ -229,8 +229,7 @@ def _gitlab(section, path) -> Optional[GitlabSettings]:
         if api is None:
             raise ConfigError("%s: %s.api — нужен адрес API, например "
                               "https://gitlab.example.com/api/v4" % (path, name))
-        web = _string(spec, "web", name + ".web", path) or api.split("/api/")[0]
-        hosts[str(host)] = GitlabHost(api=api, web=web)
+        hosts[str(host)] = GitlabHost(api=api)
     default_host = _string(section, "default_host", "gitlab.default_host", path)
     if default_host is not None and default_host not in hosts:
         raise ConfigError("%s: gitlab.default_host %s нет в gitlab.hosts" % (path, default_host))

@@ -1,4 +1,3 @@
-import base64
 import csv
 import io
 import json
@@ -22,7 +21,7 @@ from vulnsheet.vex import vex_url
 BLOCK = "Состоит из\nTASKID-181229\nCVE-2026-73070 vim\nОтменен\n22.09.2026\nКМ"
 BAD = "Состоит из\nTASKID-181231\nCVE-2026-73072 bash\nВ работу\n23.09.2026"
 HEADER = ";".join(COLUMNS)
-EXPECTED = ("-;-;-;-;-;TASKID-181229;CVE-2026-73070;Отменен;22.09.2026;КМ;vim;"
+EXPECTED = ("-;-;-;-;-;TASKID-181229;CVE-2026-73070;Отменен;22.09.2026;КМ;vim;-;-;"
             "vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;Moderate;5.5;-;"
             "https://access.redhat.com/security/cve/CVE-2026-73070;-")
 COMMON = ["--rhel", "9", "--koji-url", "https://koji.example.com/kojihub", "--tag", "sl9"]
@@ -111,7 +110,7 @@ class HappyPathTest(CliCase):
         self.assertEqual(code, EXIT_OK)  # NOT_FOUND и no VEX record — не ошибки
         self.assertEqual(len(lines), 4)
         self.assertEqual((lines[1], lines[3]), (EXPECTED, EXPECTED))
-        self.assertIn(";openssl;NOT_FOUND;", lines[2])
+        self.assertIn(";openssl;-;-;NOT_FOUND;", lines[2])
         self.assertIn(";no VEX record;", lines[2])
         self.assertEqual(self.session.calls, [("sl9", "vim"), ("sl9", "openssl")])
         self.assertEqual(self.download.call_count, 2)
@@ -173,7 +172,7 @@ class PartialTest(CliCase):
     def test_koji_error_for_package_marks_row(self):
         self.session.errors["vim"] = "boom"
         self.assertEqual(self.run_cli(), EXIT_PARTIAL)
-        self.assertIn(";vim;ERROR;", self.report_lines()[1])
+        self.assertIn(";vim;-;-;ERROR;", self.report_lines()[1])
 
 
 class FatalTest(CliCase):
@@ -264,7 +263,7 @@ class ConfigTest(CliCase):
         code = self.run_raw("--config", self.write_config())
         self.assertEqual(code, EXIT_OK)
         line = self.report_lines()[1]
-        self.assertIn(";nginx;nginx-1.26.3-1.sl9;", line)
+        self.assertIn(";nginx;-;-;nginx-1.26.3-1.sl9;", line)
         self.assertIn(";Affected;", line)
         self.assertEqual(self.session.calls, [("sl9", "nginx")])
         self.assertIn("nginx → nginx:1.26 (1)", self.log)
@@ -291,7 +290,7 @@ class ConfigTest(CliCase):
         code = self.run_raw("--config", path, text=BLOCK.replace("vim", "rust-afterburn") + "\n")
         self.assertEqual(code, EXIT_OK)
         line = self.report_lines()[1]
-        self.assertIn(";rust-afterburn;rust-afterburn-5.7.0-1.sl9;", line)
+        self.assertIn(";rust-afterburn;-;-;rust-afterburn-5.7.0-1.sl9;", line)
         self.assertIn(";Affected;", line)
         self.assertEqual(self.session.calls, [("sl9", "rust-afterburn")])
         self.assertIn("имена VEX: rust-afterburn → afterburn (1)", self.log)
@@ -332,25 +331,25 @@ class ConfigTest(CliCase):
 
 # строка прежней таблицы: ручные колонки заполнены, koji и VEX устарели
 OLD_ROW = ("Иванов;В работе;01.09.2026;-;обновить;TASKID-181229;CVE-2026-73070;"
-           "В работу;01.09.2026;КМ;vim;vim-8.2.2637-20.sl9;-;-;Affected;Low;3.1;-;"
+           "В работу;01.09.2026;КМ;vim;+;+;vim-8.2.2637-20.sl9;-;-;Affected;Low;3.1;-;"
            "https://access.redhat.com/security/cve/CVE-2026-73070;ждём апстрим")
 # OLD_ROW после режима 2: обновлены только koji и VEX
 REFRESHED = ("Иванов;В работе;01.09.2026;-;обновить;TASKID-181229;CVE-2026-73070;"
-             "В работу;01.09.2026;КМ;vim;vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;"
+             "В работу;01.09.2026;КМ;vim;+;+;vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;"
              "Moderate;5.5;-;https://access.redhat.com/security/cve/CVE-2026-73070;ждём апстрим")
 # OLD_ROW после режима 3 с BLOCK: данные задачи — из блока
 SYNCED = ("Иванов;В работе;01.09.2026;-;обновить;TASKID-181229;CVE-2026-73070;"
-          "Отменен;22.09.2026;КМ;vim;vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;"
+          "Отменен;22.09.2026;КМ;vim;+;+;vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;"
           "Moderate;5.5;-;https://access.redhat.com/security/cve/CVE-2026-73070;ждём апстрим")
 # задача, которой больше нет в блоках
 GONE_ROW = ("Петров;Готово;-;-;-;TASKID-100000;CVE-2026-73071;Выполнена;01.08.2026;КМ;"
-            "openssl;openssl-3-1.sl9;-;-;Fixed;Low;2.0;-;"
+            "openssl;+;+;openssl-3-1.sl9;-;-;Fixed;Low;2.0;-;"
             "https://access.redhat.com/security/cve/CVE-2026-73071;-")
 GONE_MISSING = ("Петров;Готово;-;-;-;TASKID-100000;CVE-2026-73071;Missing;01.08.2026;КМ;"
-                "openssl;NOT_FOUND;-;-;no VEX record;-;-;-;"
+                "openssl;+;+;NOT_FOUND;-;-;no VEX record;-;-;-;"
                 "https://access.redhat.com/security/cve/CVE-2026-73071;-")
 NEW_BLOCK = BLOCK.replace("181229", "181230").replace("73070", "73071").replace("vim", "openssl")
-NEW_ROW = ("-;-;-;-;-;TASKID-181230;CVE-2026-73071;Отменен;22.09.2026;КМ;openssl;NOT_FOUND;"
+NEW_ROW = ("-;-;-;-;-;TASKID-181230;CVE-2026-73071;Отменен;22.09.2026;КМ;openssl;-;-;NOT_FOUND;"
            "-;-;no VEX record;-;-;-;https://access.redhat.com/security/cve/CVE-2026-73071;-")
 
 
@@ -364,7 +363,11 @@ gitlab:
       api: https://gitlab.example.com/api/v4
 """
 TREE_URL = "https://gitlab.example.com/api/v4/projects/g%2Fvim/repository/tree"
-BLOB = "https://gitlab.example.com/g/vim/-/blob/sl9/PATCH/vim-CVE-2026-73070.patch"
+
+
+def first_row(lines):
+    """Первая строка данных таблицы: колонка → значение."""
+    return dict(zip(COLUMNS, next(csv.reader(lines[1:], delimiter=";"))))
 
 
 class GitlabTest(CliCase):
@@ -387,15 +390,26 @@ class GitlabTest(CliCase):
             handle.write(config)
         return self.run_cli("--config", path, *extra)
 
-    def comment(self):
-        # ячейка с «; » внутри уходит в CSV в кавычках
-        return next(csv.reader(self.report_lines()[1:], delimiter=";"))[-1]
+    def cell(self, name):
+        return first_row(self.report_lines())[name]
 
-    def test_patch_in_the_tree_is_noted_in_the_comment(self):
+    def write_table(self, *rows):
+        table = self.path("old.csv")
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write("\n".join((HEADER,) + rows) + "\n")
+        return table
+
+    def refresh(self, table):
+        path = self.path("vulnsheet.yaml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(GITLAB_CONFIG)
+        return self.run_main("--config", path, "--table", table, "-o", self.path("report.csv"))
+
+    def test_patch_in_the_tree_is_a_plus_in_p(self):
         self.assertEqual(self.run_gitlab(), EXIT_OK)
-        self.assertEqual(self.comment(), "патч найден: " + BLOB)
+        self.assertEqual((self.cell("P"), self.cell("Комментарий")), ("+", "-"))
         self.assertEqual(self.session.build_calls, [VIM_NVR])
-        self.assertIn("    - каталог PATCH: найден 1, убран из ветки 0, только в ветке 0", self.log)
+        self.assertIn("    - «+» 1", self.log)
 
     def test_token_from_the_environment_is_sent_stripped(self):
         self.run_gitlab()
@@ -404,23 +418,43 @@ class GitlabTest(CliCase):
         self.assertEqual(params["ref"], "sl9")
         self.assertEqual(self.made.call_args.kwargs["timeout"], 30)
 
-    def test_without_a_patch_the_comment_stays_empty(self):
+    def test_without_a_patch_p_is_minus(self):
         self.transport.routes[TREE_URL] = Response(200, [
             {"type": "blob", "path": "PATCH/vim-CVE-2026-11111.patch"}], {})
         self.assertEqual(self.run_gitlab(), EXIT_OK)
         self.assertEqual(self.report_lines(), [HEADER, EXPECTED])
 
-    def test_gitlab_failure_is_partial_and_leaves_the_comment(self):
+    def test_only_the_build_commit_is_read(self):
+        sha = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+        self.session.infos[VIM_NVR]["source"] = "git+ssh://git@gitlab.example.com/g/vim#" + sha
+        self.run_gitlab()
+        self.assertEqual([params["ref"] for _, params, _ in self.transport.requests], [sha])
+        self.assertEqual(self.cell("P"), "+")
+
+    def test_gitlab_failure_is_partial_and_new_row_gets_minus(self):
         self.transport.routes[TREE_URL] = Response(500, {"message": "boom"}, {})
         self.assertEqual(self.run_gitlab(), EXIT_PARTIAL)
         self.assertEqual(self.report_lines(), [HEADER, EXPECTED])
         self.assertIn("vim: патчи не проверены", self.log)
         self.assertNotIn("glpat-t0ken-secret", self.log)
 
+    def test_gitlab_failure_keeps_the_old_p(self):
+        self.transport.routes[TREE_URL] = Response(500, {"message": "boom"}, {})
+        old = EXPECTED.replace(";vim;-;-;", ";vim;+;-;")
+        self.assertEqual(self.refresh(self.write_table(old)), EXIT_PARTIAL)
+        self.assertEqual(self.cell("P"), "+")
+        self.assertIn("запись 2 (CVE-2026-73070 vim): патчи не проверены — оставлено прежнее P",
+                      self.log)
+
+    def test_refresh_overwrites_p_and_leaves_the_comment(self):
+        old = EXPECTED[:-1] + "ждём апстрим"
+        self.assertEqual(self.refresh(self.write_table(old)), EXIT_OK)
+        self.assertEqual((self.cell("P"), self.cell("Комментарий")), ("+", "ждём апстрим"))
+
     def test_koji_without_build_details_is_partial(self):
         del self.session.infos[VIM_NVR]
         self.assertEqual(self.run_gitlab(), EXIT_PARTIAL)
-        self.assertEqual(self.comment(), "-")
+        self.assertEqual(self.cell("P"), "-")
 
     def test_package_missing_from_koji_is_not_looked_up(self):
         self.session.builds.clear()
@@ -428,55 +462,15 @@ class GitlabTest(CliCase):
         self.assertEqual(self.session.build_calls, [])
         self.assertEqual(self.transport.requests, [])
 
-    def test_refresh_appends_the_note_to_the_human_comment(self):
-        table = self.path("old.csv")
-        with open(table, "w", encoding="utf-8") as handle:
-            handle.write(HEADER + "\n" + EXPECTED[:-1] + "ждём апстрим\n")
-        path = self.path("vulnsheet.yaml")
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(GITLAB_CONFIG)
-        code = self.run_main("--config", path, "--table", table, "-o", self.path("report.csv"))
-        self.assertEqual(code, EXIT_OK)
-        self.assertEqual(self.comment(), "ждём апстрим; патч найден: " + BLOB)
-
-    def test_patch_removed_from_the_branch_links_to_the_build_commit(self):
-        sha = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
-        self.session.infos[VIM_NVR]["source"] = "git+ssh://git@gitlab.example.com/g/vim#" + sha
-
-        def tree_at(ref, path="PATCH"):
-            return (TREE_URL, (("path", path), ("per_page", "100"),
-                               ("recursive", "true"), ("ref", ref)))
-        self.transport.routes = {
-            tree_at(sha): Response(200, [{"type": "blob",
-                                          "path": "PATCH/vim-CVE-2026-73070.patch"}], {}),
-            tree_at("sl9"): Response(200, [], {}),
-            tree_at(sha, "SPECS"): Response(200, [], {}),
-            tree_at("sl9", "SPECS"): Response(200, [], {})}
-        self.assertEqual(self.run_gitlab(), EXIT_OK)
-        self.assertEqual(self.comment(), "патч убран из ветки sl9, возможно, не нужен после "
-                                         "обновления пакета: " + BLOB.replace("/sl9/", "/%s/" % sha))
-        self.assertIn("    - каталог PATCH: найден 0, убран из ветки 1, только в ветке 0", self.log)
-
-    def test_cve_in_the_spec_changelog_is_noted_too(self):
-        spec = ("Name: vim\n%changelog\n* Mon Jan 05 2026 A <a@b> - 8.2-26\n"
-                "- Fix CVE-2026-73070\n")
-        specs = (("path", "SPECS"), ("per_page", "100"), ("recursive", "true"), ("ref", "sl9"))
-        self.transport.routes[(TREE_URL, specs)] = Response(200, [
-            {"type": "blob", "path": "SPECS/vim.spec"}], {})
-        self.transport.routes[(TREE_URL.replace("tree", "files/SPECS%2Fvim.spec"),
-                               (("ref", "sl9"),))] = Response(200, {
-            "encoding": "base64", "content": base64.b64encode(spec.encode()).decode()}, {})
-        self.assertEqual(self.run_gitlab(), EXIT_OK)
-        self.assertEqual(self.comment(), "патч найден: %s; спек, %%changelog 8.2-26: "
-                         "https://gitlab.example.com/g/vim/-/blob/sl9/SPECS/vim.spec#L4" % BLOB)
-        self.assertIn("    - %changelog: найден 1, убран из ветки 0, только в ветке 0", self.log)
-        self.assertIn("    - спек прочитан 1", self.log)
-
-    def test_without_gitlab_section_gitlab_is_not_asked(self):
+    def test_without_gitlab_section_gitlab_is_not_asked_and_p_stays(self):
         self.assertEqual(self.run_gitlab(config="rhel: \"9\"\n"), EXIT_OK)
         self.assertEqual(self.report_lines(), [HEADER, EXPECTED])
         self.assertEqual(self.session.build_calls, [])
         self.made.assert_not_called()
+        old = EXPECTED.replace(";vim;-;-;", ";vim;+;-;")
+        table = self.write_table(old)
+        self.run_main("--table", table, "-o", self.path("report.csv"))
+        self.assertEqual(self.cell("P"), "+")
 
 
 class RangesTest(CliCase):
@@ -508,22 +502,28 @@ class RangesTest(CliCase):
             handle.write(config)
         return self.run_cli("--config", path)
 
-    def comment(self):
-        return next(csv.reader(self.report_lines()[1:], delimiter=";"))[-1]
+    def cell(self, name):
+        return first_row(self.report_lines())[name]
 
-    def test_version_inside_the_range_is_noted(self):
+    def test_version_inside_the_range_is_a_minus_in_d(self):
         self.assertEqual(self.run_ranges(), EXIT_OK)
-        self.assertEqual(self.comment(),
-                         "версия 8.2.2637 в уязвимом диапазоне <9.0.2106 (NVD)")
+        self.assertEqual(self.report_lines(), [HEADER, EXPECTED])
         self.assertIn("диапазоны: NVD без ключа ($NVD_API_KEY пуст, запрос раз в 6 с), CVE.org",
                       self.log)
-        self.assertIn("диапазоны — CVE 1", self.log)
+        self.assertIn("диапазоны — CVE 1 → D", self.log)
+
+    def test_version_outside_the_range_is_a_plus_in_d(self):
+        self.ranges_answers[nvd_url("CVE-2026-73070")] = json.loads(
+            json.dumps(self.NVD_DOC).replace("9.0.2106", "8.0"))
+        self.run_ranges()
+        self.assertEqual((self.cell("D"), self.cell("Комментарий")), ("+", "-"))
 
     def test_footer_counts(self):
         self.run_ranges()
         log = re.sub(r"(?m)^\S+ \w+ +cli: ", "", self.log)
-        for line in ("  - диапазоны версий:", "    - в диапазоне 1", "    - вне диапазона 0",
-                     "    - неизвестен 0", "    - источник: NVD 1, CVE.org 0"):
+        for line in ("  - диапазоны версий, колонка D:", "    - «+» 0", "    - «-» 1",
+                     "    - в диапазоне 1", "    - вне диапазона 0", "    - неизвестен 0",
+                     "    - источник: NVD 1, CVE.org 0"):
             self.assertIn(line + "\n", log)
 
     def test_key_from_the_environment_goes_to_nvd_only(self):
@@ -539,22 +539,49 @@ class RangesTest(CliCase):
         self.ranges_answers[nvd_url("CVE-2026-73070")] = json.loads(
             json.dumps(self.NVD_DOC).replace("vim:vim", "vim:vim_editor"))
         self.run_ranges()
-        self.assertEqual(self.comment(), "диапазон версий неизвестен")
+        self.assertIn("    - неизвестен 1", self.log)
         self.run_ranges("ranges:\n  names:\n    vim: vim_editor\n")
-        self.assertIn("в уязвимом диапазоне", self.comment())
+        self.assertIn("    - в диапазоне 1", self.log)
 
-    def test_both_sources_down_is_partial_without_a_fragment(self):
+    def test_both_sources_down_is_partial_and_keeps_the_old_d(self):
         for url in list(self.ranges_answers):
             self.ranges_answers[url] = urllib.error.URLError("сеть")
         self.assertEqual(self.run_ranges(), EXIT_PARTIAL)
-        self.assertEqual(self.comment(), "-")
+        self.assertEqual(self.cell("D"), "-")
         self.assertIn("CVE без диапазонов из-за сбоя 1", self.log)
+        table = self.path("old.csv")
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write(HEADER + "\n" + EXPECTED.replace(";vim;-;-;", ";vim;-;+;") + "\n")
+        path = self.path("vulnsheet.yaml")
+        self.assertEqual(self.run_main("--config", path, "--table", table,
+                                       "-o", self.path("report.csv")), EXIT_PARTIAL)
+        self.assertEqual(self.cell("D"), "+")
+        self.assertIn("запись 2 (CVE-2026-73070 vim): диапазон не сверен — оставлено "
+                      "прежнее D", self.log)
+
+    def test_package_missing_from_koji_has_minus_and_is_not_an_unknown_range(self):
+        self.session.builds.clear()
+        self.run_ranges()
+        self.assertEqual(self.cell("D"), "-")
+        self.assertIn("    - неизвестен 0", self.log)
+
+    def test_koji_error_keeps_the_old_d(self):
+        self.session.errors["vim"] = "хаб споткнулся"
+        table = self.path("old.csv")
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write(HEADER + "\n" + EXPECTED.replace(";vim;-;-;", ";vim;-;+;") + "\n")
+        path = self.path("vulnsheet.yaml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("ranges: {}\n")
+        self.run_main("--config", path, "--table", table, "-o", self.path("report.csv"))
+        self.assertEqual(self.cell("D"), "+")
+        self.assertIn("    - неизвестен 0", self.log)
 
     def test_without_ranges_section_nothing_is_asked(self):
         self.assertEqual(self.run_ranges('rhel: "9"\n'), EXIT_OK)
         self.assertEqual(self.range_calls, [])
-        self.assertIn("диапазоны: не заданы в конфиге — версии не сверяются", self.log)
-        self.assertIn("диапазоны версий: не заданы — не сверялись", self.log)
+        self.assertIn("диапазоны: не заданы в конфиге — колонка D не сверяется", self.log)
+        self.assertIn("диапазоны версий: не заданы — колонка D не сверялась", self.log)
 
 
 class HeaderTest(CliCase):
@@ -586,8 +613,8 @@ class HeaderTest(CliCase):
             "вход: блоков 1, отбраковано 0",
             "koji: хаб https://koji.example.com/kojihub, тег sl9",
             "VEX: RHEL 9, кэш %s (живёт 3600 с), потоков 8" % cache,
-            "GitLab: не задан в конфиге — патчи не проверяются",
-            "диапазоны: не заданы в конфиге — версии не сверяются",
+            "GitLab: не задан в конфиге — колонка P не проверяется",
+            "диапазоны: не заданы в конфиге — колонка D не сверяется",
             "план: koji — пакетов 1, VEX — CVE 1",
         ])
 
@@ -603,7 +630,7 @@ class HeaderTest(CliCase):
         self.assertIn("GitLab: gitlab.example.com (по умолчанию), каталог PATCH, "
                       "токен из $VULNSHEET_TEST_TOKEN, потоков 3", header)
         self.assertEqual(header[-1], "план: koji — пакетов 1, VEX — CVE 1, "
-                                     "GitLab — патчи по билдам из koji (до 1)")
+                                     "GitLab — каталог PATCH по билдам из koji (до 1) → P")
         self.assertNotIn("glpat-t0ken-secret", self.log)
 
     def test_gitlab_without_token_says_so(self):
@@ -693,8 +720,8 @@ class FooterTest(CliCase):
             "    - ERROR 0",
             "  - VEX:",
             "    - Under investigation 1",
-            "  - GitLab: не задан — патчи не проверялись",
-            "  - диапазоны версий: не заданы — не сверялись",
+            "  - GitLab: не задан — колонка P не проверялась",
+            "  - диапазоны версий: не заданы — колонка D не сверялась",
             "  - код возврата 0",
         ])
         self.assertRegex(footer[-1], r"^всего за \d+\.\d с$")
@@ -709,24 +736,38 @@ class FooterTest(CliCase):
                                       text=BLOCK + "\n\n" + BLOCK + "\n\n" + bash + "\n"),
                          EXIT_OK)
         footer = self.footer()
-        start = footer.index("  - GitLab, строки:")
-        self.assertEqual(footer[start:start + 16], [
-            "  - GitLab, строки:",
-            "    - каталог PATCH: найден 2, убран из ветки 0, только в ветке 0",
-            "    - PatchN в спеке: найден 0, убран из ветки 0, только в ветке 0",
-            "    - %changelog: найден 0, убран из ветки 0, только в ветке 0",
-            "    - пометка поставлена 2, обновлена 0, без изменений 0",
+        start = footer.index("  - GitLab, колонка P:")
+        self.assertEqual(footer[start:start + 11], [
+            "  - GitLab, колонка P:",
+            "    - «+» 2",
+            "    - «-» 1",
             "  - GitLab, компоненты:",
             "    - прочитано 1",
             "    - без каталога патчей 0",
             "    - без источника 1",
             "    - из SRPM 0",
             "    - ошибок 0",
-            "    - спек прочитан 0",
-            "    - спека нет 1",
-            "    - спеков несколько, не выбран 0",
-            "  - диапазоны версий: не заданы — не сверялись",
+            "  - диапазоны версий: не заданы — колонка D не сверялась",
             "  - код возврата 0",
+        ])
+
+    def test_unchecked_rows_are_counted(self):
+        path = self.gitlab({TREE_URL: Response(500, {"message": "boom"}, {})})
+        table = self.path("old.csv")
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write(HEADER + "\n" + EXPECTED.replace(";vim;-;-;", ";vim;+;-;") + "\n")
+        src = self.path("tasks.txt")
+        with open(src, "w", encoding="utf-8") as handle:
+            handle.write(BLOCK.replace("181229", "181231") + "\n")
+        self.run_main("--config", path, "--table", table, "--blocks", src,
+                      "-o", self.path("report.csv"))
+        footer = self.footer()
+        start = footer.index("  - GitLab, колонка P:")
+        self.assertEqual(footer[start:start + 4], [
+            "  - GitLab, колонка P:",
+            "    - «+» 1",
+            "    - «-» 1",
+            "    - не проверено 2: в новых строках «-» 1, в прежних оставлено прежнее 1",
         ])
 
     def test_failures_are_listed_as_reasons_for_exit_code_1(self):
