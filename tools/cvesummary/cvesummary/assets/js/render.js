@@ -601,11 +601,11 @@
     /* row — из образца, дни вместо миллисекунд */
     const row = (title, d, sub, main, n) => {
       const r = el('div', main ? 'fc-main' : 'fc-row');
-      /* главная строка при нуле открытых — «завершено»; у остальных строк
-         ноль значит другое и пока подписан по-старому */
-      const dt = d === 0 ? (main ? el('div', 'd ok', 'завершено 🎉') : el('div', 'd', 'уже 0')) : d === null ? el('div', 'd bad', 'не завершится') : el('div', 'd', fmt(AS_OF + d));
+      /* ноль: открытых нет — «завершено»; открытые есть, но у всех готовое
+         решение (строка «без задач с готовым решением») — «только закрыть» */
+      const dt = d === 0 ? el('div', 'd ok', R.open === 0 ? 'завершено 🎉' : 'только закрыть') : d === null ? el('div', 'd bad', 'не завершится') : el('div', 'd', fmt(AS_OF + d));
       /* sub-функция пишет описание целиком, строка — после «N задач · ≈ дни» */
-      const meta = el('div', 's', typeof sub === 'function' ? sub(d) : (d ? `${n} задач · ≈ ${wdays(dates.workdays(AS_OF + 1, AS_OF + d))}. ` : '') + sub);
+      const meta = el('div', 's', typeof sub === 'function' ? sub(d) : (d ? `${tasks(n)} · ≈ ${wdays(dates.workdays(AS_OF + 1, AS_OF + d))}. ` : '') + sub);
       if (main) r.append(el('div', 'e', title), dt, meta); else r.append(el('div', 't', title), dt, meta);
       fc.append(r);
     };
@@ -618,8 +618,10 @@
       row('При текущем темпе, без сканфриза', R.open === 0 || R.net > 0 ? pace.simulate(R.open, R.inR, R.outR, AS_OF) : null, R.open === 0 ? 'Открытых задач нет.' : R.net > 0 ? 'Новые задачи продолжают поступать в том же темпе.' : 'Приходит не меньше, чем закрывается. Укажите дату сканфриза.', true, R.open);
     }
     const rest = R.open - ready;
+    const comingToStop = stop !== null ? Math.round(R.inR * Math.max(0, stop - AS_OF - 1)) : 0;
     row('Без задач с готовым решением', pace.simulate(rest, R.inR, R.outR, AS_OF, stop === null ? null : stop), d => {
-      if (d === 0) return `Все открытые задачи (${R.open}) — с готовым решением.`;
+      if (d === 0) return (R.open === 0 ? 'Открытых задач нет.' : `Все открытые задачи (${R.open}) — с готовым решением: их осталось только закрыть.`)
+        + (comingToStop ? ` До сканфриза придёт ещё ≈ ${comingToStop}.` : '');
       const head = `Если сразу закрыть ${tasks(ready)} с готовым решением, останется ${rest}`;
       if (d === null) return `${head}, и при текущем темпе их не закрыть.`;
       const span = wdays(dates.workdays(AS_OF + 1, AS_OF + d));
