@@ -306,32 +306,27 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 @media (max-width:640px){.ps:nth-child(3){border-left:0;padding-left:0}.ps:nth-child(n+3){border-top:1px solid var(--line)}}
 
 /* прогноз — три колонки: главный итог и два сценария рядом, через
-   вертикальные линии; на узком экране — друг под другом. Строки обоих
-   режимов в одной сетке — n-я строка одного режима в той же ячейке, что
-   n-я другого; текст прижат к верху, при переключении ничего не сдвигается */
+   вертикальные линии; на узком экране — друг под другом. У каждой колонки
+   подпись, значение и пояснение, одинаково в обоих режимах. Колонки обоих
+   режимов лежат в одних ячейках, а их три строки — общие (subgrid): высота
+   строки — по большему режиму, и при переключении ничего не сдвигается */
 .fc-stack{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr);align-content:start;border-block:1px solid var(--line);overflow:hidden;min-width:0}
 .fc-set{display:contents}
 .fc-set.off{visibility:hidden}
-.fc-set > :nth-child(1){grid-column:1;grid-row:1}
-.fc-set > :nth-child(2){grid-column:2;grid-row:1}
-.fc-set > :nth-child(3){grid-column:3;grid-row:1;padding-right:0}
-.fc-main{padding:14px 20px 14px 0;display:flex;flex-direction:column;gap:4px}
-.fc-main .e{font:600 11.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.fc-main .d{font-family:var(--f-display);font-weight:500;font-size:30px;line-height:1.1;font-variant-numeric:tabular-nums}
-.fc-main .d.bad{color:var(--bad);font-size:26px}
-.fc-main .d.ok{color:var(--ok);font-size:26px}
-.fc-main .s{font-size:13px;color:var(--muted);max-width:44ch}
-.fc-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-content:start;align-items:baseline;padding:14px 20px;border-left:1px solid var(--line)}
-.fc-row .t{font-weight:600;font-size:14px}
-.fc-row .d{font-family:var(--f-display);font-weight:500;font-size:18px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.fc-row .d.ok{color:var(--ok)}
-.fc-row .d.bad{color:var(--bad);font-family:var(--f-body);font-size:13.5px;font-weight:600}
-.fc-row .s{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
+.fc-cell{display:grid;grid-template-rows:subgrid;grid-row:1/span 3;row-gap:4px;align-content:start;padding:14px 20px;min-width:0}
+.fc-set > :nth-child(1){grid-column:1;padding-left:0}
+.fc-set > :nth-child(2){grid-column:2;border-left:1px solid var(--line)}
+.fc-set > :nth-child(3){grid-column:3;border-left:1px solid var(--line);padding-right:0}
+.fc-cell .e{font:600 11.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.fc-cell .d{font-family:var(--f-display);font-weight:500;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.fc-cell .d.bad{color:var(--bad)}
+.fc-cell .d.ok{color:var(--ok)}
+.fc-cell .s{font-size:13px;color:var(--muted);max-width:44ch}
 @media (max-width:900px){
   .fc-stack{grid-template-columns:minmax(0,1fr);border-block:0;padding-top:14px}
-  .fc-set > :nth-child(2){grid-column:1;grid-row:2}
-  .fc-set > :nth-child(3){grid-column:1;grid-row:3}
-  .fc-row{border-left:0;border-top:1px solid var(--line);padding-left:0}
+  .fc-set > :nth-child(n){grid-column:1;padding-inline:0}
+  .fc-set > :nth-child(2){grid-row:4/span 3;border-left:0;border-top:1px solid var(--line)}
+  .fc-set > :nth-child(3){grid-row:7/span 3;border-left:0;border-top:1px solid var(--line)}
 }
 
 /* график — без рамки: подпись слева, переключатель вида справа, легенда
