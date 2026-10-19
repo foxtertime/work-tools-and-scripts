@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-20
+
+### Добавлено
+
+- `cvesummary` (1.5.0): в режиме «Когда начать» галка «Без задач с готовым
+  решением» — задачи с готовым решением закрываются сразу, и прогноз с
+  симуляцией считаются по остальным; поля разработчиков и темпа ужаты в
+  один слот.
+
 ## [0.14.0] - 2026-10-20
 
 ### Добавлено
@@ -265,7 +274,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.11.0...v0.12.0
