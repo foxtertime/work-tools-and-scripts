@@ -54,7 +54,8 @@
     for (const [dev, spans] of byDev) {
       const edges = new Set();
       spans.forEach(s => { edges.add(s.from); if (s.end !== null) edges.add(s.end); });
-      const lo = Math.min(...spans.map(s => s.from)), hi = Math.max(...spans.map(s => s.to));
+      let lo = Infinity, hi = -Infinity;
+      for (const s of spans) { if (s.from < lo) lo = s.from; if (s.to > hi) hi = s.to; }
       const days = new Set(), counts = new Map();
       for (let d = lo; d <= hi; d++) {
         const on = spans.filter(s => s.from <= d && d <= s.to);

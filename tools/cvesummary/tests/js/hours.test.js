@@ -100,3 +100,11 @@ test('rate: закрыто за рабочий день', function () {
   assert.strictEqual(hours.rate([MON, MON + 1], days, MON, MON + 3), 0.5);
   assert.strictEqual(hours.rate([MON], new Set(), MON, MON + 3), null);
 });
+
+test('сотни тысяч задач одного разработчика не переполняют стек', function () {
+  var rows = [];
+  for (var i = 0; i < 300000; i++) rows.push(t('X', MON, MON, 'Готов'));
+  var h = H(rows, MON);
+  assert.strictEqual(h.length, 300000);
+  assert.ok(Math.abs(h[0] - 8 / 300000) < 1e-12);
+});

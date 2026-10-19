@@ -37,14 +37,16 @@
       if (ev.pointerType !== 'mouse' || ev.button !== 0) return;
       drag = { x: ev.clientX, left: box.scrollLeft, id: ev.pointerId };
     });
+    const stop = () => { drag = null; box.classList.remove('dragging'); };
     box.addEventListener('pointermove', ev => {
       if (!drag || ev.pointerId !== drag.id) return;
+      // кнопку отпустили за пределами графика до порога: pointerup сюда не дошёл
+      if (ev.buttons === 0) { stop(); return; }
       const dx = ev.clientX - drag.x;
       if (Math.abs(dx) < DRAG && !box.classList.contains('dragging')) return;
       if (!box.classList.contains('dragging')) { box.classList.add('dragging'); box.setPointerCapture(drag.id); }
       box.scrollLeft = drag.left - dx;
     });
-    const stop = () => { drag = null; box.classList.remove('dragging'); };
     box.addEventListener('pointerup', stop);
     box.addEventListener('pointercancel', stop);
   }

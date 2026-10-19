@@ -15,6 +15,9 @@
   const fmt = d => (d === null || d === undefined ? '—' : dates.ruOf(d));
   const mk = (t, a) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  /* Math.max(...arr) на большом массиве валит стек вызовов — данные таблицы любого размера */
+  const maxOf = (arr, init) => { let m = init; for (const x of arr) if (x > m) m = x; return m; };
+  const minOf = (arr, init) => { let m = init; for (const x of arr) if (x < m) m = x; return m; };
   const count = (arr, f) => { const m = new Map(); for (const x of arr) { const k = f(x); if (k == null || k === '') continue; m.set(k, (m.get(k) || 0) + 1); } return [...m].sort((a, b) => b[1] - a[1]); };
   const plural = (n, a, b, c) => { n = Math.abs(n) % 100; const n1 = n % 10; return n > 10 && n < 20 ? c : n1 > 1 && n1 < 5 ? b : n1 === 1 ? a : c; };
   const days = n => `${n} ${plural(n, 'день', 'дня', 'дней')}`;
@@ -66,7 +69,7 @@
   const SEV_KEYS = roles.sevOrder(recs.map(r => r.sevN));
   const SEV = SEV_KEYS.map(k => ({ k, c: sevColor(k) }));
   const allDays = recs.flatMap(r => [r.tdateD, r.startD, r.endD]).filter(d => d !== null && d <= AS_OF);
-  const FIRST = allDays.length ? Math.min(...allDays) : null;
+  const FIRST = allDays.length ? minOf(allDays, Infinity) : null;
   const statusKey = r => String(r.status || '').trim() || (r.taken ? 'Без статуса' : 'Не взята');
   const roleColor = r => r.done ? '--ok' : r.attention ? '--bad' : r.paused ? '--warn' : r.review ? '--c7' : r.taken ? '--accent' : '--sev-none';
   const hoursText = r => (r.hours === null ? '—' : f1(r.hours));
@@ -116,7 +119,7 @@
   function drawPace(series, from) {
     const host = $('pace-chart');
     if (!series.length) { host.replaceChildren(el('div', 'empty', 'Нет дат в Task date и End date')); return; }
-    const { yMax, yStep } = scale(Math.max(...series.map(s => Math.max(s.i, s.o))));
+    const { yMax, yStep } = scale(maxOf(series.map(s => Math.max(s.i, s.o)), 0));
     const F = frame(host, { count: series.length, minStep: DAY_STEP, height: 230, yMax, yStep, pad: { t: 8, b: 22 } });
     const x = i => F.step * i + F.step / 2;
     const fi = series.findIndex(s => s.day > from);
@@ -148,7 +151,7 @@
   function stackChart(host, weeks, cats, what) {
     if (!weeks.length) { host.replaceChildren(el('div', 'empty', 'Нет данных с датами')); return; }
     const H2 = 230;
-    const { yMax, yStep } = scale(Math.max(...weeks.map(w => w.all)));
+    const { yMax, yStep } = scale(maxOf(weeks.map(w => w.all), 0));
     const F = frame(host, { count: weeks.length, minStep: WEEK_STEP, height: H2, yMax, yStep, pad: { t: 16, b: 24 } });
     const barW = Math.max(3, Math.min(56, F.step - 6)), GAP = barW >= 10 ? 2 : 1;
     weeks.forEach((w, i) => {
@@ -173,7 +176,7 @@
   function spark(host, dayCounts, from, color, who) {
     const n = AS_OF - from + 1;
     if (n <= 0) { host.replaceChildren(); return; }
-    const top = Math.max(1, ...dayCounts.values());
+    const top = maxOf(dayCounts.values(), 1);
     const F = frame(host, { count: n, minStep: DAY_STEP, height: 40, yMax: top, yStep: top, pad: { t: 2, b: 0 }, axis: false, key: 'spark:' + who });
     for (let i = 0; i < n; i++) {
       const d = from + i, v = dayCounts.get(d) || 0, hh = Math.max(v ? 2 : 1, v / top * 36);
@@ -235,7 +238,7 @@
 
   /* statTable — из образца; колонка «Ср. срок» → «Ср. часов» по закрытым */
   function statTable(boxId, title, groups) {
-    const box = $(boxId); box.replaceChildren(); const mx = Math.max(1, ...groups.map(g => g.recs.length));
+    const box = $(boxId); box.replaceChildren(); const mx = maxOf(groups.map(g => g.recs.length), 1);
     const mob = matchMedia('(max-width:560px)').matches;
     [[title, 'h l'], ['', 'h bar'], ['Всего', 'h'], ['Открыто', 'h'], ['Готово', 'h'], ['% готово', 'h'], ['Ср. часов', 'h']].forEach(([x, c]) => {
       const h = el('div', c, x);
@@ -399,7 +402,7 @@
       SEV.forEach(s => { const v = done.filter(r => r.sevN === s.k).length; if (v) kvRow(kv2, s.k, v, maxS, s.c, `${d} · ${s.k}: ${v}`); });
       c2.append(kv2);
       const c3 = el('div'); c3.append(el('div', 'cap', `Сделано по принятой мере · ${done.length}`));
-      const kv3 = el('div', 'kv'); const maxM = Math.max(1, ...measKeys.map(k => done.filter(r => r.measureN === k).length));
+      const kv3 = el('div', 'kv'); const maxM = maxOf(measKeys.map(k => done.filter(r => r.measureN === k).length), 1);
       measKeys.forEach(k => { const v = done.filter(r => r.measureN === k).length; if (v) kvRow(kv3, k, v, maxM, col, `${d} · ${k}: ${v}`); });
       c3.append(kv3);
       card.append(c2, c3);
@@ -421,8 +424,9 @@
         const sh = el('div', 'tl spark-tl'); c4.append(sh);
         const per = new Map(); closedDays.forEach(x => per.set(x, (per.get(x) || 0) + 1));
         card.append(c4); ppl.append(card);
-        spark(sh, per, Math.min(...starts), col, d);
-        c4.append(el('div', 'cap', `закрыто по дням с ${fmt(Math.min(...starts))} по ${fmt(AS_OF)}`));
+        const first = minOf(starts, Infinity);
+        spark(sh, per, first, col, d);
+        c4.append(el('div', 'cap', `закрыто по дням с ${fmt(first)} по ${fmt(AS_OF)}`));
         continue;
       }
       card.append(c4); ppl.append(card);
