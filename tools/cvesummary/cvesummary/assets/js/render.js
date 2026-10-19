@@ -88,11 +88,7 @@
   const hoursText = r => (r.hours === null ? '—' : f1(r.hours));
 
   /* ---------- графики по времени ---------- */
-  function scale(top) {
-    top = Math.max(1, top);
-    const step = top <= 5 ? 1 : top <= 12 ? 2 : top <= 30 ? 5 : top <= 60 ? 10 : top <= 150 ? 25 : 50;
-    return { yMax: Math.ceil(top / step) * step, yStep: step };
-  }
+  const scale = timeline.scale;
   /* Рамка: слева ось значений (стоит на месте), справа листаемая область
      со столбиками. Положение запоминается как расстояние до правого края
      (0 — график в конце, на последних днях) по прокрутке самого
@@ -106,8 +102,10 @@
     const st = POS.get(key) || { dist: 0 };
     POS.set(key, st);
     host.replaceChildren();
-    const axisW = o.axis === false ? 0 : AXIS_W;
+    /* ось шире, если не влезает число: 10000 задач — пять цифр */
+    const axisW = o.axis === false ? 0 : Math.max(AXIS_W, String(o.yMax).length * 8 + 8);
     const box = el('div', 'tl-scroll');
+    host.style.setProperty('--axis', axisW + 'px');  // левый градиент прокрутки — за осью
     let axis = null;
     if (axisW) { axis = mk('svg', { class: 'tl-axis', width: axisW, height: o.height, viewBox: `0 0 ${axisW} ${o.height}` }); host.append(axis); }
     host.append(box);
@@ -133,17 +131,15 @@
      вертикаль и подпись на подложке цвета фона; близкие отметки разносятся
      по строкам. Подписи возвращаются — их добавляют поверх линий в конце. */
   function dateMarks(F, x, first, end, stop, target) {
-    const out = [], rows = [];
-    [[AS_OF, 'отчёт'], [stop, 'сканфриз'], [target, 'цель']]
-      .filter(([d]) => d !== null && d >= first && d <= end).sort((a, b) => a[0] - b[0])
-      .forEach(([d, label], j, all) => {
-        const xi = x(d - first);
-        F.plot.append(mk('line', { x1: xi, x2: xi, y1: 8, y2: 208, class: 'vmark' }));
-        const row = all.slice(0, j).filter(([p]) => xi - x(p - first) < 64).length;
-        const right = xi + 64 > F.width, t = mk('text', { x: right ? xi - 4 : xi + 4, y: 18 + row * 13, class: 'vlab', 'text-anchor': right ? 'end' : 'start' });
-        t.textContent = label; out.push(t); rows.push(row);
-      });
-    return out;
+    const marks = [[AS_OF, 'отчёт'], [stop, 'сканфриз'], [target, 'цель']]
+      .filter(([d]) => d !== null && d >= first && d <= end).sort((a, b) => a[0] - b[0]);
+    const xs = marks.map(([d]) => x(d - first)), rows = timeline.lanes(xs, 64);
+    return marks.map(([, label], j) => {
+      const xi = xs[j];
+      F.plot.append(mk('line', { x1: xi, x2: xi, y1: 8, y2: 208, class: 'vmark' }));
+      const right = xi + 64 > F.width, t = mk('text', { x: right ? xi - 4 : xi + 4, y: 18 + rows[j] * 13, class: 'vlab', 'text-anchor': right ? 'end' : 'start' });
+      t.textContent = label; return t;
+    });
   }
   /* Выходные — светло-серая заливка во всю высоту поля, по суббот-
      воскресным отрезкам; поверх окна темпа, под сеткой и данными. */
@@ -736,10 +732,12 @@
       c1.append(stat);
       /* нагрузка: сколько задач висит на нём в дату отчёта и сколько часов
          его дня достаётся каждой (8 ч делятся поровну) */
+      /* меньше 0,1 ч — в минутах, иначе выйдет «по 0 ч» */
+      const perTask = h => (h >= 0.1 ? f1(h) + ' ч' : h * 60 < 1 ? 'меньше минуты' : Math.round(h * 60) + ' мин');
       const hanging = (H.load.get(d) && H.load.get(d).get(AS_OF)) || 0;
       const now = el('div', 'dnow');
       if (hanging) {
-        now.append('Сейчас на нём ', el('b', null, String(hanging)), ` ${plural(hanging, 'задача', 'задачи', 'задач')} — по `, el('b', null, f1(Hm.HOURS_PER_DAY / hanging) + ' ч'), ' в день на каждую');
+        now.append('Сейчас на нём ', el('b', null, String(hanging)), ` ${plural(hanging, 'задача', 'задачи', 'задач')} — по `, el('b', null, perTask(Hm.HOURS_PER_DAY / hanging)), ' в день на каждую');
         const today = mine.filter(r => r.done && r.endD === AS_OF).length;
         now.dataset.tip = `Его ${Hm.HOURS_PER_DAY}-часовой рабочий день делится поровну между задачами, которые на нём висят` + (today ? `; включая закрытые сегодня: ${today}` : '');
       } else now.append('Сейчас задач на нём нет');
