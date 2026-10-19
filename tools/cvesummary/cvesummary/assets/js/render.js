@@ -22,6 +22,7 @@
   const plural = (n, a, b, c) => { n = Math.abs(n) % 100; const n1 = n % 10; return n > 10 && n < 20 ? c : n1 > 1 && n1 < 5 ? b : n1 === 1 ? a : c; };
   const days = n => `${n} ${plural(n, 'день', 'дня', 'дней')}`;
   const tasks = n => `${n} ${plural(n, 'задачу', 'задачи', 'задач')}`;
+  const wdays = n => `${n} ${plural(n, 'рабочий день', 'рабочих дня', 'рабочих дней')}`;
   const LS = { get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* без хранилища поля просто не запоминаются */ } } };
   const SEV_COLOR = { Critical: '--sev-crit', Important: '--sev-imp', Moderate: '--sev-mod', Low: '--sev-low' };
   const sevColor = k => SEV_COLOR[k] || '--sev-none';
@@ -362,12 +363,12 @@
     const R = pace.rates(recs, AS_OF, WIN);
     const ready = recs.filter(r => r.open && r.reasons.length).length;
     const fc = $('forecast'); fc.replaceChildren();
-    $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп за ${days(WIN)}`;
-    $('pace-note').textContent = `Точка отсчёта — дата отчёта (${fmt(AS_OF)}). Закрытой считается задача со статусом «Готов» и заполненным End date. Дни календарные. До сканфриза новые задачи прибывают в текущем темпе.`;
+    $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп за ${days(WIN)}, из них ${wdays(dates.workdays(AS_OF - WIN + 1, AS_OF))}`;
+    $('pace-note').textContent = `Точка отсчёта — дата отчёта (${fmt(AS_OF)}). Закрытой считается задача со статусом «Готов» и заполненным End date. Темп и сроки — в рабочих днях, Пн–Пт; праздники не учитываются. До сканфриза новые задачи прибывают в текущем темпе.`;
     $('p-in').textContent = f1(R.inR);
     $('p-out').textContent = f1(R.outR);
     const pn = $('p-net'); pn.textContent = (R.net > 0 ? '−' : R.net < 0 ? '+' : '') + f1(Math.abs(R.net)); pn.className = 'v ' + (R.net > 0 ? 'ok' : R.net < 0 ? 'bad' : '');
-    $('p-net-l').textContent = R.net > 0 ? 'бэклог сокращается в день' : R.net < 0 ? 'бэклог растёт в день' : 'бэклог не меняется';
+    $('p-net-l').textContent = R.net > 0 ? 'бэклог сокращается в рабочий день' : R.net < 0 ? 'бэклог растёт в рабочий день' : 'бэклог не меняется';
     $('p-open').textContent = R.open;
     const sd = $('stop-date'), td = $('target-date');
     if (!sd.value) sd.value = LS.get('cve.stopDate');
@@ -380,15 +381,15 @@
          ноль значит другое и пока подписан по-старому */
       const dt = d === 0 ? (main ? el('div', 'd ok', 'завершено 🎉') : el('div', 'd', 'уже 0')) : d === null ? el('div', 'd bad', 'не завершится') : el('div', 'd', fmt(AS_OF + d));
       /* sub-функция пишет описание целиком, строка — после «N задач · ≈ дни» */
-      const meta = el('div', 's', typeof sub === 'function' ? sub(d) : (d ? `${n} задач · ≈ ${days(d)}. ` : '') + sub);
+      const meta = el('div', 's', typeof sub === 'function' ? sub(d) : (d ? `${n} задач · ≈ ${wdays(dates.workdays(AS_OF + 1, AS_OF + d))}. ` : '') + sub);
       if (main) r.append(el('div', 'e', title), dt, meta); else r.append(el('div', 't', title), dt, meta);
       fc.append(r);
     };
     if (stop !== null) {
-      const inflowDays = Math.max(0, stop - AS_OF - 1), coming = Math.round(R.inR * inflowDays);
+      const coming = Math.round(R.inR * dates.workdays(AS_OF + 1, stop - 1));
       row(`Сканфриз ${fmt(stop)}`, pace.simulate(R.open, R.inR, R.outR, AS_OF, stop),
         R.open === 0 ? 'Открытых задач нет.' + (coming ? ` До сканфриза придёт ещё ≈ ${coming}.` : '')
-          : `До этой даты придёт ещё ≈ ${coming}, дальше только закрываем по ${f1(R.outR)} в день.`, true, R.open);
+          : `До этой даты придёт ещё ≈ ${coming}, дальше только закрываем по ${f1(R.outR)} в рабочий день.`, true, R.open);
     } else {
       row('При текущем темпе, без сканфриза', R.open === 0 || R.net > 0 ? pace.simulate(R.open, R.inR, R.outR, AS_OF) : null, R.open === 0 ? 'Открытых задач нет.' : R.net > 0 ? 'Новые задачи продолжают поступать в том же темпе.' : 'Приходит не меньше, чем закрывается. Укажите дату сканфриза.', true, R.open);
     }
@@ -397,16 +398,18 @@
       if (d === 0) return `Все открытые задачи (${R.open}) — с готовым решением.`;
       const head = `Если сразу закрыть ${tasks(ready)} с готовым решением, останется ${rest}`;
       if (d === null) return `${head}, и при текущем темпе их не закрыть.`;
-      return `${head}. ` + (stop === null ? `Без новых задач — ≈ ${days(d)} работы.` : `С новыми до сканфриза ${fmt(stop)} — ≈ ${days(d)} работы.`);
+      const span = wdays(dates.workdays(AS_OF + 1, AS_OF + d));
+      return `${head}. ` + (stop === null ? `Без новых задач — ≈ ${span}.` : `С новыми до сканфриза ${fmt(stop)} — ≈ ${span}.`);
     }, false, rest);
     if (target !== null) {
       const r = el('div', 'fc-row need'); r.append(el('div', 't', `Закончить к ${fmt(target)}`));
       const nd = pace.need(R.open, R.inR, AS_OF, stop, target);
       if (nd === null) r.append(el('div', 'd bad', 'дата прошла'), el('div', 's', 'Выберите дату позже ' + fmt(AS_OF) + '.'));
+      else if (!nd.left) r.append(el('div', 'd bad', 'нет рабочих дней'), el('div', 's', `До ${fmt(target)} не осталось рабочих дней. Выберите дату позже.`));
       else {
         const coming = Math.round(nd.incoming);
-        const what = `Столько нужно закрывать в день, чтобы за ${days(nd.left)} закрыть ${tasks(R.open)}` + (coming ? ` и ≈ ${coming} новых.` : '.');
-        const now = !R.outR ? ' Сейчас не закрываем ни одной.' : nd.perDay <= R.outR ? ` Сейчас закрываем ${f1(R.outR)} в день — темпа хватает.` : ` Сейчас закрываем ${f1(R.outR)} в день — нужно в ${f1(nd.perDay / R.outR)} раза быстрее.`;
+        const what = `Столько нужно закрывать в рабочий день, чтобы за ${wdays(nd.left)} закрыть ${tasks(R.open)}` + (coming ? ` и ≈ ${coming} новых.` : '.');
+        const now = !R.outR ? ' Сейчас не закрываем ни одной.' : nd.perDay <= R.outR ? ` Сейчас закрываем ${f1(R.outR)} в рабочий день — темпа хватает.` : ` Сейчас закрываем ${f1(R.outR)} в рабочий день — нужно в ${f1(nd.perDay / R.outR)} раза быстрее.`;
         r.append(el('div', 'd', `${f1(nd.perDay)}/день`), el('div', 's', what + now));
       }
       fc.append(r);

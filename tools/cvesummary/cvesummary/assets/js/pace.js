@@ -1,6 +1,8 @@
 /* Темп и прогноз в задачах — как в образце сводки. Поступление — по Task
    date, закрытие — «Готов» по End date; всё, что позже даты отчёта, ещё
-   не случилось. */
+   не случилось. Темп — на рабочий день (Пн–Пт, без праздников): задачи за
+   календарное окно делятся на число рабочих дней в нём; прогноз шагает
+   только по рабочим дням. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(require('./dates.js'), require('./roles.js'));
@@ -20,8 +22,10 @@
   function rates(rows, asOf, win) {
     const from = asOf - win;
     const within = d => d !== null && d > from && d <= asOf;
-    const inR = rows.map(inDay).filter(within).length / win;
-    const outR = rows.map(outDay).filter(within).length / win;
+    const work = dates.workdays(from + 1, asOf);
+    const per = n => (work ? n / work : 0);
+    const inR = per(rows.map(inDay).filter(within).length);
+    const outR = per(rows.map(outDay).filter(within).length);
     return { inR, outR, net: outR - inR, open: rows.filter(roles.isOpen).length };
   }
 
@@ -31,6 +35,7 @@
     let left = n;
     for (let d = 1; d <= HORIZON; d++) {
       const day = asOf + d;
+      if (dates.isWeekend(day)) continue;
       if (inflowUntil === undefined || (inflowUntil !== null && day < inflowUntil)) left += inR;
       left -= outR;
       if (left <= EPS) return d;
@@ -38,12 +43,14 @@
     return null;
   }
 
+  /* left — рабочих дней после даты отчёта до цели включительно; нет ни
+     одного — perDay бесконечен */
   function need(n, inR, asOf, stop, target) {
-    const left = target - asOf;
-    if (left <= 0) return null;
-    const inflowDays = stop === null ? left : Math.max(0, Math.min(left, stop - asOf - 1));
+    if (target <= asOf) return null;
+    const left = dates.workdays(asOf + 1, target);
+    const inflowDays = stop === null ? left : dates.workdays(asOf + 1, Math.min(target, stop - 1));
     const incoming = inR * inflowDays;
-    return { perDay: (n + incoming) / left, left, incoming };
+    return { perDay: left ? (n + incoming) / left : Infinity, left, incoming };
   }
 
   function daily(rows, from, to) {

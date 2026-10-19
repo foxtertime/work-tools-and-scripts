@@ -27,3 +27,12 @@ test('день недели и понедельник', function () {
   assert.strictEqual(dates.mondayOf(MON + 6), MON);
   assert.strictEqual(dates.mondayOf(MON), MON);
 });
+
+test('рабочие дни Пн–Пт в отрезке включительно', function () {
+  var mon = dates.dayOf('2026-10-05');
+  assert.strictEqual(dates.workdays(mon, mon + 6), 5);      // неделя
+  assert.strictEqual(dates.workdays(mon + 5, mon + 6), 0);  // выходные
+  assert.strictEqual(dates.workdays(mon + 4, mon + 7), 2);  // пятница и понедельник
+  assert.strictEqual(dates.workdays(mon, mon + 13), 10);
+  assert.strictEqual(dates.workdays(mon + 1, mon), 0);      // пустой отрезок
+});
