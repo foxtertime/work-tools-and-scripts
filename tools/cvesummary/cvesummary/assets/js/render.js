@@ -192,10 +192,12 @@
       const segs = cats.filter(s => w[s.k] > 0);
       let acc = 0;
       segs.forEach((s, j) => {
-        const n = w[s.k], y1 = F.y(acc + n), y0 = F.y(acc); acc += n;
-        const h = Math.max(1, y0 - y1 - (j < segs.length - 1 ? GAP : 0));
-        if (j === segs.length - 1 && h > 4) { const r = Math.min(3, barW / 2); col.append(mk('path', { d: `M${x},${y1 + h}V${y1 + r}Q${x},${y1} ${x + r},${y1}H${x + barW - r}Q${x + barW},${y1} ${x + barW},${y1 + r}V${y1 + h}Z`, fill: css(s.c) })); }
-        else col.append(mk('rect', { x, y: y1, width: barW, height: h, fill: css(s.c) }));
+        /* сегмент стоит на верхушке нижнего (y0), зазор до следующего — сверху;
+           так нижний сегмент всегда доходит до оси */
+        const n = w[s.k], y0 = F.y(acc), y1 = F.y(acc + n) + (j < segs.length - 1 ? GAP : 0); acc += n;
+        const h = Math.max(1, y0 - y1), top = y0 - h;
+        if (j === segs.length - 1 && h > 4) { const r = Math.min(3, barW / 2); col.append(mk('path', { d: `M${x},${y0}V${top + r}Q${x},${top} ${x + r},${top}H${x + barW - r}Q${x + barW},${top} ${x + barW},${top + r}V${y0}Z`, fill: css(s.c) })); }
+        else col.append(mk('rect', { x, y: top, width: barW, height: h, fill: css(s.c) }));
       });
       const hit = mk('rect', { x: i * F.step, y: 16, width: F.step, height: H2 - 40, fill: 'transparent' });
       hit.dataset.tip = `${byDay ? fmt(w.t) : 'Неделя с ' + fmt(w.t)}: ${what} ${w.all}` + (w.all ? ' · ' + cats.filter(s => w[s.k]).map(s => `${s.k} ${w[s.k]}`).join(', ') : '');
