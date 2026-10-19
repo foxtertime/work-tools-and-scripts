@@ -767,7 +767,6 @@
         const first = START !== null ? START : minOf(starts, Infinity);
         const mcats = measKeys.map(k => ({ k, c: measColor(k) }));
         stackChart(sh, daysOf(done.map(r => [r.endD, r.measureN]), mcats, first), mcats, 'закрыто', true, { height: 130, key: 'dev:all', window: W });
-        c4.append(el('div', 'cap', `закрыто по дням с ${fmt(first)} по ${fmt(AS_OF)}`));
         continue;
       }
       card.append(c4); ppl.append(card);
