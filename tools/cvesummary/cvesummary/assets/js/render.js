@@ -400,22 +400,23 @@
     $('k-cve').textContent = u.tasks;
     $('k-comp').textContent = u.comps;
 
-    /* общая полоса: готово | можно закрыть | без решения; каждая задача — в
+    /* общая полоса: готово | без решения | можно закрыть; каждая задача — в
        одном сегменте, по первому основанию (fixed, patch, range, dup).
-       Над полосой — скобки трёх групп, под ней — легенда оснований */
+       Над полосой — скобки трёх групп в том же порядке, под ней — легенда
+       оснований */
     const parts = [
       { k: 'Готово', c: 'var(--st-done)', f: r => r.done, g: 'done' },
+      { k: 'Без решения', c: 'var(--rs-none)', f: r => r.open && !r.reasons.length, g: 'none' },
       { k: 'Фикс в RHEL', l: 'фикс в RHEL', c: 'var(--rs-fixed)', f: r => r.open && r.reasons[0] === 'fixed', g: 'ready' },
       { k: 'Устранено ранее', l: 'устранено ранее', c: 'var(--rs-patch)', f: r => r.open && r.reasons[0] === 'patch', g: 'ready' },
       { k: 'Вне диапазона', l: 'вне диапазона', c: 'var(--rs-range)', f: r => r.open && r.reasons[0] === 'range', g: 'ready' },
       { k: 'Дубликат', l: 'дубликат', c: 'var(--rs-dup)', f: r => r.open && r.reasons[0] === 'dup', g: 'ready' },
-      { k: 'Без решения', c: 'var(--rs-none)', f: r => r.open && !r.reasons.length, g: 'none' },
     ].map(x => ({ ...x, n: recs.filter(x.f).length }));
     const sum = g => parts.filter(x => x.g === g).reduce((a, x) => a + x.n, 0);
     const G = [
       { g: 'done', n: sum('done'), l: 'готово' },
-      { g: 'ready', n: sum('ready'), l: 'можно закрыть сразу' },
       { g: 'none', n: sum('none'), l: 'без решения' },
+      { g: 'ready', n: sum('ready'), l: 'можно закрыть сразу' },
     ];
     /* скобки и полоса — на одной сетке: колонка на сегмент, ширина — по
        числу задач; скобка занимает колонки сегментов своей группы и встаёт
