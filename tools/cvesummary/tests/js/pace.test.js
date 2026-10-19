@@ -76,3 +76,11 @@ test('project: прогноз остатка по дням до нуля — т�
   assert.strictEqual(pace.project(5, 2, 2, D, undefined, 30).length, 30);
   assert.deepStrictEqual(pace.project(0, 1, 1, D, undefined, 30), []);
 });
+
+test('cumulative: даты позже конца ряда прижимаются к нему — остаток равен rates().open', function () {
+  var rows = [r(D), r(D + 3), r(D, 'Готов', D + 3), r(D + 2, 'Готов', D + 1), { tdate: iso(D), status: 'Готов', end: '' }];
+  var got = pace.cumulative(rows, D - 1, D);
+  var last = got[got.length - 1];
+  assert.strictEqual(last.open, pace.rates(rows, D, 7).open);
+  assert.deepStrictEqual([last.inc, last.out, last.open], [5, 3, 2]);
+});

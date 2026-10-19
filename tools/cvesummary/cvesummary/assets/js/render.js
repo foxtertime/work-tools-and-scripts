@@ -184,15 +184,18 @@
      от сегодняшнего остатка к нулю в целевую дату */
   function drawBurn(mode) {
     const host = $('pace-chart'), up = mode === 'up';
-    paceLegend(up
-      ? [['всего поступило', 'background:var(--sev-imp)'], ['всего закрыто', 'background:var(--ok)'], ['прогноз', 'background:repeating-linear-gradient(90deg,var(--muted) 0 5px,transparent 5px 8px)']]
-      : [['открыто', 'background:var(--accent)'], ['прогноз', 'background:repeating-linear-gradient(90deg,var(--accent) 0 5px,transparent 5px 8px)'], ['идеально к цели', 'background:repeating-linear-gradient(90deg,var(--muted) 0 2px,transparent 2px 5px)']]);
+    const legendFor = forecast => paceLegend(up
+      ? [['всего поступило', 'background:var(--sev-imp)'], ['всего закрыто', 'background:var(--ok)'], [forecast, 'background:repeating-linear-gradient(90deg,var(--muted) 0 5px,transparent 5px 8px)']]
+      : [['открыто', 'background:var(--accent)'], [forecast, 'background:repeating-linear-gradient(90deg,var(--accent) 0 5px,transparent 5px 8px)'], ['идеально к цели', 'background:repeating-linear-gradient(90deg,var(--muted) 0 2px,transparent 2px 5px)']]);
+    legendFor('прогноз');
     host.setAttribute('aria-label', up ? 'Burn-up: всего поступило и всего закрыто по дням' : 'Burn-down: открытые задачи по дням');
     if (FIRST === null) { host.replaceChildren(el('div', 'empty', 'Нет дат в Task date и End date')); return; }
     const { R, stop, target } = paceCtx;
     const hist = pace.cumulative(recs, FIRST, AS_OF), last = hist[hist.length - 1];
     const proj = pace.project(last.open, R.inR, R.outR, AS_OF, stop !== null ? stop : undefined, BURN_HORIZON);
-    const near = d => (d !== null && d > AS_OF && d <= AS_OF + BURN_HORIZON ? d : AS_OF);
+    if (proj.length && proj[proj.length - 1].open > 0) legendFor('прогноз — не сходится, показан год');
+    /* цель и сканфриз — в пределах двух лет, чтобы идеальная линия дошла до нуля */
+    const near = d => (d !== null && d > AS_OF && d <= AS_OF + 2 * BURN_HORIZON ? d : AS_OF);
     const end = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, near(stop), near(target));
     const n = end - FIRST + 1, ai = AS_OF - FIRST;
     const at = i => (i <= ai ? hist[i] : proj[i - ai - 1]
@@ -202,8 +205,11 @@
     let top = 0;
     for (let i = 0; i < n; i++) { const v = at(i); if (v) keys.forEach(k => { top = Math.max(top, v[k]); }); }
     const { yMax, yStep } = scale(top);
-    const F = frame(host, { count: n, minStep: BURN_STEP, height: 230, yMax, yStep, pad: { t: 8, b: 22 }, key: 'pace:' + mode });
+    const key = 'pace:' + mode, first = !POS.has(key);
+    const F = frame(host, { count: n, minStep: BURN_STEP, height: 230, yMax, yStep, pad: { t: 8, b: 22 }, key });
     const x = i => F.step * i + F.step / 2;
+    /* при первом показе вида дата отчёта — на 70 % ширины, а не хвост прогноза */
+    if (first) { const box = F.plot.parentNode; box.scrollLeft = Math.max(0, x(ai) - box.clientWidth * 0.7); timeline.sync(box); }
     const line = (pts, color, w, dash) => { if (pts.length < 2) return; F.plot.append(mk('path', Object.assign({ d: pts.map(([i, v], j) => (j ? 'L' : 'M') + x(i).toFixed(1) + ',' + F.y(v).toFixed(1)).join(''), fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linejoin': 'round' }, dash ? { 'stroke-dasharray': dash } : {}))); };
     /* отметки дат: подписи — на подложке цвета фона; близкие отметки
        разносятся по строкам, чтобы подписи не налезали друг на друга */
@@ -213,7 +219,7 @@
       .forEach(([d, label], j, all) => {
         const xi = x(d - FIRST);
         F.plot.append(mk('line', { x1: xi, x2: xi, y1: 8, y2: 208, class: 'vmark' }));
-        const row = j && xi - x(all[j - 1][0] - FIRST) < 64 ? (labels[j - 1].row + 1) % 3 : 0;
+        const row = all.slice(0, j).filter(([p]) => xi - x(p - FIRST) < 64).length;
         const right = xi + 64 > F.width, t = mk('text', { x: right ? xi - 4 : xi + 4, y: 18 + row * 13, class: 'vlab', 'text-anchor': right ? 'end' : 'start' });
         t.textContent = label; labels.push({ row, t });
       });
@@ -246,7 +252,7 @@
       const hit = mk('rect', { x: F.step * i, y: 8, width: F.step, height: 200, fill: 'transparent', 'data-i': i });
       const when = fmt(day) + (day > AS_OF ? ' · прогноз' : '');
       const id = ideal(i);
-      hit.dataset.tip = up ? `${when}: всего поступило ${R0(v.inc)}, закрыто ${R0(v.out)}, открыто ${R0(v.open)}`
+      hit.dataset.tip = up ? `${when}: всего поступило ${R0(v.inc)}, закрыто ${R0(v.out)}, открыто ${R0(v.inc) - R0(v.out)}`
         : `${when}: открыто ${R0(v.open)}` + (id !== null && day > AS_OF ? ` · по идеальной линии ${R0(id)}` : '');
       F.plot.append(hit);
     }

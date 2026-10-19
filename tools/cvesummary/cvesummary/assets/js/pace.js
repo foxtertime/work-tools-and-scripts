@@ -71,12 +71,13 @@
   /* Накопительные ряды по дням from..to для burn-up и burn-down: всего
      поступило (inc), всего закрыто (out), открыто (open). Задача без Task
      date — в бэклоге с начала; закрыта не раньше, чем поступила; «Готов»
-     без End date закрыт сразу, как поступил. */
+     без End date закрыт сразу, как поступил. Даты позже to прижимаются к
+     to: на последний день открыты ровно не «Готов», как в rates().open. */
   function cumulative(rows, from, to) {
     const n = to - from + 1;
     if (n <= 0) return [];
     const inc = new Array(n).fill(0), out = new Array(n).fill(0);
-    const put = (arr, d) => { if (d <= to) arr[Math.max(0, d - from)]++; };
+    const put = (arr, d) => { arr[Math.min(n - 1, Math.max(0, d - from))]++; };
     rows.forEach(r => {
       const a = inDay(r) === null ? -Infinity : inDay(r);
       put(inc, a);

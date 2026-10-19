@@ -220,7 +220,8 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .ps .l{font-size:12px;color:var(--muted)}
 .ps .v.bad{color:var(--bad)}.ps .v.ok{color:var(--ok)}
 .pace-chart{flex:1;display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:8px;padding:12px 14px 6px;min-height:280px;min-width:0}
-.pace-chart-h{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
+/* переключатель вида — справа сверху, легенда — под графиком */
+.pace-chart-h{display:flex;justify-content:flex-end}
 .pace-leg{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .tl .vmark{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 3}
 .tl text.vlab{font-size:11px;paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
