@@ -7,6 +7,28 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-19
+
+### Изменено
+
+- Пункты списков задач оформляются как в `work-ai-skills`: чекбокс с кодом
+  `ТИП-П-ГГММ-NN` (`REPO-` у корневого списка), строки «Область»,
+  «Источник» и «Приоритет» с датой оценки, порядок по убыванию приоритета,
+  счётчик последних номеров в шапке. Формат описан в `CLAUDE.md`, «Список
+  задач»; списки `dashboard` и `vulnsheet` переведены, прежние коды `V…`
+  сохранены строкой «Бывш.».
+- `vulnsheet` (2.0.0), несовместимо: признаки патча и диапазона — в своих
+  колонках `P` и `D` (`+`/`-`) перед `SL NVR`, в таблице 22 колонки;
+  `Комментарий` тулза больше не трогает. Таблица 1.x не читается — код 2 с
+  подсказкой, как её перевести. Сбой GitLab или NVD больше не стирает
+  прежний результат: у прежней строки остаётся прежнее значение колонки.
+
+### Удалено
+
+- `vulnsheet` (2.0.0): поиск CVE в спеке (`PatchN`, `%changelog`), сверка
+  билда с веткой и ссылки на патчи; GitLab спрашивается одним деревом
+  `PATCH` на билд.
+
 ## [0.9.1] - 2026-10-15
 
 ### Исправлено
@@ -125,7 +147,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.7.0...v0.8.0

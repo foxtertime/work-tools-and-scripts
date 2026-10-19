@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 EXIT_OK = 0
 # CSV записан, но есть отбраковка, ERROR koji, fetch error (в том числе там,
 # где из-за сбоя оставлены прежние koji или VEX), компоненты, чьи патчи в
-# GitLab проверить не удалось, строки таблицы, по которым нечего спрашивать,
-# либо читатель оборвал stdout (broken pipe) — таблица дописана не до конца
+# GitLab проверить не удалось, CVE без диапазонов из-за сбоя, строки
+# таблицы, по которым нечего спрашивать, либо читатель оборвал stdout
+# (broken pipe) — таблица дописана не до конца
 EXIT_PARTIAL = 1
 EXIT_FATAL = 2
 
@@ -55,7 +56,7 @@ def _parser() -> argparse.ArgumentParser:
                         help="файл с блоками задач; - — stdin")
     parser.add_argument("--table", metavar="FILE",
                         help="прежняя таблица vulnsheet: без --blocks — обновить в ней "
-                             "koji и VEX, с --blocks — сверить с блоками")
+                             "koji, VEX, P и D, с --blocks — сверить с блоками")
     parser.add_argument("--config",
                         help="YAML-конфиг (по умолчанию — из $%s, иначе без конфига)"
                              % config.ENV_VAR)
@@ -226,27 +227,19 @@ def _footer(args, cfg, rejects, found, outcome, reasons) -> None:
         _item(2, "оставлены прежние данные VEX %d" % len(outcome.kept_vex))
 
     if cfg.gitlab is None:
-        _item(1, "GitLab: не задан — патчи не проверялись")
+        _item(1, "GitLab: не задан — колонка P не проверялась")
     else:
-        kinds, fates = outcome.patch_kinds, outcome.note_fates
-        _item(1, "GitLab, строки:")
-        for source in patches.SOURCES:
-            _item(2, "%s: найден %d, убран из ветки %d, только в ветке %d" % (
-                source, kinds.get((source, patches.FOUND), 0),
-                kinds.get((source, patches.REMOVED), 0),
-                kinds.get((source, patches.BRANCH_ONLY), 0)))
-        _item(2, "пометка " + ", ".join("%s %d" % (fate, fates.get(fate, 0))
-                                         for fate in merge.FATES))
+        _item(1, "GitLab, колонка P:")
+        _marks(outcome.patch_marks, outcome.patch_unchecked, outcome.kept_patch)
         _item(1, "GitLab, компоненты:")
         for kind in patches.KINDS:
             _item(2, "%s %d" % (kind, found.kinds.get(kind, 0)))
-        for kind in patches.SPEC_KINDS:
-            _item(2, "%s %d" % (kind, found.spec_kinds.get(kind, 0)))
     if cfg.ranges is None:
-        _item(1, "диапазоны версий: не заданы — не сверялись")
+        _item(1, "диапазоны версий: не заданы — колонка D не сверялась")
     else:
         kinds, sources = outcome.range_kinds, outcome.range_sources
-        _item(1, "диапазоны версий:")
+        _item(1, "диапазоны версий, колонка D:")
+        _marks(outcome.range_marks, outcome.range_unchecked, outcome.kept_range)
         _item(2, "в диапазоне %d" % kinds.get(True, 0))
         _item(2, "вне диапазона %d" % kinds.get(False, 0))
         _item(2, "неизвестен %d" % kinds.get(None, 0))
@@ -261,6 +254,15 @@ def _footer(args, cfg, rejects, found, outcome, reasons) -> None:
             _item(2, reason)
     else:
         _item(1, "код возврата 0")
+
+
+def _marks(marks, unchecked: int, kept) -> None:
+    """Строки по значению колонки P или D и те, где проверить не удалось."""
+    _item(2, "«+» %d" % marks.get("+", 0))
+    _item(2, "«-» %d" % marks.get("-", 0))
+    if unchecked or kept:
+        _item(2, "не проверено %d: в новых строках «-» %d, в прежних оставлено прежнее %d"
+              % (unchecked + len(kept), unchecked, len(kept)))
 
 
 def _settings(args):
@@ -287,8 +289,8 @@ def _gitlab_token(settings) -> Optional[str]:
 
 
 def _patches(session, nvrs, settings, token):
-    """Патчи под CVE по компонентам с найденным билдом; без секции gitlab —
-    ничего не спрашивается."""
+    """Патчи под CVE в каталоге PATCH билда, по компонентам с найденным
+    билдом; без секции gitlab ничего не спрашивается."""
     if settings is None:
         return patches.Result({}, ())
     found = {name: nvr for name, nvr in nvrs.items()
@@ -344,7 +346,7 @@ def _header(args, cfg, run) -> None:
             for name, count in renamed.items()))
     gitlab = cfg.gitlab
     if gitlab is None:
-        logger.info("GitLab: не задан в конфиге — патчи не проверяются")
+        logger.info("GitLab: не задан в конфиге — колонка P не проверяется")
     else:
         hosts = ", ".join("%s (по умолчанию)" % host if host == gitlab.default_host else host
                           for host in gitlab.hosts)
@@ -353,7 +355,7 @@ def _header(args, cfg, run) -> None:
         logger.info("GitLab: %s, каталог %s, %s, потоков %d", hosts, gitlab.patch_dir, token,
                     gitlab.jobs)
     if cfg.ranges is None:
-        logger.info("диапазоны: не заданы в конфиге — версии не сверяются")
+        logger.info("диапазоны: не заданы в конфиге — колонка D не сверяется")
     else:
         env = cfg.ranges.nvd_key_env
         key = ("NVD с ключом из $%s" % env if run.nvd_key else
@@ -365,9 +367,9 @@ def _header(args, cfg, run) -> None:
         return
     plan = "koji — пакетов %d, VEX — CVE %d" % (len(run.packages), len(run.cves))
     if gitlab is not None:
-        plan += ", GitLab — патчи по билдам из koji (до %d)" % len(run.packages)
+        plan += ", GitLab — каталог PATCH по билдам из koji (до %d) → P" % len(run.packages)
     if cfg.ranges is not None:
-        plan += ", диапазоны — CVE %d" % len(run.cves)
+        plan += ", диапазоны — CVE %d → D" % len(run.cves)
     logger.info("план: %s", plan)
 
 
@@ -377,7 +379,8 @@ def _ranges_cache(cfg) -> str:
 
 def _range_notes(cfg, unique, nvrs, nvd_key):
     """(CVE, компонент) → RangeNote и CVE, по которым диапазоны не известны
-    из-за сбоя. Без секции ranges ничего не спрашивается."""
+    из-за сбоя: их пар в ответе нет. Без секции ranges ничего не
+    спрашивается. Пакетам без билда (NOT_FOUND, ERROR) сверять нечего."""
     settings = cfg.ranges
     if settings is None or not unique:
         return {}, set()
@@ -386,8 +389,13 @@ def _range_notes(cfg, unique, nvrs, nvd_key):
         retries=settings.retries, timeout=settings.timeout, nvd_key=nvd_key))
     notes, failed = {}, set()
     for cve, name in unique:
-        version = ranges.upstream_version(nvrs.get(name, ""))
-        if version is None or cve not in docs:
+        nvr = nvrs.get(name, "")
+        if nvr in (kojiclient.NOT_FOUND, kojiclient.ERROR):
+            continue
+        version = ranges.upstream_version(nvr)
+        if version is None:
+            logger.debug("%s: версия не выделена из %s — диапазон неизвестен", name, nvr)
+            notes[(cve, name)] = ranges.judge(nvr, None)
             continue
         found, broken = ranges.ranges_for(docs[cve], settings.names_for(name))
         if broken:
@@ -435,6 +443,12 @@ def _warn_outcome(outcome) -> None:
                        note.number, note.cve, note.component)
     for note in outcome.kept_vex:
         logger.warning("запись %d (%s %s): VEX не получен — оставлены прежние данные VEX",
+                       note.number, note.cve, note.component)
+    for note in outcome.kept_patch:
+        logger.warning("запись %d (%s %s): патчи не проверены — оставлено прежнее P",
+                       note.number, note.cve, note.component)
+    for note in outcome.kept_range:
+        logger.warning("запись %d (%s %s): диапазон не сверен — оставлено прежнее D",
                        note.number, note.cve, note.component)
     for note in outcome.skipped:
         logger.warning("запись %d (%s %s): нет CVE-ID или компонента — строка оставлена как есть",
@@ -494,7 +508,9 @@ def _run(args) -> int:
         verdicts = {(cve, name): vex.Verdict(state=vex.FETCH_ERROR) if cve in failures
                     else vex.lookup(indices[cve], name, rhel, streams[name], aliases[name])
                     for cve, name in unique}
-        outcome = _merge(records, tasks, merge.Fresh(nvrs, verdicts, found.notes, range_notes))
+        outcome = _merge(records, tasks, merge.Fresh(
+            nvrs, verdicts, found.patched if cfg.gitlab is not None else None,
+            range_notes if cfg.ranges is not None else None))
         report.write(outcome.rows, out)
     except BaseException:
         if tmp_path is not None:
