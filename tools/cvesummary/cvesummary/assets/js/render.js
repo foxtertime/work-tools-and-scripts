@@ -213,7 +213,7 @@
     wl.textContent = `в работе · ревью ${review} · пауза ${paused}`;
     wl.dataset.tip = `в работе ${working.length}, из них на ревью ${review}, на паузе ${paused}`;
     set('k-free', recs.filter(r => !r.taken && !r.done).length, '#8FA6B8');
-    $('k-ready').textContent = `${ready.length} задач без повторов · ${pct(ready.length)}% от всех`;
+    $('k-ready').textContent = `${ready.length} задач · ${pct(ready.length)}% от всех`;
     set('k-fixed', ready.filter(r => r.reasons.includes('fixed')).length, '#BFE3F2');
     set('k-own', ready.filter(r => r.reasons.includes('patch')).length, '#7FC6E4');
     set('k-out', ready.filter(r => r.reasons.includes('range')).length, '#3E9CC4');
@@ -298,7 +298,7 @@
     const ready = recs.filter(r => r.open && r.reasons.length);
     const why = [['Фикс в RHEL (RHEL state = Fixed)', 'fixed', '--ok'], ['Устранено ранее (P = +)', 'patch', '--accent'], ['Версия вне уязвимого диапазона (D = +)', 'range', '--sev-none']];
     hbars('close-why', why.map(([l, k, c]) => { const n = ready.filter(r => r.reasons.includes(k)).length; return { label: l, n, segs: [{ n, color: c, name: '' }] }; })
-      .concat([{ label: 'Всего задач, без повторов', n: ready.length, segs: [{ n: ready.length, color: '--fg', name: '' }] }]), Math.max(1, ready.length));
+      .concat([{ label: 'Всего задач', n: ready.length, segs: [{ n: ready.length, color: '--fg', name: '' }] }]), Math.max(1, ready.length));
     $('close-n').textContent = ready.length;
     const cb = $('close-body'); cb.replaceChildren();
     if (!ready.length) emptyRow(cb, 8, 'Открытых задач с готовым решением нет');
