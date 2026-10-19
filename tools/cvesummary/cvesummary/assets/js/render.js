@@ -364,6 +364,10 @@
     set('k-out', ready.filter(r => r.reasons.includes('range')).length, '#3E9CC4');
     set('k-dup', ready.filter(r => r.reasons.includes('dup')).length, '#9AA9D6');
     set('k-ci', open.filter(r => r.sevN === 'Critical' || r.sevN === 'Important').length, '#FF8A6B');
+    const crit = open.filter(r => r.sevN === 'Critical').length, imp = open.filter(r => r.sevN === 'Important').length;
+    const cl = $('k-ci-l');
+    cl.textContent = `Critical ${crit} · Important ${imp}`;
+    cl.dataset.tip = `открытых Critical ${crit}, Important ${imp}`;
     set('k-att', recs.filter(r => r.attention).length, '#FF8A6B');
     const problem = recs.filter(r => roles.norm(r.status) === 'есть проблема').length, rework = recs.filter(r => roles.norm(r.status) === 'нужна доработка').length;
     const al = $('k-att-l');
