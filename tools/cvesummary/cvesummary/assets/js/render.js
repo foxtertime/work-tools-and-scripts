@@ -389,7 +389,6 @@
   let inflowBy = LS.get('cve.inflowBy') === 'day' ? 'day' : 'week';
   function renderInflow() {
     const byDay = inflowBy === 'day', items = recs.map(r => [r.tdateD, r.sevN]);
-    $('weeks-h').textContent = `Поступление задач по ${byDay ? 'дням' : 'неделям'}`;
     $('weeks-sub').textContent = `По полю Task date${byDay ? '' : ', неделя начинается в понедельник'}, с разбивкой по критичности (RHEL severity)`;
     $('weeks').setAttribute('aria-label', `Количество задач по ${byDay ? 'дням' : 'неделям'}`);
     for (const b of $('inflow-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === inflowBy));
@@ -545,7 +544,6 @@
   function renderBurn() {
     if (!burnData) return;
     const byDay = burnBy === 'day', { cats, items } = burnData;
-    $('burn-sub').textContent = `Сжигание по ${byDay ? 'дням' : 'неделям'}: задачи со статусом «Готов» по End date, с разбивкой по разработчикам`;
     $('burn').setAttribute('aria-label', `Закрытые задачи по ${byDay ? 'дням' : 'неделям'} и разработчикам`);
     for (const b of $('burn-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === burnBy));
     stackChart($('burn'), byDay ? daysOf(items, cats) : weeksOf(items, cats), cats, 'закрыто', byDay);
