@@ -402,7 +402,7 @@
     al.dataset.tip = `есть проблема ${problem}, нужна доработка ${rework}`;
     const s = Hm.summary(closedWithHours(recs));
     $('k-hours').textContent = s.n ? f1(s.mean) : '—';
-    $('k-hours-l').textContent = s.n ? `часов на задачу, медиана ${f1(s.median)} · по ${s.n} задачам` : 'часов на задачу: закрытых с датами нет';
+    $('k-hours-l').textContent = s.n ? `часов на задачу, медиана ${f1(s.median)} · по\u00a0${s.n} ${plural(s.n, 'задаче', 'задачам', 'задачам')} за всё время` : 'часов на задачу: закрытых с датами нет';
 
     /* каждая задача — в одном сегменте: по первому основанию закрыть,
        основания идут в порядке fixed, patch, range, dup */
