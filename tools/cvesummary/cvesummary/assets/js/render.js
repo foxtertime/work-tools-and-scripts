@@ -1,8 +1,9 @@
 /* Отрисовка сводки. Данные — из блока #data; роли, часы, темп и ширина
-   графиков — модули dates, roles, hours, pace, timeline; здесь только DOM. */
+   графиков, подсветка строки разделов — модули dates, roles, hours, pace,
+   timeline, nav; здесь только DOM. */
 (function () {
   'use strict';
-  const { dates, roles, hours: Hm, pace, timeline } = window.CS;
+  const { dates, roles, hours: Hm, pace, timeline, nav } = window.CS;
   const DATA = JSON.parse(document.getElementById('data').textContent);
   const AS_OF = dates.dayOf(DATA.meta.as_of);
   const NS = 'http://www.w3.org/2000/svg';
@@ -554,6 +555,7 @@
     const att = recs.filter(r => r.attention).sort(byCvss);
     /* счётчик — в подписи под заголовком, жирным */
     const counted = (id, n, forms, rest) => { const p = $(id); p.replaceChildren(el('b', null, String(n)), ` ${plural(n, ...forms)}${rest}`); };
+    $('nb-att').textContent = att.length;
     counted('att-sub', att.length, ['задача', 'задачи', 'задач'], ' со статусом «Есть проблема» или «Нужна доработка». Отсортировано по CVSS.');
     const tb = $('att-body'); tb.replaceChildren();
     if (!att.length) emptyRow(tb, 9, 'Задач со статусом «Есть проблема» или «Нужна доработка» нет');
@@ -566,6 +568,7 @@
 
     const ready = recs.filter(r => r.open && r.reasons.length);
     renderCloseWhy(ready);
+    $('nb-close').textContent = ready.length;
     counted('close-sub', ready.length, ['открытая задача', 'открытые задачи', 'открытых задач'], ', по которым решение уже есть; одна задача может иметь несколько оснований');
     const cb = $('close-body'); cb.replaceChildren();
     if (!ready.length) emptyRow(cb, 8, 'Открытых задач с готовым решением нет');
@@ -953,7 +956,7 @@
     const listed = new Set(H.anomalies.map(a => a.index));
     recs.forEach(r => { if (!listed.has(r.i) && r.bad && r.bad.length) items.push({ r, why: 'не разобрана дата: ' + r.bad.map(k => label[k]).join(', ') }); });
     items.sort((a, b) => a.r.row - b.r.row);
-    $('anom-n').textContent = items.length;
+    $('anom-n').textContent = items.length; $('nb-anom').textContent = items.length;
     const notes = $('anom-notes'); notes.replaceChildren();
     if (DATA.meta.skipped) notes.append(el('li', null, `Строк без CVE ID пропущено: ${DATA.meta.skipped}.`));
     if (DATA.meta.missing.length) notes.append(el('li', null, `Нет колонок (читаются пустыми): ${DATA.meta.missing.join(', ')}.`));
@@ -970,7 +973,39 @@
     renderHead(); renderCuts(); renderTables(); renderBars();
     const W = renderPace();
     renderPeople(W); renderAnomalies();
+    navSync();
   }
+
+  /* строка разделов: подсвечен раздел, чей верх ушёл под неё (модуль nav).
+     По клику подсвечен выбранный, и прокрутка до него подсветку не
+     перебивает — пока она не утихнет */
+  const NAV_WRAP = $('secnav').querySelector('.wrap');
+  const navLinks = [...NAV_WRAP.querySelectorAll('a')];
+  const navSecs = navLinks.map(a => $(a.getAttribute('href').slice(1)));
+  let navK = -1, navPinned = false, navRaf = 0, navT;
+  function navOn(k) {
+    if (k === navK) return;
+    navK = k;
+    navLinks.forEach((a, i) => a.classList.toggle('on', i === k));
+    /* на узком экране строка листается: подсвеченный якорь — к её середине,
+       без подсветки — к началу */
+    if (k < 0) { NAV_WRAP.scrollTo({ left: 0, behavior: 'smooth' }); return; }
+    const a = navLinks[k].getBoundingClientRect(), w = NAV_WRAP.getBoundingClientRect();
+    NAV_WRAP.scrollBy({ left: a.left + a.width / 2 - (w.left + w.width / 2), behavior: 'smooth' });
+  }
+  function navSync() {
+    navRaf = 0;
+    if (navPinned) return;
+    /* раздел, к которому перешли по якорю, встаёт ровно на scroll-margin-top */
+    const line = parseFloat(getComputedStyle(navSecs[0]).scrollMarginTop) + 1;
+    const atBottom = innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
+    navOn(nav.active(navSecs.map(s => s.getBoundingClientRect().top), line, atBottom));
+  }
+  addEventListener('scroll', () => {
+    if (navPinned) { clearTimeout(navT); navT = setTimeout(() => { navPinned = false; navSync(); }, 150); return; }
+    if (!navRaf) navRaf = requestAnimationFrame(navSync);
+  }, { passive: true });
+  navLinks.forEach((a, i) => a.addEventListener('click', () => { navPinned = true; navOn(i); }));
 
   ['stop-date', 'target-date', 'pace-from', 'pace-to'].forEach(id => $(id).addEventListener('change', () => {
     LS.set('cve.stopDate', $('stop-date').value); LS.set('cve.targetDate', $('target-date').value);
