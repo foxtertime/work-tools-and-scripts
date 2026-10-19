@@ -1,4 +1,4 @@
-"""Точка входа: xlsx таблицы процесса → HTML-сводка."""
+"""Точка входа: xlsx или CSV таблицы процесса → HTML-сводка."""
 import argparse
 import datetime
 import logging
@@ -7,12 +7,14 @@ import sys
 import tempfile
 from typing import List, Optional
 
-from . import __version__, page, table, xlsx
+from . import __version__, csvfile, page, table, xlsx
 
 logger = logging.getLogger("cvesummary")
 
 EXIT_OK = 0
 EXIT_FATAL = 2
+
+_SEPARATOR_NAMES = {"\t": "табуляция"}
 
 
 def _today() -> datetime.date:
@@ -33,8 +35,8 @@ def default_output(path: str) -> str:
 def _parse(argv):
     parser = argparse.ArgumentParser(
         prog="cvesummary",
-        description="Сводка по CVE: xlsx таблицы процесса → одна HTML-страница.")
-    parser.add_argument("table", help="xlsx таблицы процесса; читается первый лист")
+        description="Сводка по CVE: xlsx или CSV таблицы процесса → одна HTML-страница.")
+    parser.add_argument("table", help="таблица процесса: xlsx (читается первый лист) или .csv")
     parser.add_argument("-o", "--output",
                         help="куда записать страницу; по умолчанию рядом с таблицей, <имя>.html")
     parser.add_argument("--as-of", type=_date,
@@ -60,14 +62,24 @@ def main(argv: Optional[List[str]] = None) -> int:
             and os.path.samefile(output, args.table)):
         logger.error("%s: страница записалась бы поверх таблицы — задайте другой -o", output)
         return EXIT_FATAL
+    is_csv = args.table.lower().endswith(".csv")
     try:
-        sheet = xlsx.read(args.table)
+        if is_csv:
+            source = csvfile.read(args.table)
+            sheet = source.sheet
+        else:
+            sheet = xlsx.read(args.table)
         found = table.build(sheet)
-    except (xlsx.XlsxError, table.TableError) as exc:
+    except (xlsx.XlsxError, csvfile.CsvError, table.TableError) as exc:
         logger.error("%s: %s", args.table, exc)
         return EXIT_FATAL
 
-    logger.info("лист «%s», шапка в строке %d", sheet.name, found.header_row)
+    if is_csv:
+        logger.info("CSV, разделитель «%s», кодировка %s, шапка в строке %d",
+                    _SEPARATOR_NAMES.get(source.delimiter, source.delimiter),
+                    source.encoding, found.header_row)
+    else:
+        logger.info("лист «%s», шапка в строке %d", sheet.name, found.header_row)
     found_names = [name for key, name in table.FIELDS
                    if key not in table.REQUIRED and name not in found.missing]
     logger.info("колонки: %s", ", ".join(found_names))
@@ -83,7 +95,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     data = {
         "meta": {"version": __version__, "source": os.path.basename(args.table),
-                 "sheet": sheet.name, "header_row": found.header_row,
+                 "sheet": None if is_csv else sheet.name, "header_row": found.header_row,
                  "as_of": as_of.isoformat(), "skipped": found.skipped,
                  "missing": found.missing, "bad_dates": found.bad_dates},
         "rows": found.rows,

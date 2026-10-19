@@ -191,7 +191,8 @@
     const tds = recs.map(r => r.tdateD).filter(d => d !== null).sort((a, b) => a - b);
     $('period').textContent = tds.length ? `Период задач: ${fmt(tds[0])} — ${fmt(tds[tds.length - 1])}` : 'Период: даты задач не найдены';
     $('asof').textContent = `на ${fmt(AS_OF)}`;
-    $('src').textContent = `${DATA.meta.source}, лист «${DATA.meta.sheet}», шапка в строке ${DATA.meta.header_row}; cvesummary ${DATA.meta.version}`;
+    const where = DATA.meta.sheet == null ? 'CSV' : `лист «${DATA.meta.sheet}»`;
+    $('src').textContent = `${DATA.meta.source}, ${where}, шапка в строке ${DATA.meta.header_row}; cvesummary ${DATA.meta.version}`;
     /* set — из образца: значение плитки, мини-полоса и процент */
     const set = (id, n, color) => {
       const v = $(id); v.textContent = n; const tile = v.parentElement;

@@ -1,11 +1,13 @@
 """Пример таблицы процесса на 100 строк — для ручной проверки страницы.
 
 python3 -m tests.example пример.xlsx
+python3 -m tests.example пример.csv     # то же самое в CSV через «;», как пишет vulnsheet
 
 Данные вымышленные, детерминированные (seed). Над шапкой — строка
 группировки, даты — текстом дд.мм.гггг, как в живой выгрузке; две строки
 — намеренные аномалии («Готов» без End date, End раньше Start).
 """
+import csv
 import datetime
 import random
 import sys
@@ -75,7 +77,11 @@ def rows():
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    write(argv[0], rows())
+    if argv[0].lower().endswith(".csv"):
+        with open(argv[0], "w", encoding="utf-8", newline="") as handle:
+            csv.writer(handle, delimiter=";", lineterminator="\n").writerows(rows())
+    else:
+        write(argv[0], rows())
     return 0
 
 
