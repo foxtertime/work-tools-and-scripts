@@ -302,13 +302,19 @@
 
   /* stackChart — из образца, перенесён на frame(): x считается от F.step,
      высота — F.y, ось — в рамке. byDay — столбик на день, а не на неделю;
-     opts.height и opts.key — для маленьких графиков в карточках */
+     opts.height и opts.key — для маленьких графиков в карточках; opts.window
+     ({ from, to } — дни) — подсветка окна темпа, как на графике темпа */
   function stackChart(host, weeks, cats, what, byDay, opts = {}) {
     if (!weeks.length) { host.replaceChildren(el('div', 'empty', 'Нет данных с датами')); return; }
     const H2 = opts.height || 230;
     const { yMax, yStep } = scale(maxOf(weeks.map(w => w.all), 0));
     const F = frame(host, { count: weeks.length, minStep: byDay ? BAR_DAY_STEP : WEEK_STEP, height: H2, yMax, yStep, pad: { t: 16, b: 24 }, key: opts.key || host.id + (byDay ? ':d' : ':w') });
     const barW = Math.max(3, Math.min(56, F.step - (byDay ? 4 : 6))), GAP = barW >= 10 ? 2 : 1;
+    if (opts.window) {
+      const span = byDay ? 1 : 7, { from, to } = opts.window;
+      const hit = weeks.map((w, i) => (w.t <= to && w.t + span - 1 >= from ? i : -1)).filter(i => i >= 0);
+      if (hit.length) F.plot.prepend(mk('rect', { x: F.step * hit[0], y: 16, width: F.step * (hit[hit.length - 1] - hit[0] + 1), height: H2 - 40, fill: 'var(--accent-soft)' }));
+    }
     F.plot.classList.add('hlg');
     weeks.forEach((w, i) => {
       /* неделя — одна группа: под курсором она яркая, остальные приглушены */
@@ -746,7 +752,7 @@
         card.append(c4); ppl.append(card);
         const first = minOf(starts, Infinity);
         const mcats = measKeys.map(k => ({ k, c: measColor(k) }));
-        stackChart(sh, daysOf(done.map(r => [r.endD, r.measureN]), mcats, first), mcats, 'закрыто', true, { height: 130, key: 'dev:' + d });
+        stackChart(sh, daysOf(done.map(r => [r.endD, r.measureN]), mcats, first), mcats, 'закрыто', true, { height: 130, key: 'dev:' + d, window: { from: AS_OF - WIN + 1, to: AS_OF } });
         c4.append(el('div', 'cap', `закрыто по дням с ${fmt(first)} по ${fmt(AS_OF)}`));
         continue;
       }
@@ -755,8 +761,8 @@
     const names = [...devColor.keys()];
     const cats = names.slice(0, 8).map(k => ({ k, c: devColor.get(k) }));
     if (names.length > 8) cats.push({ k: 'Другие', c: '--sev-none' });
-    legend('burnleg', cats);
-    burnData = { cats, items: recs.filter(r => r.done && r.taken).map(r => [r.endD, names.indexOf(r.devKey) < 8 ? r.devKey : 'Другие']) };
+    legend('burnleg', cats.concat([{ k: 'окно темпа', c: '--accent-soft' }]));
+    burnData = { cats, window: { from: AS_OF - WIN + 1, to: AS_OF }, items: recs.filter(r => r.done && r.taken).map(r => [r.endD, names.indexOf(r.devKey) < 8 ? r.devKey : 'Другие']) };
     renderBurn();
   }
 
@@ -764,10 +770,10 @@
   let burnBy = LS.get('cve.burnBy') === 'day' ? 'day' : 'week', burnData = null;
   function renderBurn() {
     if (!burnData) return;
-    const byDay = burnBy === 'day', { cats, items } = burnData;
+    const byDay = burnBy === 'day', { cats, items, window } = burnData;
     $('burn').setAttribute('aria-label', `Закрытые задачи по ${byDay ? 'дням' : 'неделям'} и разработчикам`);
     for (const b of $('burn-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === burnBy));
-    stackChart($('burn'), byDay ? daysOf(items, cats) : weeksOf(items, cats), cats, 'закрыто', byDay);
+    stackChart($('burn'), byDay ? daysOf(items, cats) : weeksOf(items, cats), cats, 'закрыто', byDay, { window });
   }
 
   function renderAnomalies() {
