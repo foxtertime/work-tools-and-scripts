@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Сводка по CVE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Onest:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>/*@css*/</style>
+</head>
+<body>
+<div id="tip" hidden></div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-top">
+      <div>
+        <div class="eyebrow" id="period">Период: —</div>
+        <h1>Сводка по CVE</h1>
+        <p class="asof" id="asof">—</p>
+      </div>
+    </div>
+    <div class="board">
+      <div class="total">
+        <span class="e">Всего задач</span>
+        <span class="n" id="k-total">—</span>
+        <span class="s"><b id="k-cve">—</b> уникальных CVE · <b id="k-comp">—</b> компонентов</span>
+        <div class="mixbar" id="mixbar"></div>
+        <div class="mixleg" id="mixleg"></div>
+      </div>
+      <div class="groups">
+        <div class="grp">
+          <div class="grp-h"><b>Состояние</b></div>
+          <div class="tiles">
+            <div class="kpi" style="--k:#5CC48A"><span class="v" id="k-closed">—</span><span class="l">готово</span></div>
+            <div class="kpi" style="--k:#FF8A6B"><span class="v" id="k-work">—</span><span class="l" id="k-work-l">в работе</span></div>
+            <div class="kpi" style="--k:#4A5B6A"><span class="v" id="k-free">—</span><span class="l">не взято</span></div>
+          </div>
+        </div>
+        <div class="grp">
+          <div class="grp-h"><b>Можно закрыть</b><span id="k-ready">—</span></div>
+          <div class="tiles">
+            <div class="kpi" style="--k:#BFE3F2"><span class="v" id="k-fixed">—</span><span class="l">фикс в RHEL (Fixed)</span></div>
+            <div class="kpi" style="--k:#7FC6E4"><span class="v" id="k-own">—</span><span class="l">есть свой патч (P = +)</span></div>
+            <div class="kpi" style="--k:#3E9CC4"><span class="v" id="k-out">—</span><span class="l">версия вне диапазона (D = +)</span></div>
+          </div>
+        </div>
+        <div class="grp">
+          <div class="grp-h"><b>Риски и темп</b></div>
+          <div class="tiles">
+            <div class="kpi hot"><span class="v" id="k-ci">—</span><span class="l">Critical и Important открыты</span></div>
+            <div class="kpi"><span class="v" id="k-att">—</span><span class="l">есть проблема / нужна доработка</span></div>
+            <div class="kpi"><span class="v" id="k-hours">—</span><span class="l" id="k-hours-l">часов на задачу</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <section class="card wide" id="cve">
+      <div class="cve-grid">
+        <div class="cve-sum">
+          <h2>CVE</h2>
+          <p class="sub" style="margin:0">по критичности, RHEL severity</p>
+          <div class="sevstrip" id="sevstrip"></div>
+        </div>
+        <div class="cve-rows" id="sevrows"></div>
+      </div>
+      <hr class="cve-div">
+      <div class="cve-grid">
+        <div class="cve-sum">
+          <h3 class="cve-h3">Принятые меры</h3>
+          <p class="sub" style="margin:0">для задач, где мера указана</p>
+          <div class="sevstrip" id="measstrip"></div>
+        </div>
+        <div class="cve-rows" id="measrows"></div>
+      </div>
+    </section>
+
+    <section class="card wide" id="pace">
+      <div class="pace-head">
+        <div><h2>Темп и прогноз</h2><p class="sub" id="pace-sub">—</p></div>
+        <div class="pace-ctl">
+          <label for="stop-date">Сканфриз<input type="date" id="stop-date"></label>
+          <label for="target-date">Хотим закончить к<input type="date" id="target-date"></label>
+          <label for="pace-win">Темп за<select id="pace-win"><option value="7">7 дней</option><option value="14" selected>14 дней</option><option value="30">30 дней</option></select></label>
+        </div>
+      </div>
+      <div class="pace-body">
+        <div class="pace-left">
+          <div class="pace-stats">
+            <div class="ps"><span class="v" id="p-in">—</span><span class="l">поступает в день</span></div>
+            <div class="ps"><span class="v" id="p-out">—</span><span class="l">закрывается в день</span></div>
+            <div class="ps"><span class="v" id="p-net">—</span><span class="l" id="p-net-l">баланс в день</span></div>
+            <div class="ps"><span class="v" id="p-open">—</span><span class="l">открыто сейчас</span></div>
+          </div>
+          <div class="pace-chart">
+            <div class="pace-leg"><span><i style="background:var(--sev-imp)"></i>поступило</span><span><i style="background:var(--ok)"></i>закрыто</span><span><i style="background:var(--muted);height:1px;opacity:.6"></i>по дням</span><span><i style="background:var(--muted)"></i>среднее за 7 дней</span><span><i style="background:var(--accent-soft);height:10px;vertical-align:-1px"></i>окно расчёта</span></div>
+            <div class="tl pace-tl" id="pace-chart" role="img" aria-label="Поступление и закрытие задач по дням"></div>
+          </div>
+        </div>
+        <div class="fc" id="forecast"></div>
+      </div>
+      <p class="pace-note" id="pace-note"></p>
+    </section>
+
+    <section class="card wide" id="attention">
+      <h2>Требует внимания<span class="cnt" id="att-n"></span></h2>
+      <p class="sub">Задачи со статусом «Есть проблема» или «Нужна доработка». Отсортировано по CVSS.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>CVE</th><th>Компонент</th><th>Критичность</th><th>CVSS</th><th>RHEL</th><th>Сборка RHEL</th><th>Статус</th><th>Разработчик</th><th>Часов</th></tr></thead>
+        <tbody id="att-body"></tbody>
+      </table></div>
+    </section>
+
+    <section class="card wide" id="closable">
+      <h2>Можно закрыть<span class="cnt" id="close-n"></span></h2>
+      <p class="sub">Открытые задачи, по которым решение уже есть. Одна задача может иметь несколько оснований.</p>
+      <div class="hbars" id="close-why"></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>CVE</th><th>Компонент</th><th>Критичность</th><th>CVSS</th><th>Основание</th><th>Статус</th><th>Разработчик</th><th>Часов</th></tr></thead>
+        <tbody id="close-body"></tbody>
+      </table></div>
+    </section>
+
+    <section class="card wide">
+      <h2>Компоненты</h2>
+      <p class="sub">Сколько CVE приходится на пакет, с разбивкой по критичности. Первые 12.</p>
+      <div class="sevlegend comp-leg" id="compleg"></div>
+      <div class="hbars" id="components"></div>
+    </section>
+
+    <section class="card">
+      <h2>Состояние в RHEL</h2>
+      <p class="sub">Поле RHEL state</p>
+      <div class="hbars" id="rhel"></div>
+    </section>
+
+    <section class="card">
+      <h2>Статус задач</h2>
+      <p class="sub">Статус у разработчика</p>
+      <div class="hbars" id="devstatus"></div>
+    </section>
+
+    <section class="card wide">
+      <h2>Поступление задач по неделям</h2>
+      <p class="sub">По полю Task date, неделя начинается в понедельник, с разбивкой по критичности (RHEL severity)</p>
+      <div class="sevlegend comp-leg" id="weekleg"></div>
+      <div class="tl" id="weeks" role="img" aria-label="Количество задач по неделям"></div>
+    </section>
+
+    <section class="card wide">
+      <h2>Разработчики</h2>
+      <p class="sub">Сжигание по неделям: задачи со статусом «Готов» по End date, с разбивкой по разработчикам</p>
+      <div class="sevlegend comp-leg" id="burnleg"></div>
+      <div class="tl" id="burn" role="img" aria-label="Закрытые задачи по неделям и разработчикам"></div>
+      <div class="sevlegend comp-leg" id="statleg"></div>
+      <div class="people" id="people"></div>
+    </section>
+
+    <section class="card wide" id="anomalies">
+      <h2>Аномалии<span class="cnt" id="anom-n"></span></h2>
+      <p class="sub">Строки, которые не попали в расчёт часов, и даты, которые не разобрались. Строка — номер строки листа.</p>
+      <ul class="anom-notes" id="anom-notes"></ul>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Строка</th><th>CVE</th><th>Компонент</th><th>Разработчик</th><th>Статус</th><th>Start date</th><th>End date</th><th>Причина</th></tr></thead>
+        <tbody id="anom-body"></tbody>
+      </table></div>
+    </section>
+
+    <dl class="foot">
+      <div><dt>Готово:</dt> <dd>статус разработчика «Готов».</dd></div>
+      <div><dt>В работе:</dt> <dd>разработчик назначен, статус не «Готов». На ревью — «Ожидает ревью», на паузе — «На паузе»; обе открытые.</dd></div>
+      <div><dt>Не взято:</dt> <dd>разработчик не назначен.</dd></div>
+      <div><dt>Требует внимания:</dt> <dd>«Есть проблема» или «Нужна доработка».</dd></div>
+      <div><dt>Часы:</dt> <dd>в рабочий день разработчика его 8 часов делятся поровну между задачами, которые на нём висят — от Start date до End date включительно, у открытых до даты отчёта. Выходной рабочий, если в этот день он взял или закрыл задачу. Часы задачи — сумма её долей.</dd></div>
+      <div><dt>Можно закрыть:</dt> <dd>открытая задача, у которой RHEL state = Fixed, или P = + (патч уже у нас), или D = + (наша версия вне уязвимого диапазона).</dd></div>
+      <div><dt>Флаги P и D</dt> <dd>по всем задачам: <span id="pd">—</span>.</dd></div>
+      <div><dt>Пустые значения</dt> <dd>«-» и пустые ячейки считаются отсутствующими. Task state в расчётах не участвует.</dd></div>
+      <div><dt>Источник:</dt> <dd id="src">—</dd></div>
+    </dl>
+  </div>
+</main>
+
+<script type="application/json" id="data">@data@</script>
+<script>/*@js*/</script>
+</body>
+</html>
