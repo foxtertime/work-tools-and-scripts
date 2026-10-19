@@ -3,18 +3,19 @@ var test = require('node:test');
 var assert = require('node:assert');
 var strips = require('../../cvesummary/assets/js/strips.js');
 
-test('labels: доля — у частей не уже порога, у остальных пусто', function () {
-  assert.deepStrictEqual(strips.labels([50, 30, 15, 5], 0.08, 'pct'), ['50%', '30%', '15%', '']);
-  assert.deepStrictEqual(strips.labels([1, 2], 0.08, 'pct'), ['33%', '67%']);
+test('labels: доля — у каждой непустой части, влезет ли — решает страница', function () {
+  assert.deepStrictEqual(strips.labels([50, 30, 15, 5], 'pct'), ['50%', '30%', '15%', '5%']);
+  assert.deepStrictEqual(strips.labels([1, 2], 'pct'), ['33%', '67%']);
 });
 
 test('labels: число вместо доли', function () {
-  assert.deepStrictEqual(strips.labels([40, 3, 57], 0.06, 'n'), ['40', '', '57']);
+  assert.deepStrictEqual(strips.labels([40, 3, 57], 'n'), ['40', '3', '57']);
 });
 
-test('labels: пустая полоса — без подписей', function () {
-  assert.deepStrictEqual(strips.labels([0, 0], 0.08, 'pct'), ['', '']);
-  assert.deepStrictEqual(strips.labels([], 0.08, 'pct'), []);
+test('labels: пустая часть и пустая полоса — без подписей', function () {
+  assert.deepStrictEqual(strips.labels([4, 0], 'n'), ['4', '']);
+  assert.deepStrictEqual(strips.labels([0, 0], 'pct'), ['', '']);
+  assert.deepStrictEqual(strips.labels([], 'pct'), []);
 });
 
 test('ink: на светлом — тёмный текст, на тёмном — белый', function () {
