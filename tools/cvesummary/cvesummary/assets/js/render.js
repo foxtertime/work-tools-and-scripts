@@ -627,17 +627,17 @@
          задач с готовым решением») — «только закрыть» */
       const dt = d === 0 ? el('div', 'd ok', R.open === 0 ? (main ? 'завершено 🎉' : 'завершено') : 'только закрыть') : d === null ? el('div', 'd bad', 'не завершится') : el('div', 'd', fmt(AS_OF + d));
       /* sub-функция пишет описание целиком, строка — после «N задач · ≈ дни» */
-      const meta = el('div', 's', typeof sub === 'function' ? sub(d) : (d ? `${tasks(n)} · ≈ ${wdays(dates.workdays(AS_OF + 1, AS_OF + d))}. ` : '') + sub);
+      const meta = el('div', 's', typeof sub === 'function' ? sub(d) : (d ? `${n} ${plural(n, 'задача', 'задачи', 'задач')} · ≈ ${wdays(dates.workdays(AS_OF + 1, AS_OF + d))}. ` : '') + sub);
       if (main) r.append(el('div', 'e', title), dt, meta); else r.append(el('div', 't', title), dt, meta);
       fc.append(r);
     };
     if (stop !== null) {
       const coming = Math.round(R.inR * Math.max(0, stop - AS_OF - 1));
-      row(`Сканфриз ${fmt(stop)}`, pace.simulate(R.open, R.inR, R.outR, AS_OF, stop),
+      row('Расчётная дата завершения', pace.simulate(R.open, R.inR, R.outR, AS_OF, stop),
         R.open === 0 ? 'Открытых задач нет.' + (coming ? ` До сканфриза придёт ещё ≈ ${coming}.` : '')
-          : `До этой даты придёт ещё ≈ ${coming}, дальше только закрываем по ${f1(R.outR)} в рабочий день.`, true, R.open);
+          : `До сканфриза придёт ещё ≈ ${coming}, дальше только закрываем по ${f1(R.outR)} в рабочий день.`, true, R.open);
     } else {
-      row('При текущем темпе, без сканфриза', R.open === 0 || R.net > 0 ? pace.simulate(R.open, R.inR, R.outR, AS_OF) : null, R.open === 0 ? 'Открытых задач нет.' : R.net > 0 ? 'Новые задачи продолжают поступать в том же темпе.' : 'Приходит не меньше, чем закрывается. Укажите дату сканфриза.', true, R.open);
+      row('Расчётная дата завершения', R.open === 0 || R.net > 0 ? pace.simulate(R.open, R.inR, R.outR, AS_OF) : null, R.open === 0 ? 'Открытых задач нет.' : R.net > 0 ? 'Сканфриз не задан: новые задачи поступают в текущем темпе.' : 'Сканфриз не задан, а задач приходит не меньше, чем закрывается. Укажите дату сканфриза.', true, R.open);
     }
     const rest = R.open - ready;
     const comingToStop = stop !== null ? Math.round(R.inR * Math.max(0, stop - AS_OF - 1)) : 0;
