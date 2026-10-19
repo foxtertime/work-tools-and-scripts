@@ -73,10 +73,12 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 /* severity strip in hero */
 .sevstrip{display:flex;height:12px;gap:2px;border-radius:4px;overflow:hidden}
 .sevstrip span{display:block;height:100%}
-.cve-grid{display:grid;grid-template-columns:minmax(200px,250px) minmax(0,1fr);gap:20px 32px;align-items:center}
-@media (max-width:1000px){.cve-grid{grid-template-columns:minmax(0,1fr)}}
+/* сверху заголовок, как у остальных карточек, под ним полоса на всю ширину,
+   ниже строки разреза */
+.cve-grid{display:flex;flex-direction:column;gap:14px;min-width:0}
 @media (max-width:760px){.cve-rows{grid-template-columns:170px minmax(40px,1fr) repeat(5,4.6em)}}
-.cve-sum{display:flex;flex-direction:column;gap:12px;min-width:0}
+.cve-sum{display:flex;flex-direction:column;gap:6px;min-width:0}
+.cve-sum .sevstrip{margin-top:8px}
 .cve-n{display:flex;align-items:baseline;gap:8px;margin-top:4px}
 .cve-n span{font-family:var(--f-display);font-size:44px;font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
 .cve-n small{color:var(--muted);font-size:13px}
