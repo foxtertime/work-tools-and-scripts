@@ -427,6 +427,41 @@
   function emptyRow(body, cols, text) { const tr = el('tr'); const td = el('td', 'empty', text); td.colSpan = cols; tr.append(td); body.append(tr); }
   const byCvss = (a, b) => b.cvssN - a.cvssN || a.cve.localeCompare(b.cve);
 
+  /* «Можно закрыть» сверху — как разрезы в блоке CVE: полоса (каждая задача
+     один раз, по первому основанию) и строки оснований (задача может быть
+     в нескольких) */
+  const CLOSE_WHY = [['Фикс в RHEL', 'fixed', '--ok', 'RHEL state = Fixed'], ['Устранено ранее', 'patch', '--accent', 'P = +: патч лежит в PATCH, последний билд собран с ним'], ['Вне диапазона', 'range', '--c1', 'D = +: версия вне уязвимых диапазонов'], ['Дубликат', 'dup', '--c7', 'та же пара CVE ID + Компонент, что у основной строки']];
+  function renderCloseWhy(ready) {
+    const strip = $('close-strip'); strip.replaceChildren();
+    const nOpen = recs.filter(r => r.open).length, pctOpen = n => (nOpen ? Math.round(n / nOpen * 100) : 0);
+    for (const [label, k, c] of CLOSE_WHY) {
+      const n = ready.filter(r => r.reasons[0] === k).length; if (!n) continue;
+      const sp = el('span'); sp.style.flexGrow = n; sp.style.background = css(c);
+      sp.dataset.tip = `${label}: ${n} из ${ready.length}`; strip.append(sp);
+    }
+    const box = $('close-why'); box.replaceChildren();
+    [['Основание', 'h l'], ['', 'h bar'], ['Задач', 'h'], ['% открытых', 'h'], ['Взято', 'h'], ['Не взято', 'h'], ['Часов', 'h']].forEach(([x, c]) => {
+      const h = el('div', c, x);
+      if (c === 'h bar') { const lg = el('div', 'cve-leg'); const a = el('span'); const i1 = el('i'); i1.style.background = css('--muted'); a.append(i1, 'взято'); const b = el('span'); const i2 = el('i', 'lite'); i2.style.background = css('--muted'); b.append(i2, 'не взято'); lg.append(a, b); h.append(lg); }
+      box.append(h);
+    });
+    const mob = matchMedia('(max-width:560px)').matches;
+    const rows = CLOSE_WHY.map(([label, k, c, rule]) => ({ label, c, rule, recs: ready.filter(r => r.reasons.includes(k)) }));
+    const mx = maxOf(rows.map(g => g.recs.length), 1);
+    for (const g of rows) {
+      const n = g.recs.length, taken = g.recs.filter(r => r.taken).length;
+      const hours = g.recs.reduce((a, r) => a + (r.hours || 0), 0);
+      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.label); k.dataset.tip = `${g.label}: ${g.rule}`;
+      const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
+      const c1 = el('span'); c1.style.flexGrow = taken; c1.style.background = css(g.c);
+      const c2 = el('span'); c2.style.flexGrow = n - taken; c2.style.background = css(g.c); c2.style.opacity = '.3';
+      w.append(c1, c2); b.append(w); b.dataset.tip = `${g.label}: взято ${taken}, не взято ${n - taken}`;
+      const cells = [k, b, el('div', 'n', String(n)), el('div', 'p', pctOpen(n) + '%'), el('div', 'n', String(taken)), el('div', 'n', String(n - taken)), el('div', 'n', hours ? f1(hours) + ' ч' : '—')];
+      if (hours) cells[6].dataset.tip = 'Часы, уже вложенные в эти задачи по модели часов';
+      if (mob) box.append(cells[0], ...cells.slice(2), cells[1]); else cells.forEach(x => box.append(x));
+    }
+  }
+
   function renderTables() {
     const att = recs.filter(r => r.attention).sort(byCvss);
     $('att-n').textContent = att.length;
@@ -440,9 +475,7 @@
     }
 
     const ready = recs.filter(r => r.open && r.reasons.length);
-    const why = [['Фикс в RHEL (RHEL state = Fixed)', 'fixed', '--ok'], ['Устранено ранее (P = +)', 'patch', '--accent'], ['Версия вне уязвимого диапазона (D = +)', 'range', '--sev-none'], ['Дубликат (та же пара CVE + компонент)', 'dup', '--c7']];
-    hbars('close-why', why.map(([l, k, c]) => { const n = ready.filter(r => r.reasons.includes(k)).length; return { label: l, n, segs: [{ n, color: c, name: '' }] }; })
-      .concat([{ label: 'Всего задач', n: ready.length, segs: [{ n: ready.length, color: '--fg', name: '' }] }]), Math.max(1, ready.length));
+    renderCloseWhy(ready);
     $('close-n').textContent = ready.length;
     const cb = $('close-body'); cb.replaceChildren();
     if (!ready.length) emptyRow(cb, 8, 'Открытых задач с готовым решением нет');
