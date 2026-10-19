@@ -226,7 +226,7 @@
     const grp = [
       { k: 'Готово', c: '#5CC48A', f: r => r.done },
       { k: 'Фикс в RHEL', c: '#BFE3F2', f: r => r.open && r.reasons.includes('fixed') },
-      { k: 'Свой патч', c: '#7FC6E4', f: r => r.open && !r.reasons.includes('fixed') && r.reasons.includes('patch') },
+      { k: 'Устранено ранее', c: '#7FC6E4', f: r => r.open && !r.reasons.includes('fixed') && r.reasons.includes('patch') },
       { k: 'Вне диапазона', c: '#3E9CC4', f: r => r.open && r.reasons.length === 1 && r.reasons[0] === 'range' },
       { k: 'Без решения', c: '#FF8A6B', f: r => r.open && !r.reasons.length },
     ];
@@ -296,7 +296,7 @@
     }
 
     const ready = recs.filter(r => r.open && r.reasons.length);
-    const why = [['Фикс в RHEL (RHEL state = Fixed)', 'fixed', '--ok'], ['Есть свой патч (P = +)', 'patch', '--accent'], ['Версия вне уязвимого диапазона (D = +)', 'range', '--sev-none']];
+    const why = [['Фикс в RHEL (RHEL state = Fixed)', 'fixed', '--ok'], ['Устранено ранее (P = +)', 'patch', '--accent'], ['Версия вне уязвимого диапазона (D = +)', 'range', '--sev-none']];
     hbars('close-why', why.map(([l, k, c]) => { const n = ready.filter(r => r.reasons.includes(k)).length; return { label: l, n, segs: [{ n, color: c, name: '' }] }; })
       .concat([{ label: 'Всего задач, без повторов', n: ready.length, segs: [{ n: ready.length, color: '--fg', name: '' }] }]), Math.max(1, ready.length));
     $('close-n').textContent = ready.length;
@@ -305,7 +305,7 @@
     for (const r of [...ready].sort(byCvss)) {
       const c5 = el('td'); c5.style.display = 'flex'; c5.style.gap = '6px';
       if (r.reasons.includes('fixed')) c5.append(link(r.rhsa, r.rhnvr || 'RHEL Fixed', 'pill') || el('span', 'pill', r.rhnvr || 'RHEL Fixed'));
-      if (r.reasons.includes('patch')) c5.append(el('span', 'pill', 'свой патч'));
+      if (r.reasons.includes('patch')) c5.append(el('span', 'pill', 'устранено ранее'));
       if (r.reasons.includes('range')) c5.append(el('span', 'pill', 'вне диапазона'));
       const tr = el('tr');
       tr.append(cveCell(r), el('td', null, r.comp), pill(r), el('td', 'num', r.cvss || '—'), c5, el('td', null, r.status || '—'), el('td', null, r.dev || 'не назначен'), el('td', 'num', hoursText(r)));
