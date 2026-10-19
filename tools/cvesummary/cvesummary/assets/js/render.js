@@ -1,9 +1,9 @@
 /* Отрисовка сводки. Данные — из блока #data; роли, часы, темп и ширина
-   графиков, подсветка строки разделов — модули dates, roles, hours, pace,
-   timeline, nav; здесь только DOM. */
+   графиков, подсветка строки разделов, подписи полос — модули dates, roles,
+   hours, pace, timeline, nav, strips; здесь только DOM. */
 (function () {
   'use strict';
-  const { dates, roles, hours: Hm, pace, timeline, nav } = window.CS;
+  const { dates, roles, hours: Hm, pace, timeline, nav, strips } = window.CS;
   const DATA = JSON.parse(document.getElementById('data').textContent);
   const AS_OF = dates.dayOf(DATA.meta.as_of);
   const NS = 'http://www.w3.org/2000/svg';
@@ -77,7 +77,7 @@
   /* меры — в порядке справочника, цвета общие для разреза мер и «Компонентов» */
   const MEAS_KEYS = roles.measureOrder(recs.map(r => r.measureN));
   /* 11 разных цветов — по числу мер в справочнике; чужие меры идут по кругу */
-  const MEAS_PALETTE = ['--accent', '--c3', '--c4', '--c7', '--c5', '--c2', '--c1', '--c6', '--c8', '--sev-crit', '--muted'];
+  const MEAS_PALETTE = ['--m1', '--m2', '--m3', '--m4', '--m5', '--m6', '--m7', '--m8', '--m9', '--m10'];
   const measColor = k => (k === roles.NO_MEASURE ? '--sev-none' : MEAS_PALETTE[MEAS_KEYS.filter(x => x !== roles.NO_MEASURE).indexOf(k) % MEAS_PALETTE.length]);
   /* начало работы — первая Start date у взятых задач: окно темпа не
      уходит раньше него */
@@ -85,7 +85,7 @@
   const allDays = recs.flatMap(r => [r.tdateD, r.startD, r.endD]).filter(d => d !== null && d <= AS_OF);
   const FIRST = allDays.length ? minOf(allDays, Infinity) : null;
   const statusKey = r => String(r.status || '').trim() || (r.taken ? 'Без статуса' : 'Не взята');
-  const roleColor = r => r.done ? '--ok' : r.attention ? '--bad' : r.paused ? '--warn' : r.review ? '--c7' : r.taken ? '--accent' : '--sev-none';
+  const roleColor = r => r.done ? '--st-done' : r.attention ? '--st-bad' : r.paused ? '--st-pause' : r.review ? '--st-review' : r.taken ? '--st-work' : '--st-idle';
   const hoursText = r => (r.hours === null ? '—' : f1(r.hours));
 
   /* ---------- графики по времени ---------- */
@@ -393,74 +393,77 @@
     if (release) document.title = `Сводка по CVE — ${release}`;
     const where = DATA.meta.sheet == null ? 'CSV' : `лист «${DATA.meta.sheet}»`;
     $('src').textContent = `${DATA.meta.source}, ${where}, шапка в строке ${DATA.meta.header_row}; cvesummary ${DATA.meta.version}`;
-    /* set — из образца: значение плитки, мини-полоса и процент */
-    const set = (id, n, color) => {
-      const v = $(id); v.textContent = n; const tile = v.parentElement;
-      tile.querySelectorAll('.mini,.pc').forEach(x => x.remove());
-      const m = el('div', 'mini'); const i = el('i'); i.style.width = pct(n) + '%'; i.style.color = color || '#8FA6B8'; m.append(i);
-      m.dataset.tip = `${n} из ${N} задач`;
-      tile.append(m, el('span', 'pc', `${pct(n)}% от всех`));
-    };
     const open = recs.filter(r => r.open), working = recs.filter(r => r.working);
     const ready = open.filter(r => r.reasons.length);
     $('k-total').textContent = N;
-    $('k-total').style.setProperty('--len', String(N).length);  // кегль под число знаков — см. .total .n
     const u = roles.uniques(recs);
     $('k-cve').textContent = u.tasks;
     $('k-comp').textContent = u.comps;
-    set('k-closed', recs.filter(r => r.done).length, '#5CC48A');
-    set('k-work', working.length, '#5DB3D6');
-    const review = working.filter(r => r.review).length, paused = working.filter(r => r.paused).length;
-    const wl = $('k-work-l');
-    wl.textContent = `в работе · ревью ${review} · пауза ${paused}`;
-    wl.dataset.tip = `в работе ${working.length}, из них на ревью ${review}, на паузе ${paused}`;
-    set('k-free', recs.filter(r => !r.taken && !r.done).length, '#8FA6B8');
-    $('k-ready').textContent = `${ready.length} задач · ${pct(ready.length)}% от всех`;
-    set('k-fixed', ready.filter(r => r.reasons.includes('fixed')).length, '#BFE3F2');
-    set('k-own', ready.filter(r => r.reasons.includes('patch')).length, '#7FC6E4');
-    set('k-out', ready.filter(r => r.reasons.includes('range')).length, '#3E9CC4');
-    set('k-dup', ready.filter(r => r.reasons.includes('dup')).length, '#9AA9D6');
-    set('k-ci', open.filter(r => r.sevN === 'Critical' || r.sevN === 'Important').length, '#FF8A6B');
-    const crit = open.filter(r => r.sevN === 'Critical').length, imp = open.filter(r => r.sevN === 'Important').length;
-    const cl = $('k-ci-l');
-    cl.textContent = `Critical ${crit} · Important ${imp}`;
-    cl.dataset.tip = `открытых Critical ${crit}, Important ${imp}`;
-    set('k-att', recs.filter(r => r.attention).length, '#FF8A6B');
-    const problem = recs.filter(r => roles.norm(r.status) === 'есть проблема').length, rework = recs.filter(r => roles.norm(r.status) === 'нужна доработка').length;
-    const al = $('k-att-l');
-    al.textContent = `проблема ${problem} · доработка ${rework}`;
-    al.dataset.tip = `есть проблема ${problem}, нужна доработка ${rework}`;
-    const s = Hm.summary(closedWithHours(recs));
-    $('k-hours').textContent = s.n ? f1(s.mean) : '—';
-    $('k-hours-l').textContent = s.n ? `часов на задачу, медиана ${f1(s.median)} · по\u00a0${s.n} ${plural(s.n, 'задаче', 'задачам', 'задачам')} за всё время` : 'часов на задачу: закрытых с датами нет';
 
-    /* каждая задача — в одном сегменте: по первому основанию закрыть,
-       основания идут в порядке fixed, patch, range, dup */
-    const grp = [
-      { k: 'Готово', c: '#5CC48A', f: r => r.done },
-      { k: 'Фикс в RHEL', c: '#BFE3F2', f: r => r.open && r.reasons[0] === 'fixed' },
-      { k: 'Устранено ранее', c: '#7FC6E4', f: r => r.open && r.reasons[0] === 'patch' },
-      { k: 'Вне диапазона', c: '#3E9CC4', f: r => r.open && r.reasons[0] === 'range' },
-      { k: 'Дубликат', c: '#9AA9D6', f: r => r.open && r.reasons[0] === 'dup' },
-      { k: 'Без решения', c: '#FF8A6B', f: r => r.open && !r.reasons.length },
+    /* общая полоса: готово | можно закрыть | без решения; каждая задача — в
+       одном сегменте, по первому основанию (fixed, patch, range, dup).
+       Над полосой — скобки трёх групп, под ней — легенда оснований */
+    const parts = [
+      { k: 'Готово', c: 'var(--st-done)', f: r => r.done, g: 'done' },
+      { k: 'Фикс в RHEL', l: 'фикс в RHEL', c: 'var(--rs-fixed)', f: r => r.open && r.reasons[0] === 'fixed', g: 'ready' },
+      { k: 'Устранено ранее', l: 'устранено ранее', c: 'var(--rs-patch)', f: r => r.open && r.reasons[0] === 'patch', g: 'ready' },
+      { k: 'Вне диапазона', l: 'вне диапазона', c: 'var(--rs-range)', f: r => r.open && r.reasons[0] === 'range', g: 'ready' },
+      { k: 'Дубликат', l: 'дубликат', c: 'var(--rs-dup)', f: r => r.open && r.reasons[0] === 'dup', g: 'ready' },
+      { k: 'Без решения', c: 'var(--rs-none)', f: r => r.open && !r.reasons.length, g: 'none' },
+    ].map(x => ({ ...x, n: recs.filter(x.f).length }));
+    const sum = g => parts.filter(x => x.g === g).reduce((a, x) => a + x.n, 0);
+    const G = [
+      { g: 'done', n: sum('done'), l: 'готово' },
+      { g: 'ready', n: sum('ready'), l: 'можно закрыть сразу' },
+      { g: 'none', n: sum('none'), l: 'без решения' },
     ];
-    const mb = $('mixbar'), ml = $('mixleg'); mb.replaceChildren(); ml.replaceChildren();
-    for (const g of grp) {
-      const n = recs.filter(g.f).length; if (!n) continue;
-      const sp = el('span', null, pct(n) >= 8 ? pct(n) + '%' : ''); sp.style.flexGrow = n; sp.style.background = g.c; sp.dataset.tip = `${g.k}: ${n} из ${N} (${pct(n)}%)`; mb.append(sp);
-      const li = el('span'); const sw = el('i', 'sw'); sw.style.background = g.c; li.append(sw, `${g.k} `, el('b', null, `${n}`), ` · ${pct(n)}%`); ml.append(li);
+    const gb = $('hero-groups'); gb.replaceChildren();
+    for (const x of G) {
+      if (!x.n) continue;
+      const d = el('div'); d.style.flex = x.n;
+      const cap = el('div', 'cap'); cap.append(el('b', null, String(x.n)), el('span', null, x.l)); cap.dataset.tip = `${x.l}: ${x.n} из ${N} (${pct(x.n)}%)`;
+      d.append(cap, el('div', 'br')); gb.append(d);
     }
+    const mb = $('hero-bar'), lg = $('hero-leg'); mb.replaceChildren(); lg.replaceChildren();
+    for (const x of parts) {
+      if (!x.n) continue;
+      const lab = x.g === 'ready' ? String(x.n) : (pct(x.n) >= 6 ? pct(x.n) + '%' : '');
+      const sp = el('span', null, lab); sp.style.flexGrow = x.n; sp.style.background = x.c; sp.dataset.tip = `${x.k}: ${x.n} из ${N} (${pct(x.n)}%)`; mb.append(sp);
+      if (x.g === 'ready') { const li = el('span'); const sw = el('i', 'sw'); sw.style.background = x.c; li.append(sw, `${x.l} `, el('b', null, String(x.n))); lg.append(li); }
+    }
+    const extra = ready.filter(r => r.reasons.length > 1).length;
+    if (extra) { const li = el('span'); li.textContent = `· у ${extra} ${plural(extra, 'задачи', 'задач', 'задач')} несколько оснований, в полосе — по первому`; lg.append(li); }
+
+    const row = (box, label, note, val, cls, tip, dot) => {
+      const d = el('div', cls || null); const k = el('span', 'k', label);
+      if (dot) { const i = el('i'); i.style.background = css(dot); k.prepend(i); }
+      if (note) { k.append(' '); k.append(el('small', null, '· ' + note)); }
+      d.append(k, el('b', null, String(val))); if (tip) d.dataset.tip = tip; box.append(d);
+    };
+    const review = working.filter(r => r.review).length, paused = working.filter(r => r.paused).length;
+    const st = $('hero-state'); st.replaceChildren();
+    row(st, 'В работе', `ревью ${review} · пауза ${paused}`, working.length, null, `в работе ${working.length}, из них на ревью ${review}, на паузе ${paused}`, '--st-work');
+    row(st, 'Не взято', 'без разработчика', recs.filter(r => !r.taken && !r.done).length, null, '', '--st-idle');
+    const rk = $('hero-risk'); rk.replaceChildren();
+    const problem = recs.filter(r => roles.norm(r.status) === 'есть проблема').length, rework = recs.filter(r => roles.norm(r.status) === 'нужна доработка').length;
+    row(rk, 'Есть проблема / нужна доработка', `${problem} + ${rework}`, recs.filter(r => r.attention).length, 'bad');
+    const crit = open.filter(r => r.sevN === 'Critical').length, imp = open.filter(r => r.sevN === 'Important').length;
+    row(rk, 'Critical и Important открыты', `${crit} + ${imp}`, crit + imp);
+    const s = Hm.summary(closedWithHours(recs));
+    row(rk, 'Часов на задачу', s.n ? `медиана ${f1(s.median)}` : 'закрытых с датами нет', s.n ? f1(s.mean) : '—', null, s.n ? `по\u00a0${s.n} ${plural(s.n, 'закрытой задаче', 'закрытым задачам', 'закрытым задачам')} за всё время` : '');
+
     const P = recs.filter(r => String(r.p).trim() === '+').length, D = recs.filter(r => String(r.d).trim() === '+').length;
     $('pd').textContent = `P отмечен у ${P}, D у ${D} из ${N} задач`;
   }
 
   /* statTable — из образца; колонка «Ср. срок» → «Ср. часов» по закрытым */
-  function statTable(boxId, title, groups) {
-    const box = $(boxId); box.replaceChildren(); const mx = maxOf(groups.map(g => g.recs.length), 1);
+  function statTable(boxId, title, groups, short) {
+    const box = $(boxId); box.replaceChildren(); box.classList.toggle('short', !!short); const mx = maxOf(groups.map(g => g.recs.length), 1);
     const mob = matchMedia('(max-width:560px)').matches;
-    [[title, 'h l'], ['', 'h bar'], ['Всего', 'h'], ['Открыто', 'h'], ['Готово', 'h'], ['% готово', 'h'], ['Ср. часов', 'h']].forEach(([x, c]) => {
+    (short ? [[title, 'h l'], ['', 'h bar'], ['Всего', 'h'], ['Ср. часов', 'h']] : [[title, 'h l'], ['', 'h bar'], ['Всего', 'h'], ['Открыто', 'h'], ['Готово', 'h'], ['% готово', 'h'], ['Ср. часов', 'h']]).forEach(([x, c]) => {
       const h = el('div', c, x);
-      if (c === 'h bar') { const lg = el('div', 'cve-leg'); const a = el('span'); const i1 = el('i'); i1.style.background = css(groups[0]?.c || '--muted'); a.append(i1, 'готово'); const b = el('span'); const i2 = el('i', 'lite'); i2.style.background = css(groups[0]?.c || '--muted'); b.append(i2, 'не готово'); lg.append(a, b); h.append(lg); }
+      if (short && x === 'Всего') h.classList.add('c3'); if (short && x === 'Ср. часов') h.classList.add('c7');
+      if (c === 'h bar' && !short) { const lg = el('div', 'cve-leg'); const a = el('span'); const i1 = el('i'); i1.style.background = css(groups[0]?.c || '--muted'); a.append(i1, 'готово'); const b = el('span'); const i2 = el('i', 'lite'); i2.style.background = css(groups[0]?.c || '--muted'); b.append(i2, 'не готово'); lg.append(a, b); h.append(lg); }
       box.append(h);
     });
     if (!groups.length) { const e = el('div', 'p', 'Нет данных'); e.style.gridColumn = '1/-1'; e.style.textAlign = 'left'; box.append(e); return; }
@@ -474,6 +477,7 @@
       w.append(c1, c2); b.append(w); b.dataset.tip = `${g.k}: готово ${closed}, открыто ${opn}`;
       const cells = [k, b, el('div', 'n', String(n)), el('div', 'n', String(opn)), el('div', 'n', String(closed)), el('div', 'p', (n ? Math.round(closed / n * 100) : 0) + '%'), el('div', 'n', s.n ? f1(s.mean) + ' ч' : '—')];
       if (s.n) cells[6].dataset.tip = `Среднее по ${s.n} закрытым задачам, медиана ${f1(s.median)} ч`;
+      if (short) { cells.splice(3, 3); cells[2].classList.add('c3'); cells[3].classList.add('c7'); if (opn) b.dataset.tip = `${g.k}: ${n}, из них открыто ${opn}`; else b.dataset.tip = `${g.k}: ${n}`; }
       if (mob) box.append(cells[0], ...cells.slice(2), cells[1]); else cells.forEach(x => box.append(x));
     }
   }
@@ -506,7 +510,7 @@
     for (const s of sevC) { if (!s.recs.length) continue; const sp = el('span'); sp.style.flexGrow = s.recs.length; sp.style.background = css(s.c); sp.dataset.tip = `${s.k}: ${s.recs.length} (${Math.round(s.recs.length / N * 100)}%)`; strip.append(sp); }
     statTable('sevrows', 'Критичность', sevC);
     const mg = MEAS_KEYS.filter(k => k !== roles.NO_MEASURE).map(k => ({ k, c: measColor(k), recs: recs.filter(r => r.measureN === k) }));
-    statTable('measrows', 'Мера', mg);
+    statTable('measrows', 'Мера', mg, true);
     const st = $('measstrip'); st.replaceChildren(); const tot = mg.reduce((a, g) => a + g.recs.length, 0);
     for (const g of mg) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${tot ? Math.round(g.recs.length / tot * 100) : 0}%)`; st.append(sp); }
   }
@@ -516,18 +520,11 @@
   function emptyRow(body, cols, text) { const tr = el('tr'); const td = el('td', 'empty', text); td.colSpan = cols; tr.append(td); body.append(tr); }
   const byCvss = (a, b) => b.cvssN - a.cvssN || a.cve.localeCompare(b.cve);
 
-  /* «Можно закрыть» сверху — как разрезы в блоке CVE: полоса (каждая задача
-     один раз, по первому основанию) и строки оснований (задача может быть
-     в нескольких) */
-  const CLOSE_WHY = [['Фикс в RHEL', 'fixed', '--ok', 'RHEL state = Fixed'], ['Устранено ранее', 'patch', '--accent', 'P = +: патч лежит в PATCH, последний билд собран с ним'], ['Вне диапазона', 'range', '--c1', 'D = +: версия вне уязвимых диапазонов'], ['Дубликат', 'dup', '--c7', 'та же пара CVE ID + Компонент, что у основной строки']];
+  /* «Можно закрыть» сверху — как разрезы в блоке CVE: строки оснований
+     (задача может быть в нескольких); полоса по первому основанию — в шапке */
+  const CLOSE_WHY = [['Фикс в RHEL', 'fixed', '--rs-fixed', 'RHEL state = Fixed'], ['Устранено ранее', 'patch', '--rs-patch', 'P = +: патч лежит в PATCH, последний билд собран с ним'], ['Вне диапазона', 'range', '--rs-range', 'D = +: версия вне уязвимых диапазонов'], ['Дубликат', 'dup', '--rs-dup', 'та же пара CVE ID + Компонент, что у основной строки']];
   function renderCloseWhy(ready) {
-    const strip = $('close-strip'); strip.replaceChildren();
     const nOpen = recs.filter(r => r.open).length, pctOpen = n => (nOpen ? Math.round(n / nOpen * 100) : 0);
-    for (const [label, k, c] of CLOSE_WHY) {
-      const n = ready.filter(r => r.reasons[0] === k).length; if (!n) continue;
-      const sp = el('span'); sp.style.flexGrow = n; sp.style.background = css(c);
-      sp.dataset.tip = `${label}: ${n} из ${ready.length}`; strip.append(sp);
-    }
     const box = $('close-why'); box.replaceChildren();
     [['Основание', 'h l'], ['', 'h bar'], ['Задач', 'h'], ['% открытых', 'h'], ['Взято', 'h'], ['Не взято', 'h'], ['Часов', 'h']].forEach(([x, c]) => {
       const h = el('div', c, x);
@@ -593,7 +590,7 @@
      графика RHEL state, незнакомые значения — серые */
   const NO_VERDICT = 'не указано';
   const verdictOf = r => r.rstate || NO_VERDICT;
-  const VERDICT_COLOR = { fixed: '--ok', affected: '--bad', 'under investigation': '--warn', 'fix deferred': '--c2', 'will not fix': '--c5', 'not affected': '--c1' };
+  const VERDICT_COLOR = { fixed: '--rs-fixed', affected: '--bad', 'under investigation': '--warn', 'fix deferred': '--c2', 'will not fix': '--c5', 'not affected': '--c1' };
   const verdictColor = k => VERDICT_COLOR[k.toLowerCase()] || '--sev-none';
   /* разбивка «Компонентов»: по критичности или по вердикту; выбор помнится */
   const COMP_BY = {
@@ -624,8 +621,8 @@
 
   function renderBars() {
     renderComps();
-    /* состояние в RHEL и статус задач — как разрезы в блоке CVE: полоса
-       состава и строки с готово/открыто и часами */
+    /* состояние в RHEL и статус задач — как разрезы в блоке CVE: строки
+       с готово/открыто и часами; у RHEL ещё полоса состава */
     const strip = (id, groups) => {
       const st = $(id); st.replaceChildren(); const N = recs.length;
       for (const g of groups) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${N ? Math.round(g.recs.length / N * 100) : 0}%)`; st.append(sp); }
@@ -635,7 +632,7 @@
     strip('rhelstrip', rg); statTable('rhel', 'Состояние', rg);
     const dsColor = k => roleColor(recs.find(r => statusKey(r) === k));
     const dg = count(recs, statusKey).map(([k]) => ({ k, c: dsColor(k), recs: recs.filter(r => statusKey(r) === k) }));
-    strip('statusstrip', dg); statusTable('devstatus', 'Статус', dg);
+    statusTable('devstatus', 'Статус', dg);
     legend('weekleg', SEV);
     renderInflow();
   }
@@ -858,12 +855,12 @@
       const cnt = { g: done.length, rv: mine.filter(r => r.working && r.review).length, u: mine.filter(r => r.working && r.paused).length, p: mine.filter(r => r.working && r.attention).length };
       cnt.w = mine.filter(r => r.working).length - cnt.rv - cnt.u - cnt.p;
       const bar = el('div', 'pbar');
-      [[cnt.g, '--ok', 'Готово'], [cnt.w, '--accent', 'В работе'], [cnt.rv, '--c7', 'Ожидает ревью'], [cnt.u, '--warn', 'На паузе'], [cnt.p, '--bad', 'Проблемы']].forEach(([k, c, s]) => { if (!k) return; const sp = el('span'); sp.style.flexGrow = k; sp.style.background = css(c); sp.dataset.tip = `${d} · ${s}: ${k}`; bar.append(sp); });
+      [[cnt.g, '--st-done', 'Готово'], [cnt.w, '--st-work', 'В работе'], [cnt.rv, '--st-review', 'Ожидает ревью'], [cnt.u, '--st-pause', 'На паузе'], [cnt.p, '--st-bad', 'Проблемы']].forEach(([k, c, s]) => { if (!k) return; const sp = el('span'); sp.style.flexGrow = k; sp.style.background = css(c); sp.dataset.tip = `${d} · ${s}: ${k}`; bar.append(sp); });
       c1.append(bar);
       /* статусы — сеткой: метка цвета сегмента полосы, название, число;
          нулевые бледнее, но на месте, чтобы карточки не прыгали */
       const stat = el('div', 'dstat');
-      [[cnt.g, '--ok', 'готово'], [cnt.w, '--accent', 'в работе'], [cnt.rv, '--c7', 'ревью'], [cnt.u, '--warn', 'пауза'], [cnt.p, '--bad', 'проблемы']].forEach(([k, c, s]) => {
+      [[cnt.g, '--st-done', 'готово'], [cnt.w, '--st-work', 'в работе'], [cnt.rv, '--st-review', 'ревью'], [cnt.u, '--st-pause', 'пауза'], [cnt.p, '--st-bad', 'проблемы']].forEach(([k, c, s]) => {
         const row = el('div', k ? null : 'zero'); const i = el('i'); i.style.background = css(c);
         row.append(i, el('span', null, s), el('b', null, String(k))); stat.append(row);
       });
@@ -969,11 +966,23 @@
     }
   }
 
+  /* подписи на полосах состава в блоках (доли) и у разработчиков (числа);
+     цвет подписи зависит от темы — при её смене пересчитывается */
+  function labelStrips() {
+    const label = (bar, min, how) => {
+      const parts = [...bar.children], text = strips.labels(parts.map(s => +s.style.flexGrow || 0), min, how);
+      parts.forEach((s, i) => { s.textContent = text[i]; s.style.color = strips.ink(getComputedStyle(s).backgroundColor); });
+    };
+    document.querySelectorAll('main .sevstrip').forEach(bar => label(bar, 0.08, 'pct'));
+    document.querySelectorAll('.dev .pbar').forEach(bar => label(bar, 0.06, 'n'));
+  }
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', labelStrips);
+
   function render() {
     renderHead(); renderCuts(); renderTables(); renderBars();
     const W = renderPace();
     renderPeople(W); renderAnomalies();
-    navSync();
+    labelStrips(); navSync();
   }
 
   /* строка разделов: подсвечен раздел, чей верх ушёл под неё (модуль nav).
