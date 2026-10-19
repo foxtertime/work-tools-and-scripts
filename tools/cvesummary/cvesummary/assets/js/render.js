@@ -545,13 +545,14 @@
     if (!ready.length) emptyRow(cb, 8, 'Открытых задач с готовым решением нет');
     for (const r of [...ready].sort(byCvss)) {
       const c5 = el('td'); c5.style.display = 'flex'; c5.style.gap = '6px';
-      if (r.reasons.includes('fixed')) c5.append(link(r.rhsa, r.rhnvr || 'RHEL Fixed', 'pill') || el('span', 'pill', r.rhnvr || 'RHEL Fixed'));
-      if (r.reasons.includes('patch')) c5.append(el('span', 'pill', 'устранено ранее'));
-      if (r.reasons.includes('range')) c5.append(el('span', 'pill', 'вне диапазона'));
+      /* у пилюли основания — квадратик его цвета, как в полосе выше */
+      const why = (k, p) => { const i = el('i'); i.style.background = css(CLOSE_WHY.find(w => w[1] === k)[2]); p.prepend(i); c5.append(p); return p; };
+      if (r.reasons.includes('fixed')) why('fixed', link(r.rhsa, r.rhnvr || 'RHEL Fixed', 'pill') || el('span', 'pill', r.rhnvr || 'RHEL Fixed'));
+      if (r.reasons.includes('patch')) why('patch', el('span', 'pill', 'устранено ранее'));
+      if (r.reasons.includes('range')) why('range', el('span', 'pill', 'вне диапазона'));
       if (r.reasons.includes('dup')) {
-        const main = recs[r.dupOf], p = el('span', 'pill', 'дубликат');
-        p.dataset.tip = `основная — строка ${main.row}` + (main.task ? `, ${main.task}` : '') + (main.done ? ', готова' : '');
-        c5.append(p);
+        const main = recs[r.dupOf];
+        why('dup', el('span', 'pill', 'дубликат')).dataset.tip = `основная — строка ${main.row}` + (main.task ? `, ${main.task}` : '') + (main.done ? ', готова' : '');
       }
       const tr = el('tr');
       tr.append(cveCell(r), el('td', null, r.comp), pill(r), el('td', 'num', r.cvss || '—'), c5, el('td', null, r.status || '—'), el('td', null, r.dev || 'не назначен'), el('td', 'num', hoursText(r)));
