@@ -63,7 +63,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .hero-total .s b{color:var(--hero-fg);font-weight:600}
 /* общая полоса: над ней — скобки групп с числами, под ней — легенда */
 .hero-mix{display:flex;flex-direction:column;gap:6px}
-.hero-groups{display:flex;gap:2px}
+.hero-groups{display:grid;column-gap:2px}
 .hero-groups > div{min-width:0;display:flex;flex-direction:column;gap:4px}
 .hero-groups .cap{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}
 .hero-groups .cap b{font:500 26px/1 var(--f-display);font-variant-numeric:tabular-nums}
@@ -133,8 +133,8 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .mix-h{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline}
 .mix-h b{font-family:var(--f-display);font-weight:500;font-size:16px}
 .mix-h span{font-size:13px;color:var(--hero-muted)}
-.mixbar{display:flex;height:34px;gap:2px;border-radius:6px;overflow:hidden}
-.mixbar span{display:flex;align-items:center;justify-content:center;height:100%;min-width:3px;font:500 12.5px var(--f-mono);color:#0F1D29;overflow:hidden;white-space:nowrap}
+.mixbar{display:grid;height:34px;gap:2px;border-radius:6px;overflow:hidden}
+.mixbar span{display:flex;align-items:center;justify-content:center;height:100%;min-width:0;font:500 12.5px var(--f-mono);color:#0F1D29;overflow:hidden;white-space:nowrap}
 .mixbar span.lt{color:#E8F0F6}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 

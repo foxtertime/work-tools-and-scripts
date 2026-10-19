@@ -417,18 +417,23 @@
       { g: 'ready', n: sum('ready'), l: 'можно закрыть сразу' },
       { g: 'none', n: sum('none'), l: 'без решения' },
     ];
-    const gb = $('hero-groups'); gb.replaceChildren();
+    /* скобки и полоса — на одной сетке: колонка на сегмент, ширина — по
+       числу задач; скобка занимает колонки сегментов своей группы и встаёт
+       ровно на их границы */
+    const shown = parts.filter(x => x.n);
+    const gb = $('hero-groups'), mb = $('hero-bar'), lg = $('hero-leg');
+    gb.replaceChildren(); mb.replaceChildren(); lg.replaceChildren();
+    gb.style.gridTemplateColumns = mb.style.gridTemplateColumns = shown.map(x => `minmax(3px,${x.n}fr)`).join(' ');
     for (const x of G) {
       if (!x.n) continue;
-      const d = el('div'); d.style.flex = x.n;
+      const span = shown.filter(p => p.g === x.g).length;
+      const d = el('div'); d.style.gridColumn = `span ${span}`; d.dataset.parts = span;
       const cap = el('div', 'cap'); cap.append(el('b', null, String(x.n)), el('span', null, x.l)); cap.dataset.tip = `${x.l}: ${x.n} из ${N} (${pct(x.n)}%)`;
       d.append(cap, el('div', 'br')); gb.append(d);
     }
-    const mb = $('hero-bar'), lg = $('hero-leg'); mb.replaceChildren(); lg.replaceChildren();
-    for (const x of parts) {
-      if (!x.n) continue;
+    for (const x of shown) {
       const lab = x.g === 'ready' ? String(x.n) : (pct(x.n) >= 6 ? pct(x.n) + '%' : '');
-      const sp = el('span', null, lab); sp.style.flexGrow = x.n; sp.style.background = x.c; sp.dataset.tip = `${x.k}: ${x.n} из ${N} (${pct(x.n)}%)`; mb.append(sp);
+      const sp = el('span', null, lab); sp.style.background = x.c; sp.dataset.tip = `${x.k}: ${x.n} из ${N} (${pct(x.n)}%)`; mb.append(sp);
       if (x.g === 'ready') { const li = el('span'); const sw = el('i', 'sw'); sw.style.background = x.c; li.append(sw, `${x.l} `, el('b', null, String(x.n))); lg.append(li); }
     }
     const extra = ready.filter(r => r.reasons.length > 1).length;
