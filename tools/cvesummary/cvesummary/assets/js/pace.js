@@ -58,7 +58,9 @@
     if (n <= 0) return 0;
     if (outR <= 0) return null;
     let left = n;
-    for (let d = 1; d <= HORIZON; d++) {
+    /* горизонт — от старта: дальний старт не съедает время на закрытие */
+    const lim = (start === undefined ? 0 : Math.max(0, start - asOf - 1)) + HORIZON;
+    for (let d = 1; d <= lim; d++) {
       const day = asOf + d;
       if (inflowUntil === undefined || (inflowUntil !== null && day < inflowUntil)) left += inR;
       if (dates.isWeekend(day) || (start !== undefined && day < start)) continue;
@@ -136,29 +138,36 @@
      завтра до цели), при котором n открытых и новые до сканфриза stop
      закрываются к target темпом rate в рабочий день; не успеть и со
      старта завтра — null. Чем позже старт, тем позже конец, поэтому
-     идём от цели назад до первого подходящего дня. */
+     ищем делением пополам: успеваем со старта lo, не успеваем после hi. */
   function fits(n, inR, rate, asOf, stop, target, start) {
     // сканфриза нет — новые приходят всё время, как в need()
     const d = simulate(n, inR, rate, asOf, stop === null ? undefined : stop, start);
     return d !== null && asOf + d <= target;
   }
   function latestStart(n, inR, rate, asOf, stop, target) {
-    if (target <= asOf) return null;
-    for (let s = target; s > asOf; s--) if (fits(n, inR, rate, asOf, stop, target, s)) return s;
-    return null;
+    const ok = s => fits(n, inR, rate, asOf, stop, target, s);
+    if (target <= asOf || !ok(asOf + 1)) return null;
+    let lo = asOf + 1, hi = target;
+    while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (ok(mid)) lo = mid; else hi = mid - 1; }
+    return lo;
   }
   /* Сколько разработчиков по perDev задач в рабочий день нужно, чтобы со
      старта завтра закончить к target; рабочих дней до цели нет или темп
-     нулевой — null. Оценка — из need(), дальше проверка симуляцией. */
+     нулевой — null. Верхняя граница — из need() (удваивается, пока не
+     хватает), дальше делением пополам до наименьшего числа: need() считает
+     поступление до самой цели, и при цели в выходной она с запасом. */
   function devsNeeded(n, inR, perDev, asOf, stop, target) {
     if (n <= 0) return 0;
     if (perDev <= 0 || target <= asOf) return null;
     const nd = need(n, inR, asOf, stop, target);
     if (!nd.left) return null;
-    let k = Math.max(1, Math.ceil(nd.perDay / perDev - EPS));
-    while (!fits(n, inR, k * perDev, asOf, stop, target, asOf + 1)) k++;
-    return k;
+    const ok = k => fits(n, inR, k * perDev, asOf, stop, target, asOf + 1);
+    if (ok(1)) return 1;
+    let lo = 1, hi = Math.max(2, Math.ceil(nd.perDay / perDev - EPS));
+    while (!ok(hi)) { lo = hi; hi *= 2; }
+    while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (ok(mid)) hi = mid; else lo = mid; }
+    return hi;
   }
 
-  return { workStart, rates, simulate, need, daily, cumulative, project, latestStart, devsNeeded };
+  return { HORIZON, workStart, rates, simulate, need, daily, cumulative, project, latestStart, devsNeeded };
 }));

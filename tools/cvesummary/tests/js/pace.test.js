@@ -147,3 +147,19 @@ test('devsNeeded: сколько людей, чтобы со старта зав
   assert.strictEqual(pace.devsNeeded(10, 0, 1, D + 4, null, D + 6), null);   // до цели одни выходные
   assert.strictEqual(pace.devsNeeded(10, 0, 1, D, null, D), null);
 });
+
+test('devsNeeded: цель в выходной — считаем по пятнице, людей не больше нужного', function () {
+  // отчёт в пн, цель в вс: закрываем вт–пт, новые 5 в день приходят до пятницы
+  assert.strictEqual(pace.devsNeeded(10, 5, 1, D, null, D + 6), 8);
+  assert.strictEqual(pace.latestStart(10, 5, 8, D, null, D + 6), D + 1);
+});
+
+test('latestStart: дальняя цель — тот же ответ, без перебора каждого дня', function () {
+  var target = D + 4000, s = pace.latestStart(10, 0, 5, D, null, target);
+  assert.ok(s > D + pace.HORIZON, 'старт за горизонтом симуляции: ' + (s - D));
+  assert.ok(D + pace.simulate(10, 0, 5, D, null, s) <= target);
+  assert.ok(D + pace.simulate(10, 0, 5, D, null, s + 1) > target);
+  var t0 = Date.now();
+  pace.latestStart(1e6, 1, 1, D, null, D + 20 * 365);               // не успеть — сразу
+  assert.ok(Date.now() - t0 < 200, 'долго: ' + (Date.now() - t0) + ' мс');
+});

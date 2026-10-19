@@ -178,7 +178,7 @@
     const fut = plan ? planDaily(series, plan.proj) : [], all = series.concat(fut);
     const { yMax, yStep } = scale(maxOf(all.map(s => Math.max(s.i, s.o)), 0));
     /* ось продолжается до сканфриза или цели — будущее пустое, но отметки видны */
-    const first = series[0].day, end = Math.max(AS_OF, nearDay(stop), nearDay(target), fut.length ? nearDay(fut[fut.length - 1].day) : AS_OF), n = end - first + 1;
+    const first = series[0].day, end = Math.max(AS_OF, nearDay(stop), nearDay(target), plan ? plan.end : AS_OF), n = end - first + 1;
     const fresh = !POS.has(host.id);
     const F = frame(host, { count: n, minStep: DAY_STEP, height: 230, yMax, yStep, pad: { t: 8, b: 22 } });
     const x = i => F.step * i + F.step / 2;
@@ -262,7 +262,7 @@
     const proj = plan ? plan.proj : pace.project(last.open, R.inR, R.outR, AS_OF, stop !== null ? stop : undefined, BURN_HORIZON);
     if (proj.length && proj[proj.length - 1].open > 0) legendFor(`${word} — не сходится, показан год`);
     /* цель и сканфриз — в пределах двух лет, чтобы идеальная линия дошла до нуля */
-    const end = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, nearDay(stop), nearDay(target));
+    const end = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, nearDay(stop), nearDay(target), plan ? plan.end : AS_OF);
     const n = end - FIRST + 1, ai = AS_OF - FIRST;
     const at = i => (i <= ai ? hist[i] : proj[i - ai - 1]
       ? { inc: last.inc + proj[i - ai - 1].inc, out: last.out + proj[i - ai - 1].out, open: proj[i - ai - 1].open } : null);
@@ -664,15 +664,19 @@
     const pdI = $('plan-devs'), prI = $('plan-rate');
     if (!pdI.value) pdI.value = LS.get('cve.planDevs') || devs0;
     if (!prI.value) prI.value = LS.get('cve.planRate') || rate0;
-    let devs = Math.round(+pdI.value); if (!(devs >= 1)) devs = devs0;
-    let rate = +String(prI.value).replace(',', '.'); if (!(rate > 0)) rate = rate0;
+    /* мусор в полях — значение по умолчанию; очищенное пишется обратно,
+       чтобы поле показывало то, по чему считаем */
+    let devs = Math.round(+pdI.value); if (!isFinite(devs) || devs < 1) devs = devs0;
+    let rate = +String(prI.value).replace(',', '.'); if (!isFinite(rate) || rate <= 0) rate = rate0;
+    pdI.value = devs; prI.value = rate;
+    LS.set('cve.planDevs', String(devs)); LS.set('cve.planRate', String(rate));
     const P = devs * rate, inflow = stop === null ? undefined : stop;
     const people = `${devs} ${plural(devs, 'разработчик', 'разработчика', 'разработчиков')}`;
-    const f2 = x => String(Math.round(x * 100) / 100).replace('.', ',');  // темп на одного — до сотых, как в поле
+    const f2 = x => String(Math.round(x * 100) / 100).replace('.', ',');  // темп — до сотых, как в поле
 
-    $('pace-sub').textContent = `На ${fmt(AS_OF)} · симуляция: ${people} по ${f2(rate)} — ${f1(P)} в рабочий день; поступление — по факту с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}`;
+    $('pace-sub').textContent = `На ${fmt(AS_OF)} · симуляция: ${people} по ${f2(rate)} — ${f2(P)} в рабочий день; поступление — по факту с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}`;
     $('pace-note').textContent = `Симуляция на дату отчёта ${fmt(AS_OF)}: до старта задачи только поступают, со старта закрываем заданным темпом по рабочим дням, Пн–Пт, без учёта праздников. Новые приходят каждый календарный день в темпе периода с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)} (если задан сканфриз — до него). «Начать не позднее» — самый поздний день старта, при котором всё закрывается к цели. Разработчики и остальные блоки страницы считаются по фактическим данным.`;
-    $('p-out').textContent = f1(P); $('p-out-l').textContent = 'закрываем в рабочий день по плану';
+    $('p-out').textContent = f2(P); $('p-out-l').textContent = 'закрываем в рабочий день по плану';
     $('p-out').parentElement.dataset.tip = `${people} × ${f2(rate)} в рабочий день`;
     const wk = Math.round(R.inR * 7 - P * 5), pn = $('p-net');
     pn.textContent = (wk > 0 ? '+' : wk < 0 ? '−' : '') + Math.abs(wk); pn.className = 'v ' + (wk < 0 ? 'ok' : wk > 0 ? 'bad' : '');
@@ -682,27 +686,31 @@
     const fc = $('forecast');
     const line = (main, title, cls, text, sub) => { const r = el('div', main ? 'fc-main' : 'fc-row'); r.append(el('div', main ? 'e' : 't', title), el('div', cls, text), el('div', 's', sub)); fc.append(r); };
     const wd = (a, b) => wdays(dates.workdays(a, b));
-    const noTarget = target === null || target <= AS_OF;
-    const askTarget = target === null ? 'Укажите дату «Хотим закончить к» — от неё считается старт.' : `Выберите дату «Хотим закончить к» позже ${fmt(AS_OF)}.`;
+    /* цель дальше горизонта симуляции (10 лет) не считаем: огромный год в
+       поле даты повесил бы вкладку */
+    const far = target !== null && target > AS_OF + pace.HORIZON;
+    const noTarget = target === null || target <= AS_OF || far;
+    const askTarget = target === null ? 'Укажите дату «Хотим закончить к» — от неё считается старт.'
+      : far ? 'Цель дальше чем через 10 лет — выберите дату ближе.' : `Выберите дату «Хотим закончить к» позже ${fmt(AS_OF)}.`;
     const S = R.open === 0 || noTarget ? null : pace.latestStart(R.open, R.inR, P, AS_OF, stop, target);
 
     /* 1. самый поздний старт */
     const T1 = 'Начать не позднее';
     if (R.open === 0) line(true, T1, 'd ok', 'не нужно', 'Открытых задач нет.');
-    else if (noTarget) line(true, T1, 'd bad', target === null ? 'нет цели' : 'дата прошла', askTarget);
-    else if (S === null) line(true, T1, 'd bad', 'не успеть', `Даже со старта завтра по ${f1(P)} в рабочий день к ${fmt(target)} не закрыть. Сколько людей нужно — ниже.`);
+    else if (noTarget) line(true, T1, 'd bad', target === null ? 'нет цели' : far ? 'слишком далеко' : 'дата прошла', askTarget);
+    else if (S === null) line(true, T1, 'd bad', 'не успеть', `Даже со старта завтра по ${f2(P)} в рабочий день к ${fmt(target)} не закрыть. Сколько людей нужно — ниже.`);
     else {
       const end = AS_OF + pace.simulate(R.open, R.inR, P, AS_OF, inflow, S);
       const c = Math.round(R.inR * Math.max(0, (stop === null ? end : Math.min(end, stop - 1)) - AS_OF));
       const fresh = c ? ` и ≈ ${c} ${plural(c, 'новую', 'новые', 'новых')}${stop !== null && stop <= end ? ' до сканфриза' : ''}` : '';
-      line(true, T1, 'd', fmt(S), `Закрыть ${tasks(R.open)}${fresh} по ${f1(P)} в рабочий день — ≈ ${wd(S, end)}, до ${fmt(end)}.` + (S === AS_OF + 1 ? ' Начинать нужно уже завтра.' : ''));
+      line(true, T1, 'd', fmt(S), `Закрыть ${tasks(R.open)}${fresh} по ${f2(P)} в рабочий день — ≈ ${wd(S, end)}, до ${fmt(end)}.` + (S === AS_OF + 1 ? ' Начинать нужно уже завтра.' : ''));
     }
 
     /* 2. старт завтра */
     const T2 = 'Если начать завтра';
     const d1 = pace.simulate(R.open, R.inR, P, AS_OF, inflow, AS_OF + 1);
     if (d1 === 0) line(false, T2, 'd ok', 'завершено', 'Открытых задач нет.');
-    else if (d1 === null) line(false, T2, 'd bad', 'не завершится', `Задач приходит не меньше, чем закрываем по ${f1(P)} в рабочий день. ` + (stop === null ? 'Задайте сканфриз или увеличьте темп.' : 'Увеличьте темп.'));
+    else if (d1 === null) line(false, T2, 'd bad', 'не завершится', `Задач приходит не меньше, чем закрываем по ${f2(P)} в рабочий день. ` + (stop === null ? 'Задайте сканфриз или увеличьте темп.' : 'Увеличьте темп.'));
     else {
       const end = AS_OF + d1, z = noTarget ? 0 : dates.workdays(end + 1, target);
       const vs = noTarget ? '' : end > target ? ` Опоздание к цели — ${wd(target + 1, end)}.` : z ? ` Запас до цели — ${wdays(z)}.` : ' Укладываемся к цели.';
@@ -721,8 +729,11 @@
 
     /* старт для графика: самый поздний, а если его нет — завтра */
     const start = S !== null ? S : AS_OF + 1;
-    const proj = R.open > 0 ? pace.project(R.open, R.inR, P, AS_OF, inflow, BURN_HORIZON, start) : [];
-    paceCtx = { R, stop, target, WINDOW, plan: { P, start: R.open > 0 ? start : null, proj } };
+    /* год симуляции считается от старта, а не от отчёта */
+    const proj = R.open > 0 ? pace.project(R.open, R.inR, P, AS_OF, inflow, start - AS_OF + BURN_HORIZON, start) : [];
+    /* ось симуляции — до конца ряда и до цели, если она в горизонте */
+    const pend = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, noTarget ? AS_OF : target);
+    paceCtx = { R, stop, target, WINDOW, plan: { P, start: R.open > 0 ? start : null, proj, end: pend } };
     drawPaceChart();
   }
 
