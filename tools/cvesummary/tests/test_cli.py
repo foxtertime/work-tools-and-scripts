@@ -51,6 +51,11 @@ class WriteTest(Base):
         self.assertIn("записано", log)
         self.assertIn("без CVE ID пропущено: 1", log)
 
+    def test_log_names_found_optional_columns(self):
+        code, log = self.run_cli(self.table, "--as-of", "2026-10-19")
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("колонки: Разработчик, Статус, Start date, End date", log)
+
     def test_explicit_output(self):
         code, _ = self.run_cli(self.table, "-o", self.path("x.html"), "--as-of", "2026-10-19")
         self.assertEqual(code, cli.EXIT_OK)

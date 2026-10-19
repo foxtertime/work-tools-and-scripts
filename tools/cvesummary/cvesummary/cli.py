@@ -68,6 +68,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return EXIT_FATAL
 
     logger.info("лист «%s», шапка в строке %d", sheet.name, found.header_row)
+    found_names = [name for key, name in table.FIELDS
+                   if key not in table.REQUIRED and name not in found.missing]
+    logger.info("колонки: %s", ", ".join(found_names))
     if found.missing:
         logger.info("нет колонок, читаются пустыми: %s", ", ".join(found.missing))
     for name in found.duplicates:
