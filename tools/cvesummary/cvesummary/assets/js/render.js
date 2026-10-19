@@ -578,6 +578,27 @@
     renderInflow();
   }
 
+  /* «Закончить к …»: сколько закрывать в рабочий день и хватает ли
+     текущего темпа; возвращает [дата-колонка, пояснение] */
+  function needText(nd, R, stop, target) {
+    const out = (cls, d, s) => [el('div', cls, d), el('div', 's', s)];
+    if (nd === null) return out('d bad', 'дата прошла', `Выберите дату позже ${fmt(AS_OF)}.`);
+    const coming = Math.round(nd.incoming);
+    const untilStop = stop !== null && stop <= target ? ` до сканфриза ${fmt(stop)}` : '';
+    if (R.open === 0 && coming === 0) return out('d ok', 'не нужно', 'Открытых задач нет, новых до этой даты не ожидается.');
+    if (!nd.left) return out('d bad', 'нет рабочих дней', `До ${fmt(target)} не осталось рабочих дней. Выберите дату позже.`);
+    const fresh = `≈ ${coming} ${plural(coming, 'новую', 'новые', 'новых')}${untilStop}`;
+    const what = R.open === 0 ? fresh : `${tasks(R.open)}` + (coming ? ` и ${fresh}` : '');
+    const head = `Столько нужно закрывать в рабочий день, чтобы за ${wdays(nd.left)} закрыть ${what}.`;
+    const ratio = R.outR ? nd.perDay / R.outR : Infinity;
+    const now = !R.outR ? ' Сейчас задачи не закрываются.'
+      : ratio <= 1 ? ` Сейчас закрываем ${f1(R.outR)} в рабочий день — темпа хватает.`
+        : ratio < 2 ? ` Сейчас закрываем ${f1(R.outR)} в рабочий день — нужно на ${Math.ceil((ratio - 1) * 100)}% быстрее.`
+          : ` Сейчас закрываем ${f1(R.outR)} в рабочий день — нужно в ${f1(ratio)} раза быстрее.`;
+    const per = nd.perDay < 0.05 ? '< 0,1' : f1(nd.perDay);
+    return out('d', `${per}/день`, (R.open === 0 ? 'Открытых задач нет. ' : '') + head + now);
+  }
+
   function renderPace() {
     /* окно темпа — последние N дней, но не раньше начала работы
        разработчиков; «весь период» — от начала работы */
@@ -630,15 +651,7 @@
     }, false, rest);
     if (target !== null) {
       const r = el('div', 'fc-row need'); r.append(el('div', 't', `Закончить к ${fmt(target)}`));
-      const nd = pace.need(R.open, R.inR, AS_OF, stop, target);
-      if (nd === null) r.append(el('div', 'd bad', 'дата прошла'), el('div', 's', 'Выберите дату позже ' + fmt(AS_OF) + '.'));
-      else if (!nd.left) r.append(el('div', 'd bad', 'нет рабочих дней'), el('div', 's', `До ${fmt(target)} не осталось рабочих дней. Выберите дату позже.`));
-      else {
-        const coming = Math.round(nd.incoming);
-        const what = `Столько нужно закрывать в рабочий день, чтобы за ${wdays(nd.left)} закрыть ${tasks(R.open)}` + (coming ? ` и ≈ ${coming} новых.` : '.');
-        const now = !R.outR ? ' Сейчас не закрываем ни одной.' : nd.perDay <= R.outR ? ` Сейчас закрываем ${f1(R.outR)} в рабочий день — темпа хватает.` : ` Сейчас закрываем ${f1(R.outR)} в рабочий день — нужно в ${f1(nd.perDay / R.outR)} раза быстрее.`;
-        r.append(el('div', 'd', `${f1(nd.perDay)}/день`), el('div', 's', what + now));
-      }
+      r.append(...needText(pace.need(R.open, R.inR, AS_OF, stop, target), R, stop, target));
       fc.append(r);
     }
     paceCtx = { R, stop, target, WIN };
