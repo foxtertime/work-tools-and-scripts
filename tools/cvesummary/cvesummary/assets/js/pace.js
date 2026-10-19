@@ -68,5 +68,43 @@
     return s;
   }
 
-  return { rates, simulate, need, daily };
+  /* Накопительные ряды по дням from..to для burn-up и burn-down: всего
+     поступило (inc), всего закрыто (out), открыто (open). Задача без Task
+     date — в бэклоге с начала; закрыта не раньше, чем поступила; «Готов»
+     без End date закрыт сразу, как поступил. */
+  function cumulative(rows, from, to) {
+    const n = to - from + 1;
+    if (n <= 0) return [];
+    const inc = new Array(n).fill(0), out = new Array(n).fill(0);
+    const put = (arr, d) => { if (d <= to) arr[Math.max(0, d - from)]++; };
+    rows.forEach(r => {
+      const a = inDay(r) === null ? -Infinity : inDay(r);
+      put(inc, a);
+      if (roles.isDone(r)) put(out, Math.max(a, outDay(r) === null ? -Infinity : outDay(r)));
+    });
+    const s = [];
+    let ci = 0, co = 0;
+    for (let k = 0; k < n; k++) { ci += inc[k]; co += out[k]; s.push({ day: from + k, inc: ci, out: co, open: ci - co }); }
+    return s;
+  }
+
+  /* Прогноз по дням после asOf тем же шагом, что simulate: поступление
+     каждый день до inflowUntil, закрытие по рабочим дням. inc и out —
+     прибавка к накопленному на asOf; ряд кончается, когда открытых не
+     осталось, или на горизонте. */
+  function project(n, inR, outR, asOf, inflowUntil, horizon) {
+    const s = [];
+    if (n <= 0) return s;
+    let left = n, inc = 0, out = 0;
+    for (let d = 1; d <= horizon; d++) {
+      const day = asOf + d;
+      if (inflowUntil === undefined || (inflowUntil !== null && day < inflowUntil)) { left += inR; inc += inR; }
+      if (!dates.isWeekend(day)) { const c = Math.min(outR, left); left -= c; out += c; }
+      if (left <= EPS) { s.push({ day, inc, out: out + left, open: 0 }); return s; }
+      s.push({ day, inc, out, open: left });
+    }
+    return s;
+  }
+
+  return { rates, simulate, need, daily, cumulative, project };
 }));

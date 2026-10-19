@@ -49,3 +49,30 @@ test('daily: по дням и среднее за 7', function () {
   assert.strictEqual(got[1].oa, 0.5);
   assert.deepStrictEqual(pace.daily([], D + 1, D), []);
 });
+
+/* Накопительные ряды для burn-up и burn-down: по дням from..to — всего
+   поступило, всего закрыто, открыто. Без Task date задача в бэклоге с
+   начала; «Готов» без End date закрыт сразу, как поступил; закрытие не
+   раньше поступления. */
+test('cumulative: поступило, закрыто, открыто по дням', function () {
+  var rows = [r(D), r(D + 1, 'Готов', D + 2), r(D + 2), { tdate: '', status: '', end: '' },
+    { tdate: iso(D + 1), status: 'Готов', end: '' }, r(D + 3, 'Готов', D + 1)];
+  var got = pace.cumulative(rows, D, D + 3);
+  assert.deepStrictEqual(got.map(function (s) { return [s.day - D, s.inc, s.out, s.open]; }),
+    [[0, 2, 0, 2], [1, 4, 1, 3], [2, 5, 2, 3], [3, 6, 3, 3]]);
+  assert.deepStrictEqual(pace.cumulative(rows, D + 1, D), []);
+});
+
+test('project: прогноз остатка по дням до нуля — тот же шаг, что simulate', function () {
+  // из пятницы, 3 открыто, приходит 1 в день до вторника (сканфриз), закрываем 3 в рабочий день
+  var got = pace.project(3, 1, 3, D + 4, D + 8, 365);
+  assert.deepStrictEqual(got.map(function (s) { return [s.day - D - 4, s.inc, s.out, s.open]; }),
+    [[1, 1, 0, 4], [2, 2, 0, 5], [3, 3, 3, 3], [4, 3, 6, 0]]);
+  assert.strictEqual(got.length, pace.simulate(3, 1, 3, D + 4, D + 8));
+  // закрытие на последнем шаге не уходит ниже нуля
+  var last = pace.project(1, 0, 3, D, null, 365);
+  assert.deepStrictEqual(last.map(function (s) { return [s.day - D, s.out, s.open]; }), [[1, 1, 0]]);
+  // не сходится — обрывается на горизонте
+  assert.strictEqual(pace.project(5, 2, 2, D, undefined, 30).length, 30);
+  assert.deepStrictEqual(pace.project(0, 1, 1, D, undefined, 30), []);
+});

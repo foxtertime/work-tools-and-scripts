@@ -160,6 +160,100 @@
     F.plot.append(mark);
   }
 
+  /* Вид графика темпа: поток (поступило и закрыто по дням), burn-up
+     (накопленные итоги) или burn-down (остаток); выбор помнится */
+  let paceBy = ['flow', 'up', 'down'].includes(LS.get('cve.paceBy')) ? LS.get('cve.paceBy') : 'flow', paceCtx = null;
+  const BURN_HORIZON = 365, BURN_STEP = 3;
+  function paceLegend(items) {
+    const leg = $('pace-leg'); leg.replaceChildren();
+    for (const [label, style] of items) { const s = el('span'); const i = el('i'); i.setAttribute('style', style); s.append(i, label); leg.append(s); }
+  }
+  function drawPaceChart() {
+    if (!paceCtx) return;
+    for (const b of $('pace-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === paceBy));
+    if (paceBy === 'flow') {
+      paceLegend([['поступило', 'background:var(--sev-imp)'], ['закрыто', 'background:var(--ok)'], ['по дням', 'background:var(--muted);height:1px;opacity:.6'], ['среднее за 7 дней', 'background:var(--muted)'], ['окно расчёта', 'background:var(--accent-soft);height:10px;vertical-align:-1px']]);
+      $('pace-chart').setAttribute('aria-label', 'Поступление и закрытие задач по дням');
+      drawPace(FIRST === null ? [] : pace.daily(recs, FIRST, AS_OF), AS_OF - paceCtx.WIN);
+    } else drawBurn(paceBy);
+  }
+
+  /* Burn-up и burn-down: факт до даты отчёта сплошной линией, прогноз
+     после — пунктиром той же моделью, что строки прогноза справа;
+     отметки даты отчёта, сканфриза и цели; у burn-down — идеальная линия
+     от сегодняшнего остатка к нулю в целевую дату */
+  function drawBurn(mode) {
+    const host = $('pace-chart'), up = mode === 'up';
+    paceLegend(up
+      ? [['всего поступило', 'background:var(--sev-imp)'], ['всего закрыто', 'background:var(--ok)'], ['прогноз', 'background:repeating-linear-gradient(90deg,var(--muted) 0 5px,transparent 5px 8px)']]
+      : [['открыто', 'background:var(--accent)'], ['прогноз', 'background:repeating-linear-gradient(90deg,var(--accent) 0 5px,transparent 5px 8px)'], ['идеально к цели', 'background:repeating-linear-gradient(90deg,var(--muted) 0 2px,transparent 2px 5px)']]);
+    host.setAttribute('aria-label', up ? 'Burn-up: всего поступило и всего закрыто по дням' : 'Burn-down: открытые задачи по дням');
+    if (FIRST === null) { host.replaceChildren(el('div', 'empty', 'Нет дат в Task date и End date')); return; }
+    const { R, stop, target } = paceCtx;
+    const hist = pace.cumulative(recs, FIRST, AS_OF), last = hist[hist.length - 1];
+    const proj = pace.project(last.open, R.inR, R.outR, AS_OF, stop !== null ? stop : undefined, BURN_HORIZON);
+    const near = d => (d !== null && d > AS_OF && d <= AS_OF + BURN_HORIZON ? d : AS_OF);
+    const end = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, near(stop), near(target));
+    const n = end - FIRST + 1, ai = AS_OF - FIRST;
+    const at = i => (i <= ai ? hist[i] : proj[i - ai - 1]
+      ? { inc: last.inc + proj[i - ai - 1].inc, out: last.out + proj[i - ai - 1].out, open: proj[i - ai - 1].open } : null);
+    const ideal = i => (target !== null && target > AS_OF && i >= ai && FIRST + i <= target ? last.open * (1 - (i - ai) / (target - AS_OF)) : null);
+    const keys = up ? ['inc', 'out'] : ['open'];
+    let top = 0;
+    for (let i = 0; i < n; i++) { const v = at(i); if (v) keys.forEach(k => { top = Math.max(top, v[k]); }); }
+    const { yMax, yStep } = scale(top);
+    const F = frame(host, { count: n, minStep: BURN_STEP, height: 230, yMax, yStep, pad: { t: 8, b: 22 }, key: 'pace:' + mode });
+    const x = i => F.step * i + F.step / 2;
+    const line = (pts, color, w, dash) => { if (pts.length < 2) return; F.plot.append(mk('path', Object.assign({ d: pts.map(([i, v], j) => (j ? 'L' : 'M') + x(i).toFixed(1) + ',' + F.y(v).toFixed(1)).join(''), fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linejoin': 'round' }, dash ? { 'stroke-dasharray': dash } : {}))); };
+    /* отметки дат: подписи — на подложке цвета фона; близкие отметки
+       разносятся по строкам, чтобы подписи не налезали друг на друга */
+    const labels = [];
+    [[AS_OF, 'отчёт'], [stop, 'сканфриз'], [target, 'цель']]
+      .filter(([d]) => d !== null && d >= FIRST && d <= end).sort((a, b) => a[0] - b[0])
+      .forEach(([d, label], j, all) => {
+        const xi = x(d - FIRST);
+        F.plot.append(mk('line', { x1: xi, x2: xi, y1: 8, y2: 208, class: 'vmark' }));
+        const row = j && xi - x(all[j - 1][0] - FIRST) < 64 ? (labels[j - 1].row + 1) % 3 : 0;
+        const right = xi + 64 > F.width, t = mk('text', { x: right ? xi - 4 : xi + 4, y: 18 + row * 13, class: 'vlab', 'text-anchor': right ? 'end' : 'start' });
+        t.textContent = label; labels.push({ row, t });
+      });
+    const color = { inc: 'var(--sev-imp)', out: 'var(--ok)', open: 'var(--accent)' };
+    const factPts = k => hist.map((v, i) => [i, v[k]]);
+    const projPts = k => { const p = [[ai, last[k]]]; for (let i = ai + 1; i < n; i++) { const v = at(i); if (v) p.push([i, v[k]]); } return p; };
+    if (!up) { const p = []; for (let i = ai; i < n; i++) { const v = ideal(i); if (v !== null) p.push([i, v]); } line(p, 'var(--muted)', 1.5, '2 4'); }
+    keys.forEach(k => { line(projPts(k), color[k], 2, '6 4'); line(factPts(k), color[k], 2.5); });
+    /* метка дня под курсором — как на графике потока */
+    const mark = mk('g', { class: 'mark' });
+    mark.append(mk('line', { y1: 8, y2: 208, class: 'guide' }));
+    const dots = keys.map(k => { const d = mk('circle', { r: 4.5, fill: color[k], stroke: 'var(--panel)', 'stroke-width': 2 }); mark.append(d); return [k, d]; });
+    const show = i => {
+      const v = at(i); if (!v) return;
+      mark.firstChild.setAttribute('x1', x(i)); mark.firstChild.setAttribute('x2', x(i));
+      dots.forEach(([k, d]) => { d.setAttribute('cx', x(i)); d.setAttribute('cy', F.y(v[k])); });
+      mark.classList.add('on');
+    };
+    F.plot.addEventListener('pointerover', e => { const h = e.target.closest('rect[data-i]'); if (h) show(+h.dataset.i); });
+    F.plot.addEventListener('pointerleave', () => mark.classList.remove('on'));
+    const every = Math.ceil(48 / F.step), R0 = v => Math.round(v);
+    for (let i = 0; i < n; i++) {
+      const day = FIRST + i, v = at(i);
+      if ((i - ai) % every === 0) {
+        const edge = x(i) + 18 > F.width, start = x(i) < 18;
+        const t = mk('text', { x: edge ? F.width - 2 : start ? 2 : x(i), y: 230 - 8, 'text-anchor': edge ? 'end' : start ? 'start' : 'middle' });
+        t.textContent = fmt(day).slice(0, 5); F.plot.append(t);
+      }
+      if (!v) continue;
+      const hit = mk('rect', { x: F.step * i, y: 8, width: F.step, height: 200, fill: 'transparent', 'data-i': i });
+      const when = fmt(day) + (day > AS_OF ? ' · прогноз' : '');
+      const id = ideal(i);
+      hit.dataset.tip = up ? `${when}: всего поступило ${R0(v.inc)}, закрыто ${R0(v.out)}, открыто ${R0(v.open)}`
+        : `${when}: открыто ${R0(v.open)}` + (id !== null && day > AS_OF ? ` · по идеальной линии ${R0(id)}` : '');
+      F.plot.append(hit);
+    }
+    labels.forEach(l => F.plot.append(l.t));
+    F.plot.append(mark);
+  }
+
   function weeksOf(items, cats) {
     if (FIRST === null) return [];
     const lo = dates.mondayOf(FIRST), hi = dates.mondayOf(AS_OF), weeks = [];
@@ -462,7 +556,8 @@
       }
       fc.append(r);
     }
-    drawPace(FIRST === null ? [] : pace.daily(recs, FIRST, AS_OF), AS_OF - WIN);
+    paceCtx = { R, stop, target, WIN };
+    drawPaceChart();
     return WIN;
   }
 
@@ -588,6 +683,11 @@
     const b = e.target.closest('button[data-by]');
     if (!b || b.dataset.by === burnBy) return;
     burnBy = b.dataset.by; LS.set('cve.burnBy', burnBy); renderBurn();
+  });
+  $('pace-by').addEventListener('click', e => {
+    const b = e.target.closest('button[data-by]');
+    if (!b || b.dataset.by === paceBy) return;
+    paceBy = b.dataset.by; LS.set('cve.paceBy', paceBy); drawPaceChart();
   });
   let rT; addEventListener('resize', () => { resizing = true; clearTimeout(rT); rT = setTimeout(() => { render(); setTimeout(() => { resizing = false; }, 100); }, 150); });
   { const w = LS.get('cve.paceWin'); if (['7', '14', '30'].includes(w)) $('pace-win').value = w; }
