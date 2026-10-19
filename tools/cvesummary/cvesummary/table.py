@@ -54,8 +54,8 @@ def build(sheet: Sheet) -> Table:
     header = next((row for row in sheet.rows
                    if any(_key(c.text) == _key(HEADER_KEY) for c in row.cells)), None)
     if header is None:
-        raise TableError("нет шапки: ни в одной строке листа «%s» нет ячейки «%s»"
-                         % (sheet.name, HEADER_KEY))
+        where = " листа «%s»" % sheet.name if sheet.name else ""
+        raise TableError("нет шапки: ни в одной строке%s нет ячейки «%s»" % (where, HEADER_KEY))
     known = {_key(name) for _, name in FIELDS}
     index, duplicates = {}, []
     for i, cell in enumerate(header.cells):

@@ -85,6 +85,25 @@ class WriteTest(Base):
         self.assertEqual(self.data(self.path("t.html"))["rows"][0]["dev"], "")
 
 
+class CsvTest(Base):
+    def setUp(self):
+        super().setUp()
+        self.table = self.path("t.CSV")
+        with open(self.table, "w", encoding="cp1251", newline="") as handle:
+            handle.write("\n".join(";".join(row) for row in ROWS) + "\n")
+
+    def test_csv_builds_page(self):
+        code, log = self.run_cli(self.table, "--as-of", "2026-10-19")
+        self.assertEqual(code, cli.EXIT_OK)
+        data = self.data(self.path("t.html"))
+        self.assertEqual([r["cve"] for r in data["rows"]], ["CVE-1"])
+        self.assertEqual(data["rows"][0]["start"], "2026-10-05")
+        self.assertEqual(data["meta"]["source"], "t.CSV")
+        self.assertIsNone(data["meta"]["sheet"])
+        self.assertEqual(data["meta"]["skipped"], 1)
+        self.assertIn("CSV, разделитель «;», кодировка cp1251, шапка в строке 1", log)
+
+
 class FailTest(Base):
     def test_bad_as_of(self):
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
@@ -128,6 +147,20 @@ class FailTest(Base):
         write(html_named, ROWS)
         code, _ = self.run_cli(html_named)
         self.assertEqual(code, cli.EXIT_FATAL)
+
+    def test_csv_without_header_exits_2(self):
+        table = self.path("t.csv")
+        with open(table, "wb") as handle:
+            handle.write(b"")
+        code, log = self.run_cli(table)
+        self.assertEqual(code, cli.EXIT_FATAL)
+        self.assertIn("CVE ID", log)
+        self.assertFalse(os.path.exists(self.path("t.html")))
+
+    def test_unreadable_csv_exits_2(self):
+        code, log = self.run_cli(self.path("нет.csv"))
+        self.assertEqual(code, cli.EXIT_FATAL)
+        self.assertIn(self.path("нет.csv"), log)
 
     def test_version(self):
         out = io.StringIO()
