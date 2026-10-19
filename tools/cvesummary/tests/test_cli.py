@@ -9,7 +9,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 from cvesummary import __version__, cli
-from tests.xlsxmake import write
+from tests.xlsxmake import corrupt, write
 
 DATA_RE = re.compile(r'<script type="application/json" id="data">(.*?)</script>', re.S)
 REQUIRED = ["CVE ID", "Компонент", "RHEL state", "RHEL severity"]
@@ -90,6 +90,18 @@ class FailTest(Base):
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
             cli.main([self.table, "--as-of", "19.10.2026"])
         self.assertEqual(caught.exception.code, cli.EXIT_FATAL)
+
+    def test_compact_as_of_is_rejected(self):
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            cli.main([self.table, "--as-of", "20261019"])
+        self.assertEqual(caught.exception.code, cli.EXIT_FATAL)
+
+    def test_corrupt_member_exits_2(self):
+        corrupt(self.table, "xl/worksheets/sheet1.xml")
+        code, log = self.run_cli(self.table)
+        self.assertEqual(code, cli.EXIT_FATAL)
+        self.assertIn(self.table, log)
+        self.assertFalse(os.path.exists(self.path("t.html")))
 
     def test_not_xlsx(self):
         with open(self.table, "wb") as handle:

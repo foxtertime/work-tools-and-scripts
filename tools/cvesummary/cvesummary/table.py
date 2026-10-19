@@ -28,9 +28,13 @@ DATES = ("tdate", "start", "end", "fixdate")
 HEADER_KEY = "CVE ID"
 _NAMES = dict(FIELDS)
 _EMPTY = ("-", "—")
-_DMY = re.compile(r"(\d{1,2})\.(\d{1,2})\.(\d{4})$")
+_DMY = re.compile(r"(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ T].*)?$")
 _ISO = re.compile(r"(\d{4})-(\d{2})-(\d{2})(?:[T ].*)?$")
 _SERIAL = re.compile(r"\d+(?:\.\d+)?$")
+# правдоподобные даты: опечатка вроде 01.10.0206 или число 5 вместо даты
+# растянули бы графики на сотни тысяч дней
+_MIN_DATE = datetime.date(2000, 1, 1)
+_MAX_DATE = datetime.date(2099, 12, 31)
 
 
 class TableError(Exception):
@@ -94,7 +98,17 @@ def build(sheet: Sheet) -> Table:
 
 
 def parse_date(cell: Cell, date1904: bool = False) -> Optional[datetime.date]:
-    """Дата из ячейки: дата Excel, дд.мм.гггг, гггг-мм-дд[…], серийный номер."""
+    """Дата из ячейки: дата Excel, дд.мм.гггг[ чч:мм], гггг-мм-дд[…], серийный номер.
+
+    Дата вне 2000-01-01..2099-12-31 считается нераспознанной.
+    """
+    day = _parse(cell, date1904)
+    if day is None or not _MIN_DATE <= day <= _MAX_DATE:
+        return None
+    return day
+
+
+def _parse(cell: Cell, date1904: bool) -> Optional[datetime.date]:
     if cell.date is not None:
         return cell.date
     text = cell.text.strip()

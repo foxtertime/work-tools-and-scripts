@@ -8,6 +8,7 @@ import datetime
 import posixpath
 import re
 import zipfile
+import zlib
 import xml.etree.ElementTree as ET
 from typing import List, NamedTuple, Optional
 
@@ -64,6 +65,20 @@ def read(path: str) -> Sheet:
             raise XlsxError("битый XML: %s" % exc)
         except zipfile.BadZipFile as exc:
             raise XlsxError("битый архив: %s" % exc)
+        except (zlib.error, EOFError) as exc:
+            raise XlsxError("часть книги не распаковывается (сжатые данные повреждены): %s" % exc)
+        except NotImplementedError as exc:
+            raise XlsxError("часть книги сжата неподдерживаемым способом: %s" % exc)
+        except RuntimeError as exc:
+            raise XlsxError("часть книги не читается (зашифрована паролем?): %s" % exc)
+
+
+def _int(value, what: str) -> int:
+    """Целое из атрибута XML; иначе XlsxError, а не ValueError с трассой."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise XlsxError("%s: не целое число %r" % (what, value))
 
 
 def serial_date(number: float, date1904: bool = False) -> datetime.date:
@@ -136,13 +151,13 @@ def _date_styles(archive) -> List[bool]:
     fmts = root.find(MAIN + "numFmts")
     if fmts is not None:
         for fmt in fmts.iter(MAIN + "numFmt"):
-            custom[int(fmt.get("numFmtId", "0"))] = fmt.get("formatCode", "")
+            custom[_int(fmt.get("numFmtId", "0"), "numFmtId в xl/styles.xml")] = fmt.get("formatCode", "")
     xfs = root.find(MAIN + "cellXfs")
     if xfs is None:
         return []
     result = []
     for xf in xfs.iter(MAIN + "xf"):
-        fid = int(xf.get("numFmtId", "0"))
+        fid = _int(xf.get("numFmtId", "0"), "numFmtId в xl/styles.xml")
         code = custom.get(fid)
         result.append(is_date_format(code) if code is not None else fid in _DATE_IDS)
     return result
@@ -164,7 +179,7 @@ def _rows(root, shared, date_styles, date1904) -> List[Row]:
         return []
     rows, last = [], 0
     for row in data.iter(MAIN + "row"):
-        last = int(row.get("r") or last + 1)
+        last = _int(row.get("r") or last + 1, "номер строки r")
         cells, nxt = [], 0
         for c in row.iter(MAIN + "c"):
             ref = c.get("r")
@@ -201,7 +216,7 @@ def _cell(c, shared, date_styles, date1904) -> Cell:
         number = float(raw)
     except ValueError:
         raise XlsxError("ячейка %s: не число %r" % (c.get("r"), raw))
-    style = int(c.get("s", "0"))
+    style = _int(c.get("s", "0"), "ячейка %s: стиль s" % c.get("r"))
     if style < len(date_styles) and date_styles[style]:
         try:
             day = serial_date(number, date1904)

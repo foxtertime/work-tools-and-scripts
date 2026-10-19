@@ -21,7 +21,7 @@ def _today() -> datetime.date:
 
 def _date(text: str) -> datetime.date:
     try:
-        return datetime.date.fromisoformat(text)
+        return datetime.datetime.strptime(text, "%Y-%m-%d").date()
     except ValueError:
         raise argparse.ArgumentTypeError("дата нужна в виде ГГГГ-ММ-ДД: %r" % text)
 

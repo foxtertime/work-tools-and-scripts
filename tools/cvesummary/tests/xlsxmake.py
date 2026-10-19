@@ -163,3 +163,18 @@ def replace(path, name, text):
     with zipfile.ZipFile(path, "w") as z:
         for member, data in members.items():
             z.writestr(member, data)
+
+
+def corrupt(path, name):
+    """Испортить сжатые байты части книги, не трогая заголовки архива."""
+    with zipfile.ZipFile(path) as z:
+        info = z.getinfo(name)
+    with open(path, "rb") as handle:
+        raw = bytearray(handle.read())
+    # локальный заголовок: 30 байт + имя + extra; длины — по смещениям 26 и 28
+    start = info.header_offset + 30 + int.from_bytes(raw[info.header_offset + 26:][:2], "little") \
+        + int.from_bytes(raw[info.header_offset + 28:][:2], "little")
+    for i in range(start, start + 4):
+        raw[i] = 0xFF
+    with open(path, "wb") as handle:
+        handle.write(raw)

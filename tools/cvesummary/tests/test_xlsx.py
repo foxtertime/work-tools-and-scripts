@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from cvesummary import xlsx
-from tests.xlsxmake import Bool, Error, Formula, Num, Rich, replace, write
+from tests.xlsxmake import Bool, Error, Formula, Num, Rich, corrupt, replace, write
 
 DAY = datetime.date(2026, 10, 19)
 SERIAL = 46314            # DAY в системе 1900
@@ -131,3 +131,23 @@ class ErrorsTest(Base):
         path = self.book([["a"]])
         replace(path, "xl/worksheets/sheet1.xml", "<worksheet")
         self.assertFails(path, "XML")
+
+    def test_corrupt_deflate_member(self):
+        path = self.book([["a", "б"]])
+        corrupt(path, "xl/worksheets/sheet1.xml")
+        self.assertFails(path, "сжат")
+
+    def test_non_integer_attributes(self):
+        sheet = ('<worksheet xmlns="%s"><sheetData>%s</sheetData></worksheet>')
+        main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+        cases = {
+            "numFmtId": ("xl/styles.xml", '<styleSheet xmlns="%s"><cellXfs count="1">'
+                         '<xf numFmtId="abc"/></cellXfs></styleSheet>' % main, "numFmtId"),
+            "s": ("xl/worksheets/sheet1.xml", sheet % (main, '<row r="1"><c r="A1" s="x"><v>1</v></c></row>'), "s"),
+            "r": ("xl/worksheets/sheet1.xml", sheet % (main, '<row r="x"><c r="A1"><v>1</v></c></row>'), "r"),
+        }
+        for name, (part, text, fragment) in cases.items():
+            with self.subTest(name=name):
+                path = self.book([["a"]])
+                replace(path, part, text)
+                self.assertFails(path, fragment)

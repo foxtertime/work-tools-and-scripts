@@ -122,6 +122,27 @@ class DatesTest(unittest.TestCase):
                 self.assertEqual(result.rows[0]["bad"], ["start"])
                 self.assertEqual(result.bad_dates, 1)
 
+    def test_time_after_text_date_is_dropped(self):
+        self.assertEqual(self.start("19.10.2026 14:30")["start"], "2026-10-19")
+
+    def test_implausible_dates_are_bad(self):
+        cells = [Cell("01.10.0206"), Cell("5"), Cell("5", 5.0),
+                 Cell("30.12.1899", 0.0, datetime.date(1899, 12, 30))]
+        for cell in cells:
+            with self.subTest(text=cell.text, number=cell.number):
+                result = table.build(sheet(self.HEAD, ["CVE-1", "bash", "Affected", "Low", cell]))
+                self.assertEqual(result.rows[0]["bad"], ["start"])
+                self.assertEqual(result.bad_dates, 1)
+
+    def test_plausible_window_boundaries(self):
+        ok = {"01.01.2000": "2000-01-01", "31.12.2099": "2099-12-31"}
+        for text, iso in ok.items():
+            with self.subTest(text=text):
+                self.assertEqual(self.start(text)["start"], iso)
+        for text in ("31.12.1999", "01.01.2100"):
+            with self.subTest(text=text):
+                self.assertIsNone(table.parse_date(Cell(text)))
+
     def test_parse_date(self):
         self.assertEqual(table.parse_date(Cell("05.10.2026")), datetime.date(2026, 10, 5))
         self.assertIsNone(table.parse_date(Cell("-")))
