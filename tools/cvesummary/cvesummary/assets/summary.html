@@ -19,42 +19,16 @@
         <h1>Сводка по CVE</h1>
         <p class="asof" id="asof">—</p>
       </div>
+      <div class="hero-total"><div class="n" id="k-total">—</div><div class="s">задач · <b id="k-cve">—</b> уникальных CVE · <b id="k-comp">—</b> компонентов</div></div>
     </div>
-    <div class="board">
-      <div class="total">
-        <span class="e">Всего задач</span>
-        <span class="n" id="k-total">—</span>
-        <span class="s"><b id="k-cve">—</b> уникальных CVE · <b id="k-comp">—</b> компонентов</span>
-        <div class="mixbar" id="mixbar"></div>
-        <div class="mixleg" id="mixleg"></div>
-      </div>
-      <div class="groups">
-        <div class="grp">
-          <div class="grp-h"><b>Состояние</b></div>
-          <div class="tiles">
-            <div class="kpi" style="--k:#5CC48A"><span class="v" id="k-closed">—</span><span class="l">готово</span></div>
-            <div class="kpi" style="--k:#5DB3D6"><span class="v" id="k-work">—</span><span class="l" id="k-work-l">в работе</span></div>
-            <div class="kpi" style="--k:#4A5B6A"><span class="v" id="k-free">—</span><span class="l">не взято</span></div>
-          </div>
-        </div>
-        <div class="grp">
-          <div class="grp-h"><b>Можно закрыть</b><span id="k-ready">—</span></div>
-          <div class="tiles four">
-            <div class="kpi" style="--k:#BFE3F2"><span class="v" id="k-fixed">—</span><span class="l">фикс в RHEL</span></div>
-            <div class="kpi" style="--k:#7FC6E4"><span class="v" id="k-own">—</span><span class="l">устранено ранее (P&nbsp;=&nbsp;+)</span></div>
-            <div class="kpi" style="--k:#3E9CC4"><span class="v" id="k-out">—</span><span class="l">версия вне диапазона (D&nbsp;=&nbsp;+)</span></div>
-            <div class="kpi" style="--k:#9AA9D6"><span class="v" id="k-dup">—</span><span class="l">дубликат</span></div>
-          </div>
-        </div>
-        <div class="grp">
-          <div class="grp-h"><b>Риски и темп</b></div>
-          <div class="tiles">
-            <div class="kpi" style="--k:#FF8A6B"><span class="v" id="k-ci">—</span><span class="l" id="k-ci-l">Critical и Important открыты</span></div>
-            <div class="kpi" style="--k:#FF8A6B"><span class="v" id="k-att">—</span><span class="l" id="k-att-l">есть проблема / нужна доработка</span></div>
-            <div class="kpi" style="--k:#8FA6B8"><span class="v" id="k-hours">—</span><span class="l" id="k-hours-l">часов на задачу</span></div>
-          </div>
-        </div>
-      </div>
+    <div class="hero-mix">
+      <div class="hero-groups" id="hero-groups"></div>
+      <div class="mixbar" id="hero-bar"></div>
+      <div class="hero-leg" id="hero-leg"></div>
+    </div>
+    <div class="hero-cols">
+      <div><div class="hero-h">Состояние</div><div class="hero-list" id="hero-state"></div></div>
+      <div><div class="hero-h">Риски и темп</div><div class="hero-list" id="hero-risk"></div></div>
     </div>
   </div>
 </header>
@@ -163,7 +137,6 @@
         <div class="cve-sum">
           <h2>Можно закрыть</h2>
           <p class="sub" style="margin:0" id="close-sub">открытые задачи, по которым решение уже есть; одна задача может иметь несколько оснований</p>
-          <div class="sevstrip" id="close-strip"></div>
         </div>
         <div class="cve-rows" id="close-why"></div>
       </div>
@@ -204,7 +177,6 @@
         <div class="cve-sum">
           <h2>Статус задач</h2>
           <p class="sub" style="margin:0">статус у разработчика</p>
-          <div class="sevstrip" id="statusstrip"></div>
         </div>
         <div class="cve-rows" id="devstatus"></div>
       </div>
