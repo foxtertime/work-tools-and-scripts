@@ -148,7 +148,7 @@
   /* будущая дата в пределах двух лет — иначе ось до даты отчёта */
   const nearDay = d => (d !== null && d > AS_OF && d <= AS_OF + 2 * 365 ? d : AS_OF);
 
-  function drawPace(series, from, stop, target) {
+  function drawPace(series, win, stop, target) {
     const host = $('pace-chart');
     if (!series.length) { host.replaceChildren(el('div', 'empty', 'Нет дат в Task date и End date')); return; }
     const { yMax, yStep } = scale(maxOf(series.map(s => Math.max(s.i, s.o)), 0));
@@ -159,8 +159,8 @@
     const x = i => F.step * i + F.step / 2;
     /* при первом показе дата отчёта — на 70 % ширины, а не пустое будущее */
     if (fresh) { const box = F.plot.parentNode; box.scrollLeft = Math.max(0, x(series.length - 1) - box.clientWidth * 0.7); timeline.sync(box); }
-    const fi = series.findIndex(s => s.day > from);
-    if (fi >= 0) F.plot.prepend(mk('rect', { x: F.step * fi, y: 8, width: F.step * (series.length - fi), height: 230 - 30, fill: 'var(--accent-soft)' }));
+    const fi = Math.max(0, win.from - first), li = Math.min(series.length - 1, win.to - first);
+    if (li >= fi) F.plot.prepend(mk('rect', { x: F.step * fi, y: 8, width: F.step * (li - fi + 1), height: 230 - 30, fill: 'var(--accent-soft)' }));
     const labels = dateMarks(F, x, first, end, stop, target);
     const path = (k, c, w, op) => F.plot.append(mk('path', { d: series.map((s, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + F.y(s[k]).toFixed(1)).join(''), fill: 'none', stroke: c, 'stroke-width': w, 'stroke-opacity': op, 'stroke-linejoin': 'round' }));
     path('i', 'var(--sev-imp)', 1, 0.4); path('o', 'var(--ok)', 1, 0.4);
@@ -210,7 +210,7 @@
     if (paceBy === 'flow') {
       paceLegend([['поступило', 'background:var(--sev-imp)'], ['закрыто', 'background:var(--ok)'], ['по дням', 'background:var(--muted);height:1px;opacity:.6'], ['среднее за 7 дней', 'background:var(--muted)'], ['окно расчёта', 'background:var(--accent-soft);height:10px;vertical-align:-1px']]);
       $('pace-chart').setAttribute('aria-label', 'Поступление и закрытие задач по дням');
-      drawPace(FIRST === null ? [] : pace.daily(recs, FIRST, AS_OF), AS_OF - paceCtx.WIN, paceCtx.stop, paceCtx.target);
+      drawPace(FIRST === null ? [] : pace.daily(recs, FIRST, AS_OF), paceCtx.WINDOW, paceCtx.stop, paceCtx.target);
     } else drawBurn(paceBy);
   }
 
@@ -617,16 +617,21 @@
   }
 
   function renderPace() {
-    /* окно темпа — последние N дней, но не раньше начала работы
-       разработчиков; «весь период» — от начала работы */
-    const sel = $('pace-win').value, all = sel === 'all';
-    const R = pace.rates(recs, AS_OF, all ? Infinity : +sel || 14, START);
-    const WIN = R.days;
+    /* период темпа — две даты: конец не позже даты отчёта, начало не раньше
+       начала работы разработчиков; перепутаны — меняются местами */
+    const pf = $('pace-from'), pt = $('pace-to');
+    if (!pt.value) pt.value = LS.get('cve.paceTo') || dates.isoOf(AS_OF);
+    if (!pf.value) pf.value = LS.get('cve.paceFrom') || dates.isoOf(AS_OF - 13);
+    let wa = dates.dayOf(pf.value), wb = dates.dayOf(pt.value);
+    if (wb === null || wb > AS_OF) wb = AS_OF;
+    if (wa === null) wa = wb - 13;
+    if (wa > wb) [wa, wb] = [wb, wa];
+    const R = pace.rates(recs, AS_OF, wb - wa + 1, START, wb);
+    const WINDOW = { from: wb - R.days + 1, to: wb };
     const ready = recs.filter(r => r.open && r.reasons.length).length;
     const fc = $('forecast'); fc.replaceChildren();
-    const clipped = START !== null && AS_OF - WIN + 1 === START;
-    $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп за ${days(WIN)}, из них ${wdays(R.work)}` + (all ? ' — весь период' + (START !== null ? `, с начала работы ${fmt(START)}` : '') : clipped ? ` — с начала работы ${fmt(START)}` : '');
-    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за окно, которое ею заканчивается, прогноз — со следующего дня; даты в таблице позже неё не учитываются. Закрытая задача — со статусом «Готов» и заполненным End date. Новые задачи приходят каждый календарный день (до сканфриза — в текущем темпе), закрываем по рабочим дням, Пн–Пт, без учёта праздников. Баланс — за неделю.`;
+    $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}: ${days(R.days)}, из них ${wdays(R.work)}` + (WINDOW.from > wa ? ` — начало прижато к началу работы` : '');
+    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Закрытая задача — со статусом «Готов» и заполненным End date. Новые задачи приходят каждый календарный день (до сканфриза — в текущем темпе), закрываем по рабочим дням, Пн–Пт, без учёта праздников. Баланс — за неделю.`;
     $('p-in').textContent = f1(R.inR);
     $('p-out').textContent = f1(R.outR);
     const pn = $('p-net'); pn.textContent = (R.net > 0 ? '−' : R.net < 0 ? '+' : '') + f1(Math.abs(R.net)); pn.className = 'v ' + (R.net > 0 ? 'ok' : R.net < 0 ? 'bad' : '');
@@ -671,12 +676,12 @@
       r.append(...needText(pace.need(R.open, R.inR, AS_OF, stop, target), R, stop, target));
       fc.append(r);
     }
-    paceCtx = { R, stop, target, WIN };
+    paceCtx = { R, stop, target, WINDOW };
     drawPaceChart();
-    return WIN;
+    return WINDOW;
   }
 
-  function renderPeople(WIN) {
+  function renderPeople(W) {
     const devs = count(recs, r => r.devKey);
     const devColor = new Map(devs.map(([d], i) => [d, i < 8 ? `--c${i + 1}` : '--sev-none']));
     const doneKeys = recs.filter(r => r.taken && r.done);
@@ -736,12 +741,12 @@
       const s = Hm.summary(closedWithHours(mine));
       const closedDays = done.map(r => r.endD).filter(x => x !== null && x <= AS_OF);
       const work = H.workdays.get(d) || new Set();
-      const recent = Hm.rate(closedDays, work, AS_OF - WIN + 1, AS_OF);
+      const recent = Hm.rate(closedDays, work, W.from, W.to);
       const overall = Hm.rate(closedDays, work, -Infinity, AS_OF);
       const sp = el('div', 'speed');
       const sv = (v, l, t) => { const x = el('div'); x.append(el('span', 'v', v), el('span', 'l', l)); if (t) x.dataset.tip = t; sp.append(x); };
       sv(s.n ? f1(s.mean) : '—', s.n ? `ч на задачу, медиана ${f1(s.median)}` : 'ч на задачу', `По ${s.n} закрытым задачам`);
-      sv(recent === null ? '—' : f1(recent), `задач за рабочий день, ${days(WIN)}`, 'Закрыто за окно / рабочих дней разработчика в окне');
+      sv(recent === null ? '—' : f1(recent), `задач за рабочий день, ${days(W.to - W.from + 1)}`, `Закрыто с ${fmt(W.from)} по ${fmt(W.to)} / рабочих дней разработчика за этот период`);
       sv(overall === null ? '—' : f1(overall), 'задач за рабочий день, всего', `${closedDays.length} задач за ${work.size} рабочих дней`);
       c4.append(sp);
       const starts = mine.map(r => r.startD).filter(x => x !== null && x <= AS_OF);
@@ -754,7 +759,7 @@
            день стоял на одной вертикали; прокрутка связана (см. ниже) */
         const first = START !== null ? START : minOf(starts, Infinity);
         const mcats = measKeys.map(k => ({ k, c: measColor(k) }));
-        stackChart(sh, daysOf(done.map(r => [r.endD, r.measureN]), mcats, first), mcats, 'закрыто', true, { height: 130, key: 'dev:all', window: { from: AS_OF - WIN + 1, to: AS_OF } });
+        stackChart(sh, daysOf(done.map(r => [r.endD, r.measureN]), mcats, first), mcats, 'закрыто', true, { height: 130, key: 'dev:all', window: W });
         c4.append(el('div', 'cap', `закрыто по дням с ${fmt(first)} по ${fmt(AS_OF)}`));
         continue;
       }
@@ -773,7 +778,7 @@
     const cats = names.slice(0, 8).map(k => ({ k, c: devColor.get(k) }));
     if (names.length > 8) cats.push({ k: 'Другие', c: '--sev-none' });
     legend('burnleg', cats.concat([{ k: 'окно темпа', c: '--accent-soft' }]));
-    burnData = { cats, window: { from: AS_OF - WIN + 1, to: AS_OF }, items: recs.filter(r => r.done && r.taken).map(r => [r.endD, names.indexOf(r.devKey) < 8 ? r.devKey : 'Другие']) };
+    burnData = { cats, window: W, items: recs.filter(r => r.done && r.taken).map(r => [r.endD, names.indexOf(r.devKey) < 8 ? r.devKey : 'Другие']) };
     renderBurn();
   }
 
@@ -808,12 +813,13 @@
 
   function render() {
     renderHead(); renderCuts(); renderTables(); renderBars();
-    const WIN = renderPace();
-    renderPeople(WIN); renderAnomalies();
+    const W = renderPace();
+    renderPeople(W); renderAnomalies();
   }
 
-  ['stop-date', 'target-date', 'pace-win'].forEach(id => $(id).addEventListener('change', () => {
-    LS.set('cve.stopDate', $('stop-date').value); LS.set('cve.targetDate', $('target-date').value); LS.set('cve.paceWin', $('pace-win').value);
+  ['stop-date', 'target-date', 'pace-from', 'pace-to'].forEach(id => $(id).addEventListener('change', () => {
+    LS.set('cve.stopDate', $('stop-date').value); LS.set('cve.targetDate', $('target-date').value);
+    LS.set('cve.paceFrom', $('pace-from').value); LS.set('cve.paceTo', $('pace-to').value);
     render();
   }));
   $('comp-by').addEventListener('click', e => {
@@ -837,6 +843,5 @@
     paceBy = b.dataset.by; LS.set('cve.paceBy', paceBy); drawPaceChart();
   });
   let rT; addEventListener('resize', () => { resizing = true; clearTimeout(rT); rT = setTimeout(() => { render(); setTimeout(() => { resizing = false; }, 100); }, 150); });
-  { const w = LS.get('cve.paceWin'); if (['7', '14', '30', 'all'].includes(w)) $('pace-win').value = w; }
   render();
 }());

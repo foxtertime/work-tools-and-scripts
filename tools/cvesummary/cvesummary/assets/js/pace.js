@@ -32,18 +32,21 @@
     return lo;
   }
 
-  /* Окно (from, asOf]: последние win дней, но не раньше начала работы since;
-     win = Infinity — весь период от since (нет since — от первой даты в
-     данных). days — календарных дней в окне, work — рабочих. */
-  function rates(rows, asOf, win, since) {
-    let from = asOf - win;
+  /* Окно (from, end]: win дней, кончающихся в end (по умолчанию и не позже
+     даты отчёта), но не раньше начала работы since; win = Infinity — весь
+     период от since (нет since — от первой даты в данных). days —
+     календарных дней в окне, work — рабочих. Открытые — на дату отчёта. */
+  function rates(rows, asOf, win, since, end) {
+    end = end === undefined || end === null ? asOf : Math.min(end, asOf);
+    let from = end - win;
     if (since !== undefined && since !== null) from = Math.max(from, since - 1);
     if (!isFinite(from)) {
-      const seen = rows.flatMap(r => [inDay(r), outDay(r)]).filter(d => d !== null && d <= asOf);
-      from = seen.reduce((a, d) => Math.min(a, d), asOf) - 1;
+      const seen = rows.flatMap(r => [inDay(r), outDay(r)]).filter(d => d !== null && d <= end);
+      from = seen.reduce((a, d) => Math.min(a, d), end) - 1;
     }
-    const within = d => d !== null && d > from && d <= asOf;
-    const days = asOf - from, work = dates.workdays(from + 1, asOf);
+    from = Math.min(from, end - 1);
+    const within = d => d !== null && d > from && d <= end;
+    const days = end - from, work = dates.workdays(from + 1, end);
     const inR = rows.map(inDay).filter(within).length / days;
     const outR = work ? rows.map(outDay).filter(within).length / work : 0;
     return { inR, outR, net: outR * 5 - inR * 7, open: rows.filter(roles.isOpen).length, days, work };

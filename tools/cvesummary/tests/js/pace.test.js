@@ -104,3 +104,12 @@ test('rates: окно обрезается по началу работы, «в�
   var plain = pace.rates(rows, D + 4, 7);   // без начала работы — как раньше
   assert.deepStrictEqual([plain.days, plain.work], [7, 5]);
 });
+
+test('rates: окно может кончаться раньше даты отчёта; конец позже — прижимается', function () {
+  var rows = [r(D), r(D + 1), r(D + 2, 'Готов', D + 2), r(D + 8), r(D + 9, 'Готов', D + 9)];
+  // период Пн–Ср первой недели, отчёт через неделю
+  var got = pace.rates(rows, D + 9, 3, null, D + 2);
+  assert.deepStrictEqual([got.days, got.work, got.inR, got.outR, got.open], [3, 3, 1, 1 / 3, 3]);
+  var late = pace.rates(rows, D + 9, 3, null, D + 30);   // конец после отчёта — как отчёт
+  assert.deepStrictEqual([late.days, late.inR], [3, 2 / 3]);
+});
