@@ -400,35 +400,41 @@
     $('k-cve').textContent = u.tasks;
     $('k-comp').textContent = u.comps;
 
-    /* общая полоса: готово | можно закрыть | без решения; каждая задача — в
+    /* общая полоса: готово | без решения | можно закрыть; каждая задача — в
        одном сегменте, по первому основанию (fixed, patch, range, dup).
-       Над полосой — скобки трёх групп, под ней — легенда оснований */
+       Над полосой — скобки трёх групп в том же порядке, под ней — легенда
+       оснований */
     const parts = [
       { k: 'Готово', c: 'var(--st-done)', f: r => r.done, g: 'done' },
+      { k: 'Без решения', c: 'var(--rs-none)', f: r => r.open && !r.reasons.length, g: 'none' },
       { k: 'Фикс в RHEL', l: 'фикс в RHEL', c: 'var(--rs-fixed)', f: r => r.open && r.reasons[0] === 'fixed', g: 'ready' },
       { k: 'Устранено ранее', l: 'устранено ранее', c: 'var(--rs-patch)', f: r => r.open && r.reasons[0] === 'patch', g: 'ready' },
       { k: 'Вне диапазона', l: 'вне диапазона', c: 'var(--rs-range)', f: r => r.open && r.reasons[0] === 'range', g: 'ready' },
       { k: 'Дубликат', l: 'дубликат', c: 'var(--rs-dup)', f: r => r.open && r.reasons[0] === 'dup', g: 'ready' },
-      { k: 'Без решения', c: 'var(--rs-none)', f: r => r.open && !r.reasons.length, g: 'none' },
     ].map(x => ({ ...x, n: recs.filter(x.f).length }));
     const sum = g => parts.filter(x => x.g === g).reduce((a, x) => a + x.n, 0);
     const G = [
       { g: 'done', n: sum('done'), l: 'готово' },
-      { g: 'ready', n: sum('ready'), l: 'можно закрыть сразу' },
       { g: 'none', n: sum('none'), l: 'без решения' },
+      { g: 'ready', n: sum('ready'), l: 'можно закрыть сразу' },
     ];
-    const gb = $('hero-groups'); gb.replaceChildren();
+    /* скобки и полоса — на одной сетке: колонка на сегмент, ширина — по
+       числу задач; скобка занимает колонки сегментов своей группы и встаёт
+       ровно на их границы */
+    const shown = parts.filter(x => x.n);
+    const gb = $('hero-groups'), mb = $('hero-bar'), lg = $('hero-leg');
+    gb.replaceChildren(); mb.replaceChildren(); lg.replaceChildren();
+    gb.style.gridTemplateColumns = mb.style.gridTemplateColumns = shown.map(x => `minmax(3px,${x.n}fr)`).join(' ');
     for (const x of G) {
       if (!x.n) continue;
-      const d = el('div'); d.style.flex = x.n;
+      const span = shown.filter(p => p.g === x.g).length;
+      const d = el('div'); d.style.gridColumn = `span ${span}`; d.dataset.parts = span;
       const cap = el('div', 'cap'); cap.append(el('b', null, String(x.n)), el('span', null, x.l)); cap.dataset.tip = `${x.l}: ${x.n} из ${N} (${pct(x.n)}%)`;
       d.append(cap, el('div', 'br')); gb.append(d);
     }
-    const mb = $('hero-bar'), lg = $('hero-leg'); mb.replaceChildren(); lg.replaceChildren();
-    for (const x of parts) {
-      if (!x.n) continue;
+    for (const x of shown) {
       const lab = x.g === 'ready' ? String(x.n) : (pct(x.n) >= 6 ? pct(x.n) + '%' : '');
-      const sp = el('span', null, lab); sp.style.flexGrow = x.n; sp.style.background = x.c; sp.dataset.tip = `${x.k}: ${x.n} из ${N} (${pct(x.n)}%)`; mb.append(sp);
+      const sp = el('span', null, lab); sp.style.background = x.c; sp.dataset.tip = `${x.k}: ${x.n} из ${N} (${pct(x.n)}%)`; mb.append(sp);
       if (x.g === 'ready') { const li = el('span'); const sw = el('i', 'sw'); sw.style.background = x.c; li.append(sw, `${x.l} `, el('b', null, String(x.n))); lg.append(li); }
     }
     const extra = ready.filter(r => r.reasons.length > 1).length;
@@ -700,7 +706,7 @@
     }
 
     const fc = $('forecast-plan'); fc.replaceChildren();
-    const line = (main, title, cls, text, sub) => { const r = el('div', main ? 'fc-main' : 'fc-row'); r.append(el('div', main ? 'e' : 't', title), el('div', cls, text), el('div', 's', sub)); fc.append(r); };
+    const line = (title, cls, text, sub) => { const r = el('div', 'fc-cell'); r.append(el('div', 'e', title), el('div', cls, text), el('div', 's', sub)); fc.append(r); };
     const wd = (a, b) => wdays(dates.workdays(a, b));
     /* цель дальше горизонта симуляции (10 лет) не считаем: огромный год в
        поле даты повесил бы вкладку */
@@ -712,39 +718,36 @@
 
     /* 1. самый поздний старт */
     const T1 = 'Начать не позднее';
-    if (N === 0) line(true, T1, 'd ok', skip ? 'только закрыть' : 'не нужно', none);
-    else if (noTarget) line(true, T1, 'd bad', target === null ? 'нет цели' : far ? 'слишком далеко' : 'дата прошла', askTarget);
-    else if (S === null) line(true, T1, 'd bad', 'не успеть', `Даже со старта завтра по ${f2(P)} в рабочий день к ${fmt(target)} не закрыть. Сколько людей нужно — ниже.`);
+    if (N === 0) line(T1, 'd ok', skip ? 'только закрыть' : 'не нужно', none);
+    else if (noTarget) line(T1, 'd bad', target === null ? 'нет цели' : far ? 'слишком далеко' : 'дата прошла', askTarget);
+    else if (S === null) line(T1, 'd bad', 'не успеть', `Даже со старта завтра по ${f2(P)} в рабочий день к ${fmt(target)} не закрыть. Сколько людей нужно — в «Разработчиков нужно».`);
     else {
       const end = AS_OF + pace.simulate(N, R.inR, P, AS_OF, inflow, S);
       const c = Math.round(R.inR * Math.max(0, (stop === null ? end : Math.min(end, stop - 1)) - AS_OF));
       const fresh = c ? ` и ≈ ${c} ${plural(c, 'новую', 'новые', 'новых')}${stop !== null && stop <= end ? ' до сканфриза' : ''}` : '';
-      line(true, T1, 'd', fmt(S), `Закрыть ${tasks(N)}${fresh} по ${f2(P)} в рабочий день — ≈ ${wd(S, end)}, до ${fmt(end)}.` + (S === AS_OF + 1 ? ' Начинать нужно уже завтра.' : ''));
+      line(T1, 'd', fmt(S), `Закрыть ${tasks(N)}${fresh} по ${f2(P)} в рабочий день — ≈ ${wd(S, end)}, до ${fmt(end)}.` + (S === AS_OF + 1 ? ' Начинать нужно уже завтра.' : ''));
     }
 
     /* 2. старт завтра */
     const T2 = 'Если начать завтра';
     const d1 = pace.simulate(N, R.inR, P, AS_OF, inflow, AS_OF + 1);
-    if (d1 === 0) line(false, T2, 'd ok', skip ? 'только закрыть' : 'завершено', none);
-    else if (d1 === null) line(false, T2, 'd bad', 'не завершится', `Задач приходит не меньше, чем закрываем по ${f2(P)} в рабочий день. ` + (stop === null ? 'Задайте сканфриз или увеличьте темп.' : 'Увеличьте темп.'));
+    if (d1 === 0) line(T2, 'd ok', skip ? 'только закрыть' : 'завершено', none);
+    else if (d1 === null) line(T2, 'd bad', 'не завершится', `Задач приходит не меньше, чем закрываем по ${f2(P)} в рабочий день. ` + (stop === null ? 'Задайте сканфриз или увеличьте темп.' : 'Увеличьте темп.'));
     else {
       const end = AS_OF + d1, z = noTarget ? 0 : dates.workdays(end + 1, target);
       const vs = noTarget ? '' : end > target ? ` Опоздание к цели — ${wd(target + 1, end)}.` : z ? ` Запас до цели — ${wdays(z)}.` : ' Укладываемся к цели.';
-      line(false, T2, !noTarget && end > target ? 'd bad' : 'd', fmt(end), `≈ ${wd(AS_OF + 1, end)}.${vs}`);
+      line(T2, !noTarget && end > target ? 'd bad' : 'd', fmt(end), `≈ ${wd(AS_OF + 1, end)}.${vs}`);
     }
 
     /* 3. сколько людей нужно со старта завтра */
     const T3 = 'Разработчиков нужно';
-    if (N === 0) line(false, T3, 'd ok', '0', none);
-    else if (noTarget) line(false, T3, 'd', '—', askTarget);
+    if (N === 0) line(T3, 'd ok', '0', none);
+    else if (noTarget) line(T3, 'd', '—', askTarget);
     else {
       const k = pace.devsNeeded(N, R.inR, rate, AS_OF, stop, target);
-      if (k === null) line(false, T3, 'd bad', 'не успеть', `До ${fmt(target)} не осталось рабочих дней.`);
-      else line(false, T3, k <= devs ? 'd ok' : 'd bad', String(k), `Чтобы закончить к ${fmt(target)}, начав завтра, по ${f2(rate)} в рабочий день на одного. ` + (k <= devs ? `Задано ${devs} — хватает.` : `Задано ${devs} — не хватает ${k - devs}.`));
+      if (k === null) line(T3, 'd bad', 'не успеть', `До ${fmt(target)} не осталось рабочих дней.`);
+      else line(T3, k <= devs ? 'd ok' : 'd bad', String(k), `Чтобы закончить к ${fmt(target)}, начав завтра, по ${f2(rate)} в рабочий день на одного. ` + (k <= devs ? `Задано ${devs} — хватает.` : `Задано ${devs} — не хватает ${k - devs}.`));
     }
-
-    /* «сколько нужно к цели» — серая строка, как «Закончить к …» в прогнозе */
-    fc.lastChild.classList.add('need');
 
     /* старт для графика: самый поздний, а если его нет — завтра */
     const start = S !== null ? S : AS_OF + 1;
@@ -793,14 +796,14 @@
     const stop = dates.dayOf(sd.value), target = dates.dayOf(td.value);
     /* row — из образца, дни вместо миллисекунд */
     const row = (title, d, sub, main, n) => {
-      const r = el('div', main ? 'fc-main' : 'fc-row');
+      const r = el('div', 'fc-cell');
       /* ноль: открытых нет — «завершено» (в главной строке с эмодзи, ниже
          просто слово); открытые есть, но у всех готовое решение (строка «без
          задач с готовым решением») — «только закрыть» */
       const dt = d === 0 ? el('div', 'd ok', R.open === 0 ? (main ? 'завершено 🎉' : 'завершено') : 'только закрыть') : d === null ? el('div', 'd bad', 'не завершится') : el('div', 'd', fmt(AS_OF + d));
       /* sub-функция пишет описание целиком, строка — после «N задач · ≈ дни» */
       const meta = el('div', 's', typeof sub === 'function' ? sub(d) : (d ? `${n} ${plural(n, 'задача', 'задачи', 'задач')} · ≈ ${wdays(dates.workdays(AS_OF + 1, AS_OF + d))}. ` : '') + sub);
-      if (main) r.append(el('div', 'e', title), dt, meta); else r.append(el('div', 't', title), dt, meta);
+      r.append(el('div', 'e', title), dt, meta);
       fc.append(r);
     };
     if (stop !== null) {
@@ -822,7 +825,7 @@
       return `${head}. ` + (stop === null ? `Без новых задач — ≈ ${span}.` : `С новыми до сканфриза ${fmt(stop)} — ≈ ${span}.`);
     }, false, rest);
     if (target !== null) {
-      const r = el('div', 'fc-row need'); r.append(el('div', 't', `Закончить к ${fmt(target)}`));
+      const r = el('div', 'fc-cell'); r.append(el('div', 'e', `Закончить к ${fmt(target)}`));
       r.append(...needText(pace.need(R.open, R.inR, AS_OF, stop, target), R, stop, target));
       fc.append(r);
     }
