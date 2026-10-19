@@ -365,6 +365,10 @@
     set('k-dup', ready.filter(r => r.reasons.includes('dup')).length, '#9AA9D6');
     set('k-ci', open.filter(r => r.sevN === 'Critical' || r.sevN === 'Important').length, '#FF8A6B');
     set('k-att', recs.filter(r => r.attention).length, '#FF8A6B');
+    const problem = recs.filter(r => roles.norm(r.status) === 'есть проблема').length, rework = recs.filter(r => roles.norm(r.status) === 'нужна доработка').length;
+    const al = $('k-att-l');
+    al.textContent = `проблема ${problem} · доработка ${rework}`;
+    al.dataset.tip = `есть проблема ${problem}, нужна доработка ${rework}`;
     const s = Hm.summary(closedWithHours(recs));
     $('k-hours').textContent = s.n ? f1(s.mean) : '—';
     $('k-hours-l').textContent = s.n ? `часов на задачу, медиана ${f1(s.median)} · по ${s.n} задачам` : 'часов на задачу: закрытых с датами нет';
