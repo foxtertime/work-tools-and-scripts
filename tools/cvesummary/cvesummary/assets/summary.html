@@ -118,8 +118,8 @@
     </section>
 
     <section class="card wide" id="attention">
-      <h2>Требует внимания<span class="cnt" id="att-n"></span></h2>
-      <p class="sub">Задачи со статусом «Есть проблема» или «Нужна доработка». Отсортировано по CVSS.</p>
+      <h2>Требует внимания</h2>
+      <p class="sub" id="att-sub">Задачи со статусом «Есть проблема» или «Нужна доработка». Отсортировано по CVSS.</p>
       <div class="tablewrap"><table>
         <thead><tr><th>CVE</th><th>Компонент</th><th>Критичность</th><th>CVSS</th><th>RHEL</th><th>Сборка RHEL</th><th>Статус</th><th>Разработчик</th><th>Часов</th></tr></thead>
         <tbody id="att-body"></tbody>
@@ -129,8 +129,8 @@
     <section class="card wide" id="closable">
       <div class="cve-grid">
         <div class="cve-sum">
-          <h2>Можно закрыть<span class="cnt" id="close-n"></span></h2>
-          <p class="sub" style="margin:0">открытые задачи, по которым решение уже есть; одна задача может иметь несколько оснований</p>
+          <h2>Можно закрыть</h2>
+          <p class="sub" style="margin:0" id="close-sub">открытые задачи, по которым решение уже есть; одна задача может иметь несколько оснований</p>
           <div class="sevstrip" id="close-strip"></div>
         </div>
         <div class="cve-rows" id="close-why"></div>

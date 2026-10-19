@@ -496,7 +496,9 @@
 
   function renderTables() {
     const att = recs.filter(r => r.attention).sort(byCvss);
-    $('att-n').textContent = att.length;
+    /* счётчик — в подписи под заголовком, жирным */
+    const counted = (id, n, forms, rest) => { const p = $(id); p.replaceChildren(el('b', null, String(n)), ` ${plural(n, ...forms)}${rest}`); };
+    counted('att-sub', att.length, ['задача', 'задачи', 'задач'], ' со статусом «Есть проблема» или «Нужна доработка». Отсортировано по CVSS.');
     const tb = $('att-body'); tb.replaceChildren();
     if (!att.length) emptyRow(tb, 9, 'Задач со статусом «Есть проблема» или «Нужна доработка» нет');
     for (const r of att) {
@@ -508,7 +510,7 @@
 
     const ready = recs.filter(r => r.open && r.reasons.length);
     renderCloseWhy(ready);
-    $('close-n').textContent = ready.length;
+    counted('close-sub', ready.length, ['открытая задача', 'открытые задачи', 'открытых задач'], ', по которым решение уже есть; одна задача может иметь несколько оснований');
     const cb = $('close-body'); cb.replaceChildren();
     if (!ready.length) emptyRow(cb, 8, 'Открытых задач с готовым решением нет');
     for (const r of [...ready].sort(byCvss)) {
