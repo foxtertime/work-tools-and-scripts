@@ -199,7 +199,8 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .foot div{margin-bottom:4px}
 
 .pace-head .sub{margin:4px 0 0}
-.pace-ctl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 100px;gap:10px 10px;align-items:end;min-width:0}
+/* три поля в ряд, пока каждому хватает места; иначе переносятся */
+.pace-ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(124px,1fr));gap:10px 10px;align-items:end;min-width:0}
 .pace-ctl label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted);min-width:0;white-space:nowrap}
 .pace-ctl input,.pace-ctl select{font:500 14px var(--f-body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:0 8px;height:38px;min-width:0;width:100%;box-sizing:border-box}
 .pace-ctl input:focus-visible,.pace-ctl select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}

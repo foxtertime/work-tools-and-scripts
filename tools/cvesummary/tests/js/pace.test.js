@@ -21,7 +21,7 @@ test('rates: поступление на календарный день, зак
 
 test('rates без закрытых и без дат — нули, не NaN', function () {
   var got = pace.rates([{ tdate: '', status: '', end: '' }], D, 14);
-  assert.deepStrictEqual(got, { inR: 0, outR: 0, net: 0, open: 1 });
+  assert.deepStrictEqual(got, { inR: 0, outR: 0, net: 0, open: 1, days: 14, work: 10 });
 });
 
 test('simulate — приходят каждый день, закрываем по рабочим; результат — календарный сдвиг', function () {
@@ -83,4 +83,24 @@ test('cumulative: даты позже конца ряда прижимаются
   var last = got[got.length - 1];
   assert.strictEqual(last.open, pace.rates(rows, D, 7).open);
   assert.deepStrictEqual([last.inc, last.out, last.open], [5, 3, 2]);
+});
+
+/* Начало работы — самая ранняя Start date у взятых задач; окно темпа не
+   уходит раньше него, «весь период» — от него до даты отчёта */
+test('workStart: самая ранняя Start date взятой задачи, не позже даты отчёта', function () {
+  var rows = [{ dev: 'A', start: iso(D + 2) }, { dev: '', start: iso(D) }, { dev: 'B', start: iso(D + 1) }, { dev: 'C', start: iso(D + 9) }, { dev: 'D', start: '' }];
+  assert.strictEqual(pace.workStart(rows, D + 5), D + 1);
+  assert.strictEqual(pace.workStart([{ dev: '', start: iso(D) }], D), null);
+});
+
+test('rates: окно обрезается по началу работы, «весь период» — от него', function () {
+  // задачи шли две недели, разработчики начали в пятницу D+4, отчёт тоже D+4
+  var rows = [r(D - 10), r(D - 3), r(D + 4), r(D + 4, 'Готов', D + 4), r(D + 4, 'Готов', D + 4)];
+  var got = pace.rates(rows, D + 4, 7, D + 4);
+  assert.deepStrictEqual([got.days, got.work, got.inR, got.outR], [1, 1, 3, 2]);
+  var all = pace.rates(rows, D + 4, Infinity, D);
+  assert.deepStrictEqual([all.days, all.work], [5, 5]);
+  assert.strictEqual(all.inR, 3 / 5);
+  var plain = pace.rates(rows, D + 4, 7);   // без начала работы — как раньше
+  assert.deepStrictEqual([plain.days, plain.work], [7, 5]);
 });

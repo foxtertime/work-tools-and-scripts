@@ -20,13 +20,33 @@
   const inDay = r => dates.dayOf(r.tdate);
   const outDay = r => (roles.isDone(r) ? dates.dayOf(r.end) : null);
 
-  function rates(rows, asOf, win) {
-    const from = asOf - win;
+  /* Начало работы — самая ранняя Start date у взятой задачи, не позже даты
+     отчёта; нет такой — null */
+  function workStart(rows, asOf) {
+    let lo = null;
+    for (const r of rows) {
+      if (!roles.isTaken(r)) continue;
+      const d = dates.dayOf(r.start);
+      if (d !== null && d <= asOf && (lo === null || d < lo)) lo = d;
+    }
+    return lo;
+  }
+
+  /* Окно (from, asOf]: последние win дней, но не раньше начала работы since;
+     win = Infinity — весь период от since (нет since — от первой даты в
+     данных). days — календарных дней в окне, work — рабочих. */
+  function rates(rows, asOf, win, since) {
+    let from = asOf - win;
+    if (since !== undefined && since !== null) from = Math.max(from, since - 1);
+    if (!isFinite(from)) {
+      const seen = rows.flatMap(r => [inDay(r), outDay(r)]).filter(d => d !== null && d <= asOf);
+      from = seen.reduce((a, d) => Math.min(a, d), asOf) - 1;
+    }
     const within = d => d !== null && d > from && d <= asOf;
-    const work = dates.workdays(from + 1, asOf);
-    const inR = rows.map(inDay).filter(within).length / win;
+    const days = asOf - from, work = dates.workdays(from + 1, asOf);
+    const inR = rows.map(inDay).filter(within).length / days;
     const outR = work ? rows.map(outDay).filter(within).length / work : 0;
-    return { inR, outR, net: outR * 5 - inR * 7, open: rows.filter(roles.isOpen).length };
+    return { inR, outR, net: outR * 5 - inR * 7, open: rows.filter(roles.isOpen).length, days, work };
   }
 
   function simulate(n, inR, outR, asOf, inflowUntil) {
@@ -107,5 +127,5 @@
     return s;
   }
 
-  return { rates, simulate, need, daily, cumulative, project };
+  return { workStart, rates, simulate, need, daily, cumulative, project };
 }));

@@ -76,6 +76,9 @@
   /* 11 разных цветов — по числу мер в справочнике; чужие меры идут по кругу */
   const MEAS_PALETTE = ['--accent', '--c3', '--c4', '--c7', '--c5', '--c2', '--c1', '--c6', '--c8', '--sev-crit', '--muted'];
   const measColor = k => (k === roles.NO_MEASURE ? '--sev-none' : MEAS_PALETTE[MEAS_KEYS.filter(x => x !== roles.NO_MEASURE).indexOf(k) % MEAS_PALETTE.length]);
+  /* начало работы — первая Start date у взятых задач: окно темпа не
+     уходит раньше него */
+  const START = pace.workStart(recs, AS_OF);
   const allDays = recs.flatMap(r => [r.tdateD, r.startD, r.endD]).filter(d => d !== null && d <= AS_OF);
   const FIRST = allDays.length ? minOf(allDays, Infinity) : null;
   const statusKey = r => String(r.status || '').trim() || (r.taken ? 'Без статуса' : 'Не взята');
@@ -568,11 +571,15 @@
   }
 
   function renderPace() {
-    const WIN = +$('pace-win').value || 14;
-    const R = pace.rates(recs, AS_OF, WIN);
+    /* окно темпа — последние N дней, но не раньше начала работы
+       разработчиков; «весь период» — от начала работы */
+    const sel = $('pace-win').value, all = sel === 'all';
+    const R = pace.rates(recs, AS_OF, all ? Infinity : +sel || 14, START);
+    const WIN = R.days;
     const ready = recs.filter(r => r.open && r.reasons.length).length;
     const fc = $('forecast'); fc.replaceChildren();
-    $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп за ${days(WIN)}, из них ${wdays(dates.workdays(AS_OF - WIN + 1, AS_OF))}`;
+    const clipped = START !== null && AS_OF - WIN + 1 === START;
+    $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп за ${days(WIN)}, из них ${wdays(R.work)}` + (all ? ' — весь период' + (START !== null ? `, с начала работы ${fmt(START)}` : '') : clipped ? ` — с начала работы ${fmt(START)}` : '');
     $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за окно, которое ею заканчивается, прогноз — со следующего дня; даты в таблице позже неё не учитываются. Закрытая задача — со статусом «Готов» и заполненным End date. Новые задачи приходят каждый календарный день (до сканфриза — в текущем темпе), закрываем по рабочим дням, Пн–Пт, без учёта праздников. Баланс — за неделю.`;
     $('p-in').textContent = f1(R.inR);
     $('p-out').textContent = f1(R.outR);
@@ -757,6 +764,6 @@
     paceBy = b.dataset.by; LS.set('cve.paceBy', paceBy); drawPaceChart();
   });
   let rT; addEventListener('resize', () => { resizing = true; clearTimeout(rT); rT = setTimeout(() => { render(); setTimeout(() => { resizing = false; }, 100); }, 150); });
-  { const w = LS.get('cve.paceWin'); if (['7', '14', '30'].includes(w)) $('pace-win').value = w; }
+  { const w = LS.get('cve.paceWin'); if (['7', '14', '30', 'all'].includes(w)) $('pace-win').value = w; }
   render();
 }());
