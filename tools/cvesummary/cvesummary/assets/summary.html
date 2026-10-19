@@ -169,8 +169,14 @@
     </section>
 
     <section class="card wide">
-      <h2>Разработчики</h2>
-      <p class="sub">Сжигание по неделям: задачи со статусом «Готов» по End date, с разбивкой по разработчикам</p>
+      <div class="card-h">
+        <h2>Разработчики</h2>
+        <div class="seg" role="group" aria-label="Шаг" id="burn-by">
+          <button type="button" data-by="day" aria-pressed="false">По дням</button>
+          <button type="button" data-by="week" aria-pressed="true">По неделям</button>
+        </div>
+      </div>
+      <p class="sub" id="burn-sub">Сжигание по неделям: задачи со статусом «Готов» по End date, с разбивкой по разработчикам</p>
       <div class="sevlegend comp-leg" id="burnleg"></div>
       <div class="tl" id="burn" role="img" aria-label="Закрытые задачи по неделям и разработчикам"></div>
       <div class="sevlegend comp-leg" id="statleg"></div>

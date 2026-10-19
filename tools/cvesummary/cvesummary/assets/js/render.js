@@ -536,7 +536,19 @@
     const cats = names.slice(0, 8).map(k => ({ k, c: devColor.get(k) }));
     if (names.length > 8) cats.push({ k: 'Другие', c: '--sev-none' });
     legend('burnleg', cats);
-    stackChart($('burn'), weeksOf(recs.filter(r => r.done && r.taken).map(r => [r.endD, names.indexOf(r.devKey) < 8 ? r.devKey : 'Другие']), cats), cats, 'закрыто');
+    burnData = { cats, items: recs.filter(r => r.done && r.taken).map(r => [r.endD, names.indexOf(r.devKey) < 8 ? r.devKey : 'Другие']) };
+    renderBurn();
+  }
+
+  /* сжигание: по неделям или по дням; выбор помнится */
+  let burnBy = LS.get('cve.burnBy') === 'day' ? 'day' : 'week', burnData = null;
+  function renderBurn() {
+    if (!burnData) return;
+    const byDay = burnBy === 'day', { cats, items } = burnData;
+    $('burn-sub').textContent = `Сжигание по ${byDay ? 'дням' : 'неделям'}: задачи со статусом «Готов» по End date, с разбивкой по разработчикам`;
+    $('burn').setAttribute('aria-label', `Закрытые задачи по ${byDay ? 'дням' : 'неделям'} и разработчикам`);
+    for (const b of $('burn-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === burnBy));
+    stackChart($('burn'), byDay ? daysOf(items, cats) : weeksOf(items, cats), cats, 'закрыто', byDay);
   }
 
   function renderAnomalies() {
@@ -577,6 +589,11 @@
     const b = e.target.closest('button[data-by]');
     if (!b || b.dataset.by === inflowBy) return;
     inflowBy = b.dataset.by; LS.set('cve.inflowBy', inflowBy); renderInflow();
+  });
+  $('burn-by').addEventListener('click', e => {
+    const b = e.target.closest('button[data-by]');
+    if (!b || b.dataset.by === burnBy) return;
+    burnBy = b.dataset.by; LS.set('cve.burnBy', burnBy); renderBurn();
   });
   let rT; addEventListener('resize', () => { resizing = true; clearTimeout(rT); rT = setTimeout(() => { render(); setTimeout(() => { resizing = false; }, 100); }, 150); });
   { const w = LS.get('cve.paceWin'); if (['7', '14', '30'].includes(w)) $('pace-win').value = w; }
