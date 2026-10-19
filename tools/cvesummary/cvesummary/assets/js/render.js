@@ -390,7 +390,6 @@
     } else {
       row('При текущем темпе, без сканфриза', R.open === 0 || R.net > 0 ? pace.simulate(R.open, R.inR, R.outR, AS_OF) : null, R.open === 0 ? 'Открытых задач нет.' : R.net > 0 ? 'Новые задачи продолжают поступать в том же темпе.' : 'Приходит не меньше, чем закрывается. Укажите дату сканфриза.', true, R.open);
     }
-    row('Если новые перестанут поступать сегодня', pace.simulate(R.open, R.inR, R.outR, AS_OF, null), `По ${f1(R.outR)} в день.`, false, R.open);
     row('Без задач с готовым решением', pace.simulate(R.open - ready, R.inR, R.outR, AS_OF, stop === null ? null : stop), `Если ${ready} задач с готовым решением закрыть сразу.` + (stop === null ? ' Без новых.' : ` С новыми до ${fmt(stop)}.`), false, R.open - ready);
     if (target !== null) {
       const r = el('div', 'fc-row need'); r.append(el('div', 't', `Закончить к ${fmt(target)}`));
