@@ -375,14 +375,18 @@
     /* row — из образца, дни вместо миллисекунд */
     const row = (title, d, sub, main, n) => {
       const r = el('div', main ? 'fc-main' : 'fc-row');
-      const dt = d === 0 ? el('div', 'd', 'уже 0') : d === null ? el('div', 'd bad', 'не завершится') : el('div', 'd', fmt(AS_OF + d));
+      /* главная строка при нуле открытых — «завершено»; у остальных строк
+         ноль значит другое и пока подписан по-старому */
+      const dt = d === 0 ? (main ? el('div', 'd ok', 'завершено 🎉') : el('div', 'd', 'уже 0')) : d === null ? el('div', 'd bad', 'не завершится') : el('div', 'd', fmt(AS_OF + d));
       const meta = el('div', 's', (d ? `${n} задач · ≈ ${days(d)}. ` : '') + sub);
       if (main) r.append(el('div', 'e', title), dt, meta); else r.append(el('div', 't', title), dt, meta);
       fc.append(r);
     };
     if (stop !== null) {
-      const inflowDays = Math.max(0, stop - AS_OF - 1);
-      row(`Сканфриз ${fmt(stop)}`, pace.simulate(R.open, R.inR, R.outR, AS_OF, stop), `До этой даты придёт ещё ≈ ${Math.round(R.inR * inflowDays)}, дальше только закрываем по ${f1(R.outR)} в день.`, true, R.open);
+      const inflowDays = Math.max(0, stop - AS_OF - 1), coming = Math.round(R.inR * inflowDays);
+      row(`Сканфриз ${fmt(stop)}`, pace.simulate(R.open, R.inR, R.outR, AS_OF, stop),
+        R.open === 0 ? 'Открытых задач нет.' + (coming ? ` До сканфриза придёт ещё ≈ ${coming}.` : '')
+          : `До этой даты придёт ещё ≈ ${coming}, дальше только закрываем по ${f1(R.outR)} в день.`, true, R.open);
     } else {
       row('При текущем темпе, без сканфриза', R.open === 0 || R.net > 0 ? pace.simulate(R.open, R.inR, R.outR, AS_OF) : null, R.open === 0 ? 'Открытых задач нет.' : R.net > 0 ? 'Новые задачи продолжают поступать в том же темпе.' : 'Приходит не меньше, чем закрывается. Укажите дату сканфриза.', true, R.open);
     }
