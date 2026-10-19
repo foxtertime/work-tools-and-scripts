@@ -19,45 +19,36 @@
         <h1>Сводка по CVE</h1>
         <p class="asof" id="asof">—</p>
       </div>
+      <div class="hero-total"><div class="n" id="k-total">—</div><div class="s">задач · <b id="k-cve">—</b> уникальных CVE · <b id="k-comp">—</b> компонентов</div></div>
     </div>
-    <div class="board">
-      <div class="total">
-        <span class="e">Всего задач</span>
-        <span class="n" id="k-total">—</span>
-        <span class="s"><b id="k-cve">—</b> уникальных CVE · <b id="k-comp">—</b> компонентов</span>
-        <div class="mixbar" id="mixbar"></div>
-        <div class="mixleg" id="mixleg"></div>
-      </div>
-      <div class="groups">
-        <div class="grp">
-          <div class="grp-h"><b>Состояние</b></div>
-          <div class="tiles">
-            <div class="kpi" style="--k:#5CC48A"><span class="v" id="k-closed">—</span><span class="l">готово</span></div>
-            <div class="kpi" style="--k:#5DB3D6"><span class="v" id="k-work">—</span><span class="l" id="k-work-l">в работе</span></div>
-            <div class="kpi" style="--k:#4A5B6A"><span class="v" id="k-free">—</span><span class="l">не взято</span></div>
-          </div>
-        </div>
-        <div class="grp">
-          <div class="grp-h"><b>Можно закрыть</b><span id="k-ready">—</span></div>
-          <div class="tiles four">
-            <div class="kpi" style="--k:#BFE3F2"><span class="v" id="k-fixed">—</span><span class="l">фикс в RHEL</span></div>
-            <div class="kpi" style="--k:#7FC6E4"><span class="v" id="k-own">—</span><span class="l">устранено ранее (P&nbsp;=&nbsp;+)</span></div>
-            <div class="kpi" style="--k:#3E9CC4"><span class="v" id="k-out">—</span><span class="l">версия вне диапазона (D&nbsp;=&nbsp;+)</span></div>
-            <div class="kpi" style="--k:#9AA9D6"><span class="v" id="k-dup">—</span><span class="l">дубликат</span></div>
-          </div>
-        </div>
-        <div class="grp">
-          <div class="grp-h"><b>Риски и темп</b></div>
-          <div class="tiles">
-            <div class="kpi" style="--k:#FF8A6B"><span class="v" id="k-ci">—</span><span class="l" id="k-ci-l">Critical и Important открыты</span></div>
-            <div class="kpi" style="--k:#FF8A6B"><span class="v" id="k-att">—</span><span class="l" id="k-att-l">есть проблема / нужна доработка</span></div>
-            <div class="kpi" style="--k:#8FA6B8"><span class="v" id="k-hours">—</span><span class="l" id="k-hours-l">часов на задачу</span></div>
-          </div>
-        </div>
-      </div>
+    <div class="hero-mix">
+      <div class="hero-groups" id="hero-groups"></div>
+      <div class="mixbar" id="hero-bar"></div>
+      <div class="hero-leg" id="hero-leg"></div>
+    </div>
+    <div class="hero-cols">
+      <div><div class="hero-h">Состояние</div><div class="hero-list" id="hero-state"></div></div>
+      <div><div class="hero-h">Риски и темп</div><div class="hero-list" id="hero-risk"></div></div>
     </div>
   </div>
 </header>
+
+<nav class="secnav" id="secnav" aria-label="Разделы">
+  <div class="wrap">
+    <div class="links">
+      <a href="#cve">CVE</a>
+      <a href="#pace">Темп и прогноз</a>
+      <a href="#attention">Требует внимания <span class="badge bad" id="nb-att">—</span></a>
+      <a href="#closable">Можно закрыть <span class="badge ok" id="nb-close">—</span></a>
+      <a href="#comps">Компоненты</a>
+      <a href="#rhel-state">Состояние в RHEL</a>
+      <a href="#task-status">Статус задач</a>
+      <a href="#inflow">Поступление</a>
+      <a href="#devs">Разработчики</a>
+      <a href="#anomalies">Аномалии <span class="badge" id="nb-anom">—</span></a>
+    </div>
+  </div>
+</nav>
 
 <main>
   <div class="wrap">
@@ -104,6 +95,7 @@
           </div>
           <div class="pace-chart">
             <div class="pace-chart-h">
+              <span class="pace-chart-t">По дням</span>
               <div class="seg" role="group" aria-label="Вид графика" id="pace-by">
                 <button type="button" data-by="flow" aria-pressed="true">Поток</button>
                 <button type="button" data-by="up" aria-pressed="false">Burn-up</button>
@@ -146,18 +138,17 @@
         <div class="cve-sum">
           <h2>Можно закрыть</h2>
           <p class="sub" style="margin:0" id="close-sub">открытые задачи, по которым решение уже есть; одна задача может иметь несколько оснований</p>
-          <div class="sevstrip" id="close-strip"></div>
         </div>
         <div class="cve-rows" id="close-why"></div>
       </div>
       <hr class="cve-div">
-      <div class="tablewrap"><table>
+      <div class="tablewrap"><table class="tight">
         <thead><tr><th>CVE</th><th>Компонент</th><th>Критичность</th><th>CVSS</th><th>Основание</th><th>Статус</th><th>Разработчик</th><th>Часов</th></tr></thead>
         <tbody id="close-body"></tbody>
       </table></div>
     </section>
 
-    <section class="card wide">
+    <section class="card wide" id="comps">
       <div class="card-h">
         <h2>Компоненты</h2>
         <div class="seg" role="group" aria-label="Разбивка" id="comp-by">
@@ -171,7 +162,7 @@
       <div class="hbars" id="components"></div>
     </section>
 
-    <section class="card wide states">
+    <section class="card wide states" id="rhel-state">
       <div class="cve-grid">
         <div class="cve-sum">
           <h2>Состояние в RHEL</h2>
@@ -182,18 +173,17 @@
       </div>
     </section>
 
-    <section class="card wide states">
+    <section class="card wide states" id="task-status">
       <div class="cve-grid">
         <div class="cve-sum">
           <h2>Статус задач</h2>
           <p class="sub" style="margin:0">статус у разработчика</p>
-          <div class="sevstrip" id="statusstrip"></div>
         </div>
         <div class="cve-rows" id="devstatus"></div>
       </div>
     </section>
 
-    <section class="card wide">
+    <section class="card wide" id="inflow">
       <div class="card-h">
         <h2>Поступление задач</h2>
         <div class="seg" role="group" aria-label="Шаг" id="inflow-by">
@@ -206,7 +196,7 @@
       <div class="tl" id="weeks" role="img" aria-label="Количество задач по неделям"></div>
     </section>
 
-    <section class="card wide">
+    <section class="card wide" id="devs">
       <div class="card-h">
         <h2>Разработчики</h2>
         <div class="seg" role="group" aria-label="Шаг" id="burn-by">

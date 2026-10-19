@@ -1,5 +1,9 @@
 /* Layout: a dark "terminal" hero band with the headline counts, then a two-column report grid; severity reads as a warm sequential ramp everywhere. */
 :root{
+  /* статусы задач (st), основания «можно закрыть» (rs), ступени мер (m) */
+  --st-done:#2E7D4F;--st-work:#2E7FB0;--st-review:#6250d6;--st-pause:#B7791F;--st-bad:#B42318;--st-idle:#A9B6C2;
+  --rs-fixed:#8CC6E3;--rs-patch:#4FA6D3;--rs-range:#22709A;--rs-dup:#7F88C9;--rs-none:#E0693F;
+  --m1:var(--accent);--m2:color-mix(in srgb,var(--accent) 86%,var(--panel));--m3:color-mix(in srgb,var(--accent) 74%,var(--panel));--m4:color-mix(in srgb,var(--accent) 63%,var(--panel));--m5:color-mix(in srgb,var(--accent) 53%,var(--panel));--m6:color-mix(in srgb,var(--accent) 44%,var(--panel));--m7:color-mix(in srgb,var(--accent) 36%,var(--panel));--m8:color-mix(in srgb,var(--accent) 29%,var(--panel));--m9:color-mix(in srgb,var(--accent) 23%,var(--panel));--m10:color-mix(in srgb,var(--accent) 18%,var(--panel));
   --c1:#2a78d6;--c2:#eb6834;--c3:#1baf7a;--c4:#eda100;--c5:#e87ba4;--c6:#008300;--c7:#6250d6;--c8:#e34948;
   --bg:#F5F7F9; --panel:#FFFFFF; --fg:#14202B; --muted:#5A6B7A; --line:#DCE3EA; --grid:#E9EEF2;
   --accent:#1D6A8A; --accent-soft:#E2EFF5; --weekend:rgba(20,32,43,.05);
@@ -11,6 +15,8 @@
   --f-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#9085e9;--st-pause:#E3A846;--st-bad:#F27063;--st-idle:#4A5B6A;
+  --rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B;
   --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;--c6:#008300;--c7:#9085e9;--c8:#e66767;
   --bg:#0C141B; --panel:#121D27; --fg:#E4ECF2; --muted:#93A6B5; --line:#223241; --grid:#1A2834;
   --accent:#5DB3D6; --accent-soft:#16303D; --weekend:rgba(228,236,242,.045);
@@ -18,6 +24,8 @@
   --sev-crit:#FF8A6B; --sev-imp:#E0693F; --sev-mod:#A65A33; --sev-low:#6A4532; --sev-none:#3A4A58;
   --ok:#5CC48A; --warn:#E3A846; --bad:#F27063; color-scheme:dark}}
 :root[data-theme="dark"]{
+  --st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#9085e9;--st-pause:#E3A846;--st-bad:#F27063;--st-idle:#4A5B6A;
+  --rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B;
   --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;--c6:#008300;--c7:#9085e9;--c8:#e66767;
   --bg:#0C141B; --panel:#121D27; --fg:#E4ECF2; --muted:#93A6B5; --line:#223241; --grid:#1A2834;
   --accent:#5DB3D6; --accent-soft:#16303D; --weekend:rgba(228,236,242,.045);
@@ -38,7 +46,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .lede{color:var(--hero-muted);max-width:62ch;margin:12px 0 0}
 .asof{font-family:var(--f-display);font-weight:500;font-size:clamp(16px,2vw,22px);color:var(--hero-muted);margin:8px 0 0}
 .asof b{color:var(--hero-fg);font-weight:500}
-.hero-top{display:flex;flex-wrap:wrap;gap:24px;justify-content:space-between;align-items:flex-end}
+.hero-top{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-end}
 .upload{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 .btn{font:500 14px var(--f-body);background:var(--hero-fg);color:var(--hero-bg);border:0;border-radius:8px;padding:10px 16px;cursor:pointer}
 .btn:hover{opacity:.9}.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -47,33 +55,37 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .src{font-size:12px;color:var(--hero-muted);font-family:var(--f-mono);max-width:40ch;overflow-wrap:anywhere}
 .src.err{color:#FF8A6B}
 
-.board{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);gap:14px}
-@media (max-width:900px){.board{grid-template-columns:minmax(0,1fr)}}
-.total{border:1px solid var(--hero-line);border-radius:12px;padding:22px 22px 20px;display:flex;flex-direction:column;gap:14px;background:linear-gradient(160deg,#152A3A,var(--hero-bg) 70%);min-width:0;container-type:inline-size}
-.total .e,.grp-h{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--hero-muted)}
-/* кегль не больше, чем влезает в карточку: цифра шрифта — около 0,74 em,
-   --len — число знаков; 10000 задач не вылезают за край */
-.total .n{font-family:var(--f-display);font-weight:700;font-size:min(clamp(76px,10vw,128px),calc(100cqi / (var(--len,4) * .78)));line-height:.9;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
-.total .s{font-size:13.5px;color:var(--hero-muted)}
-.total .s b{color:var(--hero-fg);font-weight:600}
-.total .mixbar{height:26px;margin-top:auto}
-.total .mixleg{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 14px;font-size:12.5px}
-.groups{display:flex;flex-direction:column;gap:12px;min-width:0}
-.grp{display:flex;flex-direction:column;gap:6px}
-.grp-h{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline}
-.grp-h b{font-family:var(--f-display);font-size:13px;letter-spacing:0;text-transform:none;color:var(--hero-fg);font-weight:500;white-space:nowrap}
-.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--hero-line);border:1px solid var(--hero-line);border-radius:10px;overflow:hidden}
-.tiles.four{grid-template-columns:repeat(4,minmax(0,1fr))}
-@media (max-width:700px){.tiles.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.kpi{background:var(--hero-bg);padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0;position:relative}
-.kpi::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:0 2px 2px 0;background:var(--k,transparent)}
-.kpi .v{font-family:var(--f-display);font-size:28px;font-weight:500;line-height:1.1;font-variant-numeric:tabular-nums}
-.kpi .l{font-size:12.5px;color:var(--hero-muted);margin-bottom:4px}
-@media (max-width:560px){.kpi{padding:10px}.kpi .v{font-size:22px}.kpi .l{font-size:11.5px}.total .mixleg{grid-template-columns:minmax(0,1fr)}}
+/* шапка всегда тёмная — в ней всегда тёмные значения палитры */
+.hero{--st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#9085e9;--st-pause:#E3A846;--st-bad:#FF8A6B;--st-idle:#4A5B6A;--rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B}
+.hero-total{text-align:right}
+.hero-total .n{font:700 clamp(48px,7vw,72px)/1 var(--f-display);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.hero-total .s{font-size:13px;color:var(--hero-muted)}
+.hero-total .s b{color:var(--hero-fg);font-weight:600}
+/* общая полоса: над ней — скобки групп с числами, под ней — легенда */
+.hero-mix{display:flex;flex-direction:column;gap:6px}
+.hero-groups{display:grid;column-gap:2px}
+.hero-groups > div{min-width:0;display:flex;flex-direction:column;gap:4px}
+.hero-groups .cap{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}
+.hero-groups .cap b{font:500 26px/1 var(--f-display);font-variant-numeric:tabular-nums}
+.hero-groups .cap span{font-size:13px;color:var(--hero-muted);overflow:hidden;text-overflow:ellipsis}
+.hero-groups .br{height:6px;border:1px solid var(--hero-muted);border-bottom:0;border-radius:4px 4px 0 0;opacity:.55}
+.hero-leg{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--hero-muted);margin-top:4px}
+.hero-leg b{color:var(--hero-fg);font-weight:600;font-variant-numeric:tabular-nums}
+/* «Состояние» и «Риски и темп» — списками через тонкую линию */
+.hero-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 40px}
+.hero-h{font:600 12px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--hero-muted);margin-bottom:6px}
+.hero-list > div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:14px;padding:7px 0;border-bottom:1px solid var(--hero-line)}
+.hero-list > div:last-child{border-bottom:0}
+.hero-list .k{min-width:0}
+.hero-list .k i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:-1px}
+.hero-list .k small{color:var(--hero-muted);font-size:13px}
+.hero-list b{font:500 18px var(--f-display);font-variant-numeric:tabular-nums;white-space:nowrap}
+.hero-list .bad b{color:#FF8A6B}
+@media (max-width:720px){.hero-total{text-align:left}.hero-cols{grid-template-columns:minmax(0,1fr)}.hero-groups .cap{flex-direction:column;gap:2px}.hero-groups .cap span{font-size:11px}.hero-groups .cap b{font-size:20px}}
 
 /* severity strip in hero */
 .sevstrip{display:flex;height:12px;gap:2px;border-radius:4px;overflow:hidden}
-.sevstrip span{display:block;height:100%}
+.sevstrip span{display:flex;align-items:center;justify-content:center;height:100%;font:500 11.5px var(--f-mono);white-space:nowrap;overflow:hidden}
 /* сверху заголовок, как у остальных карточек, под ним полоса на всю ширину,
    ниже строки разреза */
 .cve-grid{display:flex;flex-direction:column;gap:14px;min-width:0}
@@ -83,7 +95,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .cve-n{display:flex;align-items:baseline;gap:8px;margin-top:4px}
 .cve-n span{font-family:var(--f-display);font-size:44px;font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
 .cve-n small{color:var(--muted);font-size:13px}
-#cve .sevstrip,#closable .sevstrip,.states .sevstrip{height:14px;margin-top:4px}
+#cve .sevstrip,.states .sevstrip{height:22px;border-radius:6px;margin-top:6px}
 .cve-rows{display:grid;grid-template-columns:230px minmax(80px,1fr) repeat(5,4.4em);gap:12px 14px;align-items:center;font-variant-numeric:tabular-nums}
 .cve-rows .h{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;text-align:right;white-space:nowrap}
 .cve-rows .h.l{text-align:left}
@@ -104,6 +116,9 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .cve-leg{flex-wrap:wrap;gap:2px 12px}
 .cve-leg span{white-space:nowrap}
 @media (max-width:560px){.cve-rows{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px 10px}.cve-rows .k{grid-column:1/-1;margin-top:8px}.cve-rows .b{grid-column:1/-1}.cve-rows .h.l,.cve-rows .h.bar{display:none}.cve-rows .h{white-space:normal;font-size:10px;letter-spacing:.02em}}
+/* у мер — только «Всего» и «Ср. часов», в тех же колонках, что у критичности */
+.cve-rows.short > .c3{grid-column:3}.cve-rows.short > .c7{grid-column:7}
+@media (max-width:560px){.cve-rows.short{grid-template-columns:repeat(2,minmax(0,1fr))}.cve-rows.short > *{grid-column:auto!important}.cve-rows.short > .k,.cve-rows.short > .b{grid-column:1/-1!important}}
 .sevlegend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--hero-muted);margin-top:10px}
 .comp-leg{color:var(--muted);margin-top:-4px}
 /* шапка карточки с переключателем справа */
@@ -118,18 +133,28 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .mix-h{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline}
 .mix-h b{font-family:var(--f-display);font-weight:500;font-size:16px}
 .mix-h span{font-size:13px;color:var(--hero-muted)}
-.mixbar{display:flex;height:34px;gap:2px;border-radius:6px;overflow:hidden}
-.mixbar span{display:flex;align-items:center;justify-content:center;height:100%;min-width:3px;font:500 12.5px var(--f-mono);color:#0F1D29;overflow:hidden;white-space:nowrap}
+.mixbar{display:grid;height:34px;gap:2px;border-radius:6px;overflow:hidden}
+.mixbar span{display:flex;align-items:center;justify-content:center;height:100%;min-width:0;font:500 12.5px var(--f-mono);color:#0F1D29;overflow:hidden;white-space:nowrap}
 .mixbar span.lt{color:#E8F0F6}
-.mixleg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 18px;font-size:13px;color:var(--hero-muted)}
-.mixleg b{color:var(--hero-fg);font-weight:600;font-variant-numeric:tabular-nums}
-.mini{height:4px;border-radius:2px;background:var(--hero-line);margin-top:6px;overflow:hidden}
-/* полоса — к низу плитки: подпись, перенесённая на вторую строку, не
-   опускает её ниже, чем у соседних плиток ряда */
-.kpi .mini{margin-top:auto}
-.mini i{display:block;height:100%;background:currentColor;border-radius:2px}
-.kpi .pc{font-size:12px;color:var(--hero-muted);font-variant-numeric:tabular-nums}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+/* липкая строка разделов: якоря по центру колонки; не помещаются — строка
+   листается вбок, без полосы прокрутки; margin-inline:auto, а не
+   justify-content, — иначе при переполнении обрезается левый край */
+.secnav{position:sticky;top:env(safe-area-inset-top,0px);z-index:15;background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:saturate(1.4) blur(8px);-webkit-backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
+.secnav .wrap{display:flex;align-items:center;min-height:48px;overflow-x:auto;scrollbar-width:none}
+.secnav .wrap::-webkit-scrollbar{display:none}
+.secnav .links{display:flex;align-items:center;gap:2px;margin-inline:auto;flex:none}
+.secnav a{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font:500 13px var(--f-body);color:var(--muted);text-decoration:none;padding:6px 9px;border-radius:999px;transition:background .15s,color .15s}
+.secnav a:hover{color:var(--fg);background:var(--bg)}
+.secnav a.on{color:var(--fg);background:var(--accent-soft)}
+.secnav a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.secnav .badge{font:600 11.5px var(--f-body);font-variant-numeric:tabular-nums;padding:1px 7px;border-radius:999px;background:var(--bg);color:var(--fg);border:1px solid var(--line)}
+.secnav .badge.bad{background:color-mix(in srgb,var(--bad) 14%,transparent);border-color:color-mix(in srgb,var(--bad) 35%,transparent);color:var(--bad)}
+.secnav .badge.ok{background:color-mix(in srgb,var(--ok) 14%,transparent);border-color:color-mix(in srgb,var(--ok) 35%,transparent);color:var(--ok)}
+/* вырез экрана над прилипшей строкой — цветом строки, а не страницы */
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:16;background:var(--panel)}
+main section{scroll-margin-top:64px}
 
 /* report */
 main .wrap{padding-block:36px 56px;display:grid;gap:20px;grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -155,54 +180,69 @@ h2{font-family:var(--f-display);font-weight:500;font-size:18px;margin:0;letter-s
 
 /* table */
 .tablewrap{overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:8px}
-h2 .cnt{font-family:var(--f-body);font-weight:500;color:var(--muted);font-size:15px;margin-left:6px}
+h2 .cnt{font-family:var(--f-body);font-weight:500;color:var(--muted);font-size:14px;margin-left:6px}
 table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:760px}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 th{font-weight:600;color:var(--muted);font-size:12px;letter-spacing:.04em;text-transform:uppercase;background:var(--bg);position:sticky;top:0}
 tr:last-child td{border-bottom:0}
+/* «Можно закрыть»: пилюли оснований переносятся, а не тянут строку вширь;
+   отступы ячеек поуже — таблица помещается без горизонтальной прокрутки */
+table.tight th,table.tight td{padding:9px 8px}
+table.tight th:first-child,table.tight td:first-child{padding-left:12px}
+td.why{white-space:normal;min-width:150px}
+td.why .pill{margin:2px 6px 2px 0;white-space:nowrap}
+/* на узкой ширине переносятся и статус с разработчиком */
+@media (max-width:1000px){table.tight td:nth-child(6),table.tight td:nth-child(7){white-space:normal}}
 td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underline}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
 .pill i{width:8px;height:8px;border-radius:2px;display:inline-block}
 .empty{color:var(--muted);font-size:14px}
 
 .people{display:flex;flex-direction:column;gap:12px}
-.dev{border:1px solid var(--line);border-radius:10px;display:grid;grid-template-columns:minmax(170px,1fr) minmax(0,1.1fr) minmax(0,1.3fr);overflow:hidden}
-.dev > div{padding:14px 16px;min-width:0;display:flex;flex-direction:column;gap:8px;border-left:1px solid var(--line)}
-.dev > div:first-child{border-left:0;box-shadow:inset 3px 0 0 var(--dc,var(--line))}
+.dev{border:1px solid var(--line);border-radius:10px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);overflow:hidden;box-shadow:inset 3px 0 0 var(--dc,var(--line))}
+.dev > div{padding:14px 16px;min-width:0;display:flex;flex-direction:column;gap:8px;border-left:1px solid var(--line);border-top:1px solid var(--line)}
+.dev > div:first-child{grid-column:1/-1;border-left:0;border-top:0;padding:16px 18px 14px 20px;display:grid;grid-template-columns:auto auto minmax(0,1fr);column-gap:14px;row-gap:10px;align-items:baseline}
+.dev > div:first-child h3{grid-column:1;grid-row:1}
+.dev > div:first-child .big{grid-column:2;grid-row:1}
+.dev > div:first-child .dnow{grid-column:3;grid-row:1;justify-self:end;text-align:right;border-top:0;padding-top:0;margin:0;max-width:420px}
+.dev > div:first-child .pbar{grid-column:1/-1;grid-row:2}
+.dev > div:first-child .dstat{grid-column:1/-1;grid-row:3}
+.dev > div:nth-child(2){border-left:0;padding-left:20px}
 .dev h3{margin:0;font:600 16px var(--f-body);display:flex;align-items:center;gap:8px}
 .dev h3 i{width:10px;height:10px;border-radius:3px;display:inline-block}
 .dev .cap{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .dev .big{font-family:var(--f-display);font-size:26px;font-weight:500;line-height:1.1;font-variant-numeric:tabular-nums}
 .dev .big small{font:500 13px var(--f-body);color:var(--muted);margin-left:6px}
 .dev .kv{display:grid;grid-template-columns:auto minmax(40px,1fr) auto;gap:5px 10px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums}
-.dev .kv .k{color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dev .kv .k{color:var(--fg);line-height:1.3}
 .dev .kv .b{height:8px;background:var(--bg);border-radius:2px;overflow:hidden;display:flex}
 .dev .kv .b span{display:block;height:100%;border-radius:2px}
 .dev .kv .n{text-align:right;min-width:2em;font-weight:600}
-.dev .kv.kv4{grid-template-columns:auto minmax(40px,1fr) auto auto}
+.dev .kv.kv4{grid-template-columns:minmax(110px,1.4fr) minmax(40px,1fr) 3em 6.2em}
 .dev .kv .kh{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;text-align:right;white-space:nowrap}
 .dev .kv .h{text-align:right;color:var(--muted);white-space:nowrap}
-.dev .dstat{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 16px;font-size:12.5px;color:var(--muted)}
+/* статусы — строкой-легендой под полосой */
+.dev .dstat{display:flex;flex-wrap:wrap;gap:4px 20px;font-size:13px;color:var(--muted)}
 .dev .dstat div{display:flex;align-items:center;gap:6px;min-width:0}
 .dev .dstat i{width:8px;height:8px;border-radius:2px;flex:none}
-.dev .dstat b{margin-left:auto;color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+.dev .dstat b{margin-left:2px;color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
 .dev .dstat .zero{opacity:.5}
 .dev .dnow{font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px;margin-top:2px}
 .dev .dnow b{color:var(--fg);font-weight:600}
 .dev .speed{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .dev .speed div{display:flex;flex-direction:column}
-.dev .speed .v{font-family:var(--f-display);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+.dev .speed .v{font-family:var(--f-display);font-size:18px;font-weight:500;font-variant-numeric:tabular-nums}
 .dev .speed .l{font-size:11.5px;color:var(--muted)}
-.dev.na{grid-template-columns:minmax(170px,1fr) minmax(0,3.5fr)}
-@media (max-width:1000px){.dev{grid-template-columns:repeat(2,minmax(0,1fr))}.dev > div:nth-child(3){border-left:0;grid-column:1/-1}.dev > div:nth-child(n+3){border-top:1px solid var(--line)}.dev.na{grid-template-columns:minmax(0,1fr)}.dev.na > div:nth-child(2){border-left:0;border-top:1px solid var(--line)}}
-@media (max-width:560px){.dev{grid-template-columns:minmax(0,1fr)}.dev > div{border-left:0}.dev > div + div{border-top:1px solid var(--line)}}
+@media (max-width:720px){.dev{grid-template-columns:minmax(0,1fr)}.dev > div:nth-child(3){border-left:0;padding-left:20px}
+  .dev > div:first-child{grid-template-columns:auto minmax(0,1fr)}
+  .dev > div:first-child .dnow{grid-column:1/-1;grid-row:4;justify-self:start;text-align:left}}
 .person{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
 .person b{font-weight:600}
 .person .meta{font-size:13px;color:var(--muted)}
 /* полоса состава в карточке разработчика — как полосы состава в блоках:
    скруглённая, сегменты через зазор */
-.pbar{display:flex;gap:2px;height:10px;border-radius:3px;overflow:hidden;background:var(--bg)}
-.pbar span{display:block;height:100%}
+.pbar{display:flex;gap:2px;height:22px;border-radius:6px;overflow:hidden;background:var(--bg)}
+.pbar span{display:flex;align-items:center;justify-content:center;height:100%;font:500 12px var(--f-mono);white-space:nowrap;overflow:hidden}
 
 .foot{color:var(--muted);font-size:13px;grid-column:1/-1;max-width:80ch}
 .foot dt{font-weight:600;color:var(--fg);display:inline}
@@ -210,78 +250,98 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .foot div{margin-bottom:4px}
 
 .pace-head .sub{margin:4px 0 0}
+#pace{gap:16px}
+/* сверху вниз во всю ширину: параметры, числа темпа, прогноз, график;
+   колонки pace-left и pace-right — display:contents */
+.pace-body{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:stretch}
+.pace-left,.pace-right{display:contents}
+.pace-ctl,.pace-stats,.pace-right .fc-stack,.pace-chart{grid-column:1}
+.pace-ctl{grid-row:1}
+.pace-stats{grid-row:2}
+.pace-right .fc-stack{grid-row:3}
+.pace-chart{grid-row:4}
+
+/* параметры — без подложки, четыре равные колонки ровно над четырьмя
+   числами темпа, с теми же отступами */
+.pace-ctl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:end;min-width:0}
+.pace-ctl > *{padding:0 16px}
+.pace-ctl > :first-child{padding-left:0}
+.pace-ctl > :last-child{padding-right:0}
+.pace-ctl label{display:flex;flex-direction:column;gap:6px;font:600 11.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);min-width:0;white-space:nowrap}
+.pace-ctl input,.pace-ctl select{font:500 14px var(--f-body);letter-spacing:0;text-transform:none;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:0 10px;height:36px;min-width:0;width:100%;box-sizing:border-box}
+.pace-ctl input:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+.pace-ctl input:focus-visible,.pace-ctl select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+@media (max-width:640px){
+  .pace-ctl{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:12px}
+  .pace-ctl > :nth-child(n){padding:0 8px 0 0}
+  .pace-ctl > :nth-child(even){padding:0 0 0 8px}
+  .pace-ctl > .pair,.pace-ctl > .chk{grid-column:1/-1;padding:0}
+}
 /* режим «Когда начать»: вместо периода темпа — разработчики и темп на одного */
 .pace-ctl .plan,#pace.plan .pace-ctl .fact{display:none}
 #pace.plan .pace-ctl .plan{display:flex}
-/* «Когда начать»: разработчики и темп — вдвоём в левом слоте, справа галка;
-   на узкой колонке подписи переносятся, поля стоят по нижнему краю */
-#pace.plan .pace-ctl .pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 8px;align-items:end;min-width:0}
+/* разработчики и темп — вдвоём в одной колонке; на узкой колонке подписи
+   переносятся, поля стоят по нижнему краю */
+#pace.plan .pace-ctl .pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 10px;align-items:end;min-width:0}
 .pace-ctl .pair .cap{overflow:hidden;text-overflow:ellipsis}
 /* подпись галки — не больше двух строк, полностью — в подсказке */
 #plan-ready-l{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-#pace.plan .pace-ctl .chk{flex-direction:row;align-items:center;gap:8px;align-self:end;height:32px;font-size:12.5px;line-height:1.2;color:var(--fg);white-space:normal;cursor:pointer}
-.pace-ctl .chk input{width:auto;height:auto;margin:0;flex:none;accent-color:var(--accent)}
-/* четыре поля в две строки: сканфриз и цель, затем период темпа */
-.pace-ctl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;align-items:end;min-width:0}
-.pace-ctl label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--muted);min-width:0;white-space:nowrap}
-.pace-ctl input,.pace-ctl select{font:500 13.5px var(--f-body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:0 8px;height:32px;min-width:0;width:100%;box-sizing:border-box}
-.pace-ctl input:focus-visible,.pace-ctl select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-/* сетка 2×2: сверху плитки темпа и выбор дат, снизу график и прогноз —
-   верх и низ прогноза вровень с графиком; колонки — display:contents */
-.pace-body{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(280px,1fr);gap:12px 16px;align-items:stretch}
-.pace-left,.pace-right{display:contents}
-.pace-stats{grid-column:1;grid-row:1}
-.pace-chart{grid-column:1;grid-row:2}
-.pace-ctl{grid-column:2;grid-row:1;align-self:end}
-.pace-right .fc-stack{grid-column:2;grid-row:2}
-@media (max-width:900px){.pace-body{grid-template-columns:minmax(0,1fr)}.pace-stats,.pace-chart,.pace-ctl,.pace-right .fc-stack{grid-column:auto;grid-row:auto}}
+#pace.plan .pace-ctl .chk{flex-direction:row;align-items:center;gap:8px;align-self:end;height:32px;font:500 12.5px/1.2 var(--f-body);letter-spacing:0;text-transform:none;color:var(--fg);white-space:normal;cursor:pointer}
+.pace-ctl .chk input{width:auto;height:auto;margin:0;padding:0;flex:none;accent-color:var(--accent)}
+
 /* тексты обоих режимов лежат в одной ячейке, невидимый держит место:
    высота — по большему, и при переключении блок не прыгает */
 .stack{display:grid;min-width:0}
 .stack > *{grid-area:1/1;min-width:0}
 .stack > .off{visibility:hidden}
-/* лишняя высота прогноза уходит в главную строку */
-/* прогноз: строки обоих режимов в одной сетке — n-я строка одного режима
-   в той же ячейке, что n-я другого; высота строки — по большему, текст
-   прижат к верху, поэтому при переключении ничего не сдвигается. Лишняя
-   высота делится между строками поровну */
-.fc.fc-stack{display:grid;grid-template-columns:minmax(0,1fr)}
-.fc-set{display:contents}
-.fc-set.off{visibility:hidden}
-.fc-set > *{grid-column:1}
-.fc-set > :nth-child(1){grid-row:1}
-.fc-set > :nth-child(2){grid-row:2}
-.fc-set > :nth-child(3){grid-row:3}
-.fc-stack .fc-row{align-content:start}
-.pace-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+
+/* числа темпа */
+.pace-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-block:1px solid var(--line);overflow:hidden}
 @media (max-width:640px){.pace-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.ps{background:var(--panel);padding:10px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
-.ps .v{font-family:var(--f-display);font-size:24px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.15}
+.ps{padding:10px 16px 12px 0;display:flex;flex-direction:column;gap:2px;min-width:0}
+.ps .v{font-family:var(--f-display);font-size:26px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.15}
 .ps .l{font-size:12px;color:var(--muted)}
 .ps .v.bad{color:var(--bad)}.ps .v.ok{color:var(--ok)}
-.pace-chart{flex:1;display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:8px;padding:12px 14px 6px;min-height:280px;min-width:0}
-/* переключатель вида — справа сверху, легенда — под графиком */
-.pace-chart-h{display:flex;justify-content:flex-end}
+.ps + .ps{border-left:1px solid var(--line);padding-left:16px}
+@media (max-width:640px){.ps:nth-child(3){border-left:0;padding-left:0}.ps:nth-child(n+3){border-top:1px solid var(--line)}}
+
+/* прогноз — три колонки: главный итог и два сценария рядом, через
+   вертикальные линии; на узком экране — друг под другом. У каждой колонки
+   подпись, значение и пояснение, одинаково в обоих режимах. Колонки обоих
+   режимов лежат в одних ячейках, а их три строки — общие (subgrid): высота
+   строки — по большему режиму, и при переключении ничего не сдвигается */
+.fc-stack{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr);align-content:start;border-block:1px solid var(--line);overflow:hidden;min-width:0}
+.fc-set{display:contents}
+.fc-set.off{visibility:hidden}
+.fc-cell{display:grid;grid-template-rows:subgrid;grid-row:1/span 3;row-gap:4px;align-content:start;padding:14px 20px;min-width:0}
+.fc-set > :nth-child(1){grid-column:1;padding-left:0}
+.fc-set > :nth-child(2){grid-column:2;border-left:1px solid var(--line)}
+.fc-set > :nth-child(3){grid-column:3;border-left:1px solid var(--line);padding-right:0}
+.fc-cell .e{font:600 11.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.fc-cell .d{font-family:var(--f-display);font-weight:500;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.fc-cell .d.bad{color:var(--bad)}
+.fc-cell .d.ok{color:var(--ok)}
+.fc-cell .s{font-size:13px;color:var(--muted);max-width:44ch}
+@media (max-width:900px){
+  .fc-stack{grid-template-columns:minmax(0,1fr);border-block:0;padding-top:14px}
+  .fc-set > :nth-child(n){grid-column:1;padding-inline:0}
+  .fc-set > :nth-child(2){grid-row:4/span 3;border-left:0;border-top:1px solid var(--line)}
+  .fc-set > :nth-child(3){grid-row:7/span 3;border-left:0;border-top:1px solid var(--line)}
+}
+
+/* график — без рамки: подпись слева, переключатель вида справа, легенда
+   под графиком; выходные тише */
+.pace-chart{display:flex;flex-direction:column;gap:8px;min-width:0}
+.pace-chart-h{display:flex;justify-content:space-between;align-items:center}
+.pace-chart-t{font:600 11.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .pace-leg{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .tl .vmark{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 3}
 .tl text.vlab{font-size:11px;paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
 .pace-leg i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:3px;margin-right:6px}
-.fc{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden;min-width:0}
-.fc-main{background:var(--accent-soft);padding:16px 16px 14px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--line)}
-.fc-main .e{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.02em}
-.fc-main .d{font-family:var(--f-display);font-weight:500;font-size:32px;line-height:1.1;font-variant-numeric:tabular-nums}
-.fc-main .d.bad{color:var(--bad);font-size:24px}
-.fc-main .d.ok{color:var(--ok);font-size:24px}
-.fc-main .s{font-size:12.5px;color:var(--muted)}
-.fc-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:baseline}
-.fc-row:last-child{border-bottom:0}
-.fc-row .t{font-weight:600;font-size:13.5px}
-.fc-row .d{font-family:var(--f-display);font-weight:500;font-size:16px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.fc-row .d.ok{color:var(--ok)}
-.fc-row .d.bad{color:var(--bad);font-family:var(--f-body);font-size:13.5px;font-weight:600}
-.fc-row .s{grid-column:1/-1;font-size:12px;color:var(--muted)}
-.fc-row.need{background:var(--bg)}
-.pace-note{font-size:12px;color:var(--muted);margin:0}
+.pace-tl .wkend{opacity:.6}
+/* пояснение — мелко, отдельной строкой под линией */
+#pace > .stack{border-top:1px solid var(--line);padding-top:12px}
+.pace-note{font-size:12px;line-height:1.55;color:var(--muted);margin:0;max-width:110ch}
 #tip{position:fixed;pointer-events:none;background:var(--fg);color:var(--bg);font-size:12.5px;padding:6px 9px;border-radius:6px;z-index:20;max-width:260px}
 .drop-on .hero{outline:3px dashed var(--accent);outline-offset:-10px}
 @media (prefers-reduced-motion:no-preference){.track span,.sevstrip span{transition:flex-grow .4s ease}}
@@ -322,8 +382,6 @@ img{max-width:100%}
 .hbars:has(.track span span:hover) .track span span:not(:hover),
 .cve-rows:has(.b:hover) .b:not(:hover),
 .kv:has(.b:hover) .b:not(:hover){opacity:.45}
-.mini i{transition:filter .1s}
-.mini:hover i{filter:brightness(1.35)}
 .tl .mark{pointer-events:none;visibility:hidden}
 .tl .mark.on{visibility:visible}
 .tl .mark .guide{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}

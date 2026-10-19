@@ -77,6 +77,18 @@ class WriteTest(Base):
         mode = os.stat(self.path("t.html")).st_mode & 0o777
         self.assertEqual(mode, 0o666 & ~cli._umask())
 
+    def test_release_name_goes_to_meta(self):
+        code, log = self.run_cli(self.table, "--as-of", "2026-10-19", "--release", " 9.3.2 ")
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertEqual(self.data(self.path("t.html"))["meta"]["release"], "9.3.2")
+        self.assertIn("релиз: 9.3.2", log)
+
+    def test_release_name_is_optional(self):
+        for extra in ([], ["--release", "  "]):
+            with self.subTest(extra=extra):
+                self.run_cli(self.table, "--as-of", "2026-10-19", *extra)
+                self.assertIsNone(self.data(self.path("t.html"))["meta"]["release"])
+
     def test_only_required_columns(self):
         write(self.table, [REQUIRED, ["CVE-1", "bash", "Affected", "Low"]])
         code, log = self.run_cli(self.table, "--as-of", "2026-10-19")
