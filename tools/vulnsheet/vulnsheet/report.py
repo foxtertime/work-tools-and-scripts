@@ -1,47 +1,46 @@
 """Строка итоговой таблицы и запись CSV.
 
-Формат фиксирован процессом: 20 колонок, разделитель ';', пустая ячейка —
+Формат фиксирован процессом: 22 колонки, разделитель ';', пустая ячейка —
 '-', даты — dd.mm.yyyy. Колонки процесса (разработчик, статус, даты работ,
-принятая мера, комментарий) заполняют люди, здесь они — прочерки. В
-комментарий тулза дописывает только пометку о патче в GitLab и обновляет
-только её.
+принятая мера, комментарий) заполняют люди, здесь они — прочерки. P и D —
+признаки про билд из SL NVR: «+» — патч под CVE лежит в каталоге PATCH
+коммита сборки (P), апстрим-версия вне уязвимых диапазонов (D); «-» —
+нет патча, версия в диапазоне или проверить не удалось.
 """
 import csv
 import re
-from typing import Iterable, List, Optional
+from typing import Iterable, List
 
-from .patches import BRANCH_ONLY, REMOVED, SOURCES, SRC_CHANGELOG, SRC_PATCH, SRC_SPEC
 from .vex import FIXED
 
 EMPTY = "-"
+YES = "+"
+NO = "-"
 CVE_PAGE = "https://access.redhat.com/security/cve/{cve}"
 COLUMNS = [
     "Разработчик", "Статус", "Start date", "End date", "Принятая мера",
     "Task ID", "CVE ID", "Task state", "Task date", "Исполнитель",
-    "Компонент", "SL NVR (latest build)", "RHEL NVR (if fixed)",
+    "Компонент", "P", "D", "SL NVR (latest build)", "RHEL NVR (if fixed)",
     "Fix date", "RHEL state", "RHEL severity", "RHEL CVSS",
     "Advisory (RHSA)", "CVE link", "Комментарий",
 ]
 
 MISSING = "Missing"  # Task state строки, чьей задачи больше нет в блоках
-# Фрагменты пометки о CVE в комментарии. По этим началам тулза узнаёт свои
-# фрагменты среди текста людей и заменяет их; «патч присутствует» писала
-# версия 1.1.
-_NOTE_STARTS = ("патч найден:", "патч убран из ветки", "патч есть в ветке",
-                "патч присутствует", "спек, ", "диапазон версий неизвестен")
-# фрагмент о диапазоне узнаётся строже, чем по «версия »: иначе «версия
-# обновлена до 1.27», написанное людьми, сошло бы за свой фрагмент
-_RANGE_NOTE = re.compile(r"^версия \S+ (в уязвимом диапазоне|вне уязвим(ого|ых) диапазон)")
-_SEPARATOR = "; "
+
+
+def _group(first: str, last: str) -> slice:
+    return slice(COLUMNS.index(first), COLUMNS.index(last) + 1)
+
 
 # Группы колонок для режимов обновления: что в каком режиме откуда берётся,
 # см. docs/superpowers/specs/2026-09-24-vulnsheet-update-modes-design.md.
-DEVELOPER = slice(0, 5)   # Разработчик … Принятая мера
-TASK = slice(5, 11)       # Task ID … Компонент
-KOJI = slice(11, 12)      # SL NVR
-VEX = slice(12, 18)       # RHEL NVR … Advisory
-LINK = slice(18, 19)      # CVE link
-COMMENT = slice(19, 20)   # Комментарий
+DEVELOPER = _group("Разработчик", "Принятая мера")
+TASK = _group("Task ID", "Компонент")
+MARKS = _group("P", "D")
+KOJI = _group("SL NVR (latest build)", "SL NVR (latest build)")
+VEX = _group("RHEL NVR (if fixed)", "Advisory (RHSA)")
+LINK = _group("CVE link", "CVE link")
+COMMENT = _group("Комментарий", "Комментарий")
 
 TASK_ID = COLUMNS.index("Task ID")
 CVE_ID = COLUMNS.index("CVE ID")
@@ -49,6 +48,8 @@ TASK_STATE = COLUMNS.index("Task state")
 TASK_DATE = COLUMNS.index("Task date")
 ASSIGNEE = COLUMNS.index("Исполнитель")
 COMPONENT = COLUMNS.index("Компонент")
+PATCH = COLUMNS.index("P")
+RANGE = COLUMNS.index("D")
 SL_NVR = COLUMNS.index("SL NVR (latest build)")
 RHEL_STATE = COLUMNS.index("RHEL state")
 COMMENT_INDEX = COLUMNS.index("Комментарий")
@@ -65,98 +66,18 @@ def format_date(value: str) -> str:
     return "%s.%s.%s" % (day, month, year)
 
 
-def patch_note(found) -> str:
-    """Пометка о CVE: фрагмент на каждый источник, где она нашлась (каталог
-    PATCH, PatchN спека, %changelog), через «; », в этом порядке.
-
-    found — источник → patches.PatchNote."""
-    return _SEPARATOR.join(_fragment(source, found[source])
-                           for source in SOURCES if source in found)
-
-
-def _fragment(source: str, note) -> str:
-    if source == SRC_PATCH:
-        links = " ".join(item.url for item in note.items)
-        if note.kind == REMOVED:
-            return ("патч убран из ветки %s, возможно, не нужен после обновления пакета: %s"
-                    % (note.branch, links))
-        if note.kind == BRANCH_ONLY:
-            return "патч есть в ветке %s, но не в билде: %s" % (note.branch, links)
-        return "патч найден: %s" % links
-    if source == SRC_SPEC:
-        lines = ", ".join("%s %s" % (item.label, item.url) for item in note.items)
-        if note.kind == REMOVED:
-            return "спек, убрано из ветки %s: %s" % (note.branch, lines)
-        if note.kind == BRANCH_ONLY:
-            return "спек, есть в ветке %s, но не в билде: %s" % (note.branch, lines)
-        return "спек, %s" % lines
-    assert source == SRC_CHANGELOG, source
-    item = note.items[0]
-    entry = "%changelog " + item.label if item.label else "%changelog"
-    if note.kind == REMOVED:
-        return "спек, %s — в ветке %s уже нет: %s" % (entry, note.branch, item.url)
-    if note.kind == BRANCH_ONLY:
-        return "спек, %s есть в ветке %s, но не в билде: %s" % (entry, note.branch, item.url)
-    return "спек, %s: %s" % (entry, item.url)
-
-
-def range_note(note) -> str:
-    """Фрагмент о диапазоне версий (ranges.RangeNote)."""
-    if note.inside is None:
-        return "диапазон версий неизвестен"
-    ranges = ", ".join(interval.text() for interval in note.intervals)
-    if note.inside:
-        where = "в уязвимом диапазоне"
-    else:
-        where = "вне уязвимого диапазона" if len(note.intervals) == 1 else "вне уязвимых диапазонов"
-    return "версия %s %s %s (%s)" % (note.version, where, ranges, note.source)
-
-
-def _is_note(segment: str) -> bool:
-    segment = segment.strip()
-    return segment.startswith(_NOTE_STARTS) or bool(_RANGE_NOTE.match(segment))
-
-
-def has_patch_note(comment: str) -> bool:
-    return any(_is_note(segment) for segment in comment.split(_SEPARATOR))
-
-
-def with_patch_note(comment: str, note: Optional[str]) -> str:
-    """Комментарий с пометкой о CVE (patch_note).
-
-    Пустую ячейку пометка заменяет, к тексту людей дописывается через «; ».
-    Свои фрагменты прошлых прогонов убираются, а пометка встаёт на место
-    первого из них; текст людей вокруг остаётся. Без пометки
-    (патча нет или проверить не удалось) ячейка не трогается — пометку
-    прошлого прогона тулза не снимает: патча могли просто не увидеть."""
-    if not note:
-        return comment
-    if comment.strip() in ("", EMPTY):
-        return note
-    segments, placed = [], False
-    for segment in comment.split(_SEPARATOR):
-        if not _is_note(segment):
-            segments.append(segment)
-        elif not placed:
-            segments.append(note)
-            placed = True
-    if not placed:
-        segments.append(note)
-    return _SEPARATOR.join(segments)
-
-
-def row(task, nvr: str, verdict, note: Optional[str] = None) -> List[str]:
+def row(task, nvr: str, verdict, patch: str = NO, ranged: str = NO) -> List[str]:
     fixed = verdict.state == FIXED
     cells = [
         "", "", "", "", "",
         task.task_id, task.cve, task.state, task.date, task.assignee,
-        task.component, nvr,
+        task.component, patch, ranged, nvr,
         verdict.fixed_nvr if fixed else "",
         format_date(verdict.fix_date) if fixed else "",
         verdict.state, verdict.severity, verdict.cvss,
         verdict.advisory_url if fixed else "",
         CVE_PAGE.format(cve=task.cve),
-        note or "",
+        "",
     ]
     # пустое — только None и "": CVSS 0.0 — настоящее значение
     return [EMPTY if cell is None or cell == "" else cell for cell in cells]

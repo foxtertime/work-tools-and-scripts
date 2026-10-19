@@ -1,15 +1,12 @@
 """Чтение каталога патчей из GitLab через REST v4. Доступ только на чтение.
 
 Перенесено из тулзы dashboard (тулзы общего кода не делят) в урезанном
-виде: нужны только дерево каталога, содержимое файла и ссылка на файл, без
-сравнения коммитов.
+виде: нужно только дерево каталога патчей, без сравнения коммитов.
 
 Сам разговор по HTTP — повторы, паузы, чистка токена из сообщений — живёт
 в httpclient.py. Здесь только знание о GitLab: как спросить дерево ветки и
 как отличить «ветки нет» от «сервер не ответил».
 """
-import base64
-import binascii
 import logging
 import threading
 from typing import Dict, List, NamedTuple, Optional
@@ -22,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 class GitlabHost(NamedTuple):
     api: str   # https://gitlab.example.com/api/v4
-    web: str   # https://gitlab.example.com
 
 
 class TreeResult(NamedTuple):
@@ -31,13 +27,6 @@ class TreeResult(NamedTuple):
     нет; warning — дерево есть, но с оговоркой (подменён хост)."""
     present: Optional[bool]
     paths: List[str]
-    problem: Optional[str]
-    level: str = "error"
-
-
-class FileResult(NamedTuple):
-    """text — содержимое файла; None — не прочитан, problem объясняет почему."""
-    text: Optional[str]
     problem: Optional[str]
     level: str = "error"
 
@@ -83,31 +72,14 @@ class GitlabClient:
             return self._hosts["*"], None
         return None, None
 
-    def blob_url(self, host, project, ref, path) -> Optional[str]:
-        """Веб-ссылка на файл; хост — тот сервер, что отвечал (с подменой)."""
-        cfg = self._resolve_host(host)[0]
-        if not cfg or not ref:
-            return None
-        return "%s/%s/-/blob/%s/%s" % (cfg.web.rstrip("/"), _path(project),
-                                       _path(ref), _path(path))
-
     def patch_files(self, host, project, ref) -> TreeResult:
-        """Пути файлов внутри каталога патчей ref."""
-        return self.tree(host, project, ref, self._patch_dir)
-
-    def tree(self, host, project, ref, path) -> TreeResult:
-        """Пути файлов внутри каталога path на ref, рекурсивно; результат
+        """Пути файлов внутри каталога патчей ref, рекурсивно; результат
         мемоизируется."""
+        path = self._patch_dir
         if not ref:
             return _tree_problem("gitlab: no ref in source url")
         return self._cached((host, project, ref, path), "%s %s@%s:%s" % (host, project, ref, path),
                             lambda: self._fetch(host, project, ref, path))
-
-    def file_text(self, host, project, ref, path) -> FileResult:
-        """Содержимое файла на ref; результат мемоизируется."""
-        return self._cached(("file", host, project, ref, path),
-                            "%s %s@%s:%s" % (host, project, ref, path),
-                            lambda: self._fetch_file(host, project, ref, path))
 
     def _cached(self, key, note, compute):
         with self._lock:
@@ -118,25 +90,6 @@ class GitlabClient:
         with self._lock:
             self._cache[key] = result
         return result
-
-    def _fetch_file(self, host, project, ref, path) -> FileResult:
-        cfg = self._resolve_host(host)[0]
-        if cfg is None:
-            return FileResult(None, "gitlab: unknown host %s" % host)
-        url = "%s/projects/%s/repository/files/%s" % (
-            cfg.api.rstrip("/"), quote(project, safe=""), quote(path, safe=""))
-        headers = {"PRIVATE-TOKEN": self._token} if self._token else {}
-        response = self._http.get(url, headers, {"ref": ref})
-        if isinstance(response, str):
-            return FileResult(None, response)
-        if response.status >= 400:
-            return FileResult(None, "gitlab: %s %s" % (response.status, server_message(response)))
-        body = response.body if isinstance(response.body, dict) else {}
-        try:
-            data = base64.b64decode(body.get("content") or "", validate=False)
-        except (binascii.Error, ValueError) as exc:
-            return FileResult(None, "gitlab: %s не раскодирован: %s" % (path, exc))
-        return FileResult(data.decode("utf-8", errors="replace"), None)
 
     def _fetch(self, host, project, ref, path) -> TreeResult:
         cfg, note = self._resolve_host(host)
@@ -216,8 +169,3 @@ class GitlabClient:
                      project, ref, response.status, server_message(response))
         return _tree_problem("gitlab: %s %s" % (response.status, server_message(response)))
 
-
-def _path(value) -> str:
-    """Кусок пути веб-ссылки: слэши разделяют сегменты и остаются, а пробел
-    или «#» в имени ветки без кодирования ломают ссылку."""
-    return quote(str(value), safe="/")

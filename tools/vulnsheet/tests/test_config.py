@@ -136,11 +136,9 @@ class LoadTest(unittest.TestCase):
         self.assertEqual(cfg.vex_names, {"rust-afterburn": ("afterburn", "afterburn-dracut"),
                                          "rust-coreos-installer": ("coreos-installer",)})
         self.assertEqual(cfg.gitlab, GitlabSettings(
-            hosts={"gitlab.example.com": GitlabHost("https://gitlab.example.com/api/v4/",
-                                                    "https://gitlab.example.com"),
-                   # web по умолчанию — api без /api/…
-                   "mirror.example.com": GitlabHost("https://mirror.example.com/api/v4",
-                                                    "https://mirror.example.com")},
+            # web допускается и не используется
+            hosts={"gitlab.example.com": GitlabHost("https://gitlab.example.com/api/v4/"),
+                   "mirror.example.com": GitlabHost("https://mirror.example.com/api/v4")},
             default_host="gitlab.example.com", token_env="SL_GITLAB_TOKEN",
             patch_dir="patches", jobs=2, retries=5, timeout=7))
 

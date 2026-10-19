@@ -3,11 +3,8 @@ import unittest
 
 from vulnsheet import report
 from vulnsheet.kojiclient import ERROR, NOT_FOUND
-from vulnsheet.merge import ADDED, UNCHANGED, Fresh, Note, build, pairs, refresh, sync
-from vulnsheet.merge import UPDATED as NOTE_UPDATED
+from vulnsheet.merge import Fresh, Note, build, pairs, refresh, sync
 from vulnsheet.ranges import CVEORG, NVD, Interval, RangeNote
-from vulnsheet.patches import (BRANCH_ONLY, FOUND, REMOVED, SRC_CHANGELOG, SRC_PATCH, Item,
-                               PatchNote)
 from vulnsheet.table import Record
 from vulnsheet.tasks import Task
 from vulnsheet.vex import FETCH_ERROR, Verdict
@@ -17,11 +14,11 @@ RHSA = "https://access.redhat.com/errata/RHSA-2026:1234"
 
 # Строки, которые люди уже вели: ручные колонки заполнены, koji и VEX старые.
 OLD = ["Иванов", "В работе", "01.09.2026", "-", "обновить",
-       "TASKID-1", "CVE-2026-0001", "В работу", "01.09.2026", "КМ", "vim",
+       "TASKID-1", "CVE-2026-0001", "В работу", "01.09.2026", "КМ", "vim", "+", "+",
        "vim-1-1.sl9", "-", "-", "Affected", "Low", "3.1", "-",
        LINK + "CVE-2026-0001", "ждём апстрим"]
 BASH = ["Петров", "Готово", "02.09.2026", "03.09.2026", "обновлено",
-        "TASKID-2", "CVE-2026-0002", "Выполнена", "02.09.2026", "КМ", "bash",
+        "TASKID-2", "CVE-2026-0002", "Выполнена", "02.09.2026", "КМ", "bash", "-", "-",
         "bash-4-1.sl9", "-", "-", "Affected", "Moderate", "5.5", "-",
         LINK + "CVE-2026-0002", "-"]
 
@@ -53,14 +50,15 @@ def task(task_id="TASKID-1", cve="CVE-2026-0001", component="vim",
 
 OPENSSL = task("TASKID-3", "CVE-2026-0003", "openssl", "В работу", "23.09.2026", "КМ")
 # OLD, совпавшая с task(): данные задачи из блока, ручные колонки прежние
+# (GitLab и диапазоны в FRESH не проверялись — P и D прежние)
 MATCHED = (OLD[:5] + ["TASKID-1", "CVE-2026-0001", "Отменен", "22.09.2026", "ПП", "vim"]
-           + UPDATED + OLD[18:])
+           + OLD[report.MARKS] + UPDATED + OLD[20:])
 # BASH, чьей задачи нет в блоках
-BASH_MISSING = (BASH[:7] + [report.MISSING] + BASH[8:11]
-                + ["bash-5-1.sl9", "-", "-", "Affected", "Moderate", "5.5", "-"] + BASH[18:])
+BASH_MISSING = (BASH[:7] + [report.MISSING] + BASH[8:13]
+                + ["bash-5-1.sl9", "-", "-", "Affected", "Moderate", "5.5", "-"] + BASH[20:])
 # новая строка из OPENSSL
 NEW = (["-"] * 5 + ["TASKID-3", "CVE-2026-0003", "В работу", "23.09.2026", "КМ", "openssl",
-                    NOT_FOUND, "-", "-", "not listed", "-", "-", "-",
+                    "-", "-", NOT_FOUND, "-", "-", "not listed", "-", "-", "-",
                     LINK + "CVE-2026-0003", "-"])
 
 
@@ -95,7 +93,7 @@ class RefreshTest(unittest.TestCase):
     def test_manual_and_task_columns_stay_koji_and_vex_update(self):
         before = list(OLD)
         out = refresh([Record(2, OLD)], FRESH)
-        self.assertEqual(out.rows, [OLD[:11] + UPDATED + OLD[18:]])
+        self.assertEqual(out.rows, [OLD[:13] + UPDATED + OLD[20:]])
         self.assertEqual((out.kept_koji, out.kept_vex, out.skipped), ((), (), ()))
         self.assertEqual(OLD, before)  # вход не изменён
 
@@ -109,7 +107,7 @@ class RefreshTest(unittest.TestCase):
         fresh = FRESH._replace(
             verdicts={("CVE-2026-0001", "vim"): Verdict(state=FETCH_ERROR)})
         out = refresh([Record(2, OLD)], fresh)
-        self.assertEqual(out.rows[0], OLD[:11] + ["vim-2-1.sl9"] + OLD[12:])
+        self.assertEqual(out.rows[0], OLD[:13] + ["vim-2-1.sl9"] + OLD[14:])
         self.assertEqual(out.kept_vex, (Note(2, "CVE-2026-0001", "vim"),))
 
     def test_answers_overwrite_previous_values(self):
@@ -132,107 +130,113 @@ class RefreshTest(unittest.TestCase):
         self.assertEqual(row[report.LINK], [LINK + "CVE-2026-0001"])
 
 
-URL = "https://gitlab.example.com/g/vim/-/blob/sl9/PATCH/vim-CVE-2026-0001.patch"
-
-
-def in_patch(kind=FOUND):
-    """Найдено в каталоге PATCH: источник → пометка."""
-    return {SRC_PATCH: PatchNote(kind, "sl9", (Item(None, URL),))}
-
-
-VIM_NOTE = in_patch()
-NOTE = "патч найден: " + URL
-# vim закрыт патчем под CVE-2026-0001, openssl — под чужую CVE
+VIM, BASH_PAIR, OPENSSL_PAIR = (("CVE-2026-0001", "vim"), ("CVE-2026-0002", "bash"),
+                                ("CVE-2026-0003", "openssl"))
+# vim закрыт патчем под CVE-2026-0001, bash — под чужую CVE
 PATCHED = FRESH._replace(patched=types.MappingProxyType({
-    "vim": {"CVE-2026-0001": VIM_NOTE},
-    "openssl": {"CVE-2026-9999": in_patch()}}))
-
-
-def with_notes(**notes):
-    """FRESH с пометками: компонент → {CVE: PatchNote}."""
-    return FRESH._replace(patched=types.MappingProxyType(notes))
-
-
-class PatchNoteTest(unittest.TestCase):
-    def test_new_row_gets_the_note_only_for_its_own_cve(self):
-        rows = build([task(), OPENSSL], PATCHED).rows
-        self.assertEqual([r[report.COMMENT_INDEX] for r in rows], [NOTE, "-"])
-
-    def test_each_kind_of_note_is_written(self):
-        removed = in_patch(REMOVED)
-        row = build([task()], with_notes(vim={"CVE-2026-0001": removed})).rows[0]
-        self.assertEqual(row[report.COMMENT_INDEX], report.patch_note(removed))
-
-    def test_refresh_appends_the_note_to_the_old_comment(self):
-        row = refresh([Record(2, OLD)], PATCHED).rows[0]
-        self.assertEqual(row[report.COMMENT_INDEX], "ждём апстрим; " + NOTE)
-
-    def test_refresh_replaces_its_own_old_note(self):
-        cells = changed(OLD, {report.COMMENT_INDEX: "ждём апстрим; патч присутствует"})
-        row = refresh([Record(2, cells)], PATCHED).rows[0]
-        self.assertEqual(row[report.COMMENT_INDEX], "ждём апстрим; " + NOTE)
-
-    def test_refresh_without_patch_keeps_the_old_comment(self):
-        row = refresh([Record(2, OLD)], FRESH).rows[0]
-        self.assertEqual(row[report.COMMENT_INDEX], "ждём апстрим")
-
-    def test_sync_marks_matched_missing_and_new_rows(self):
-        fresh = with_notes(vim={"CVE-2026-0001": VIM_NOTE}, bash={"CVE-2026-0002": VIM_NOTE},
-                           openssl={"CVE-2026-0003": VIM_NOTE})
-        out = sync([Record(2, OLD), Record(3, BASH)], [OPENSSL, task()], fresh)
-        self.assertEqual([r[report.COMMENT_INDEX] for r in out.rows],
-                         ["ждём апстрим; " + NOTE, NOTE, NOTE])
-
-    def test_rows_are_counted_by_kind_of_note(self):
-        fresh = with_notes(vim={"CVE-2026-0001": VIM_NOTE},
-                           bash={"CVE-2026-0002": in_patch(REMOVED)},
-                           openssl={"CVE-2026-0003": dict(in_patch(BRANCH_ONLY), **{
-                               SRC_CHANGELOG: PatchNote(FOUND, "sl9", (Item("1.0-2", URL),))})})
-        out = sync([Record(2, OLD), Record(3, BASH)], [OPENSSL, task(), task()], fresh)
-        self.assertEqual(dict(out.patch_kinds), {
-            (SRC_PATCH, FOUND): 1, (SRC_PATCH, REMOVED): 1, (SRC_PATCH, BRANCH_ONLY): 1,
-            (SRC_CHANGELOG, FOUND): 1})
-
-    def test_fate_of_each_note_is_counted(self):
-        same = changed(OLD, {report.COMMENT_INDEX: "ждём; " + NOTE})
-        stale = changed(OLD, {report.COMMENT_INDEX: "патч присутствует"})
-        out = refresh([Record(2, OLD), Record(3, same), Record(4, stale), Record(5, BASH)],
-                      PATCHED)
-        self.assertEqual(dict(out.note_fates), {ADDED: 1, UNCHANGED: 1, NOTE_UPDATED: 1})
-        out = build([task(), task(), OPENSSL], PATCHED)
-        self.assertEqual(dict(out.note_fates), {ADDED: 2})
-
-    def test_row_with_nothing_to_ask_gets_no_note(self):
-        cells = changed(OLD, {report.CVE_ID: "-"})
-        out = refresh([Record(2, cells)], PATCHED)
-        self.assertEqual(out.rows, [cells])
-        self.assertEqual(dict(out.note_fates), {})
-
-
+    "vim": frozenset({"CVE-2026-0001"}), "bash": frozenset({"CVE-2026-9999"})}))
 INSIDE = RangeNote("2", True, NVD, (Interval(None, False, "3", False),))
-RANGE_TEXT = "версия 2 в уязвимом диапазоне <3 (NVD)"
+OUTSIDE = RangeNote("5", False, CVEORG, (Interval(None, False, "3", False),))
+UNKNOWN = RangeNote("1", None, None, ())
 
 
-class RangeNoteTest(unittest.TestCase):
-    def test_range_fragment_follows_the_patch_fragments(self):
-        fresh = PATCHED._replace(ranges={("CVE-2026-0001", "vim"): INSIDE})
-        row = build([task()], fresh).rows[0]
-        self.assertEqual(row[report.COMMENT_INDEX], NOTE + "; " + RANGE_TEXT)
+def marks(row):
+    return row[report.PATCH], row[report.RANGE]
 
-    def test_range_alone_is_a_note_too(self):
-        out = refresh([Record(2, OLD)], FRESH._replace(ranges={("CVE-2026-0001", "vim"): INSIDE}))
-        self.assertEqual(out.rows[0][report.COMMENT_INDEX], "ждём апстрим; " + RANGE_TEXT)
-        self.assertEqual(dict(out.note_fates), {ADDED: 1})
+
+class PatchMarkTest(unittest.TestCase):
+    def test_new_row_gets_plus_only_for_its_own_cve(self):
+        fresh = PATCHED._replace(nvrs=dict(FRESH.nvrs, openssl="openssl-3-1.sl9"),
+                                 patched=dict(PATCHED.patched, openssl=frozenset()))
+        rows = build([task(), task("TASKID-2", "CVE-2026-0002", "bash"), OPENSSL], fresh).rows
+        self.assertEqual([r[report.PATCH] for r in rows], ["+", "-", "-"])
+
+    def test_refresh_overwrites_the_old_mark(self):
+        rows = refresh([Record(2, BASH), Record(3, OLD)], PATCHED._replace(
+            patched={"vim": frozenset(), "bash": frozenset({"CVE-2026-0002"})})).rows
+        self.assertEqual([r[report.PATCH] for r in rows], ["+", "-"])
+
+    def test_unchecked_component_keeps_the_old_mark_and_is_noted(self):
+        out = refresh([Record(2, OLD)], PATCHED._replace(patched={}))
+        self.assertEqual(out.rows[0][report.PATCH], "+")
+        self.assertEqual(out.kept_patch, (Note(2, "CVE-2026-0001", "vim"),))
+
+    def test_unchecked_component_of_a_new_row_is_minus(self):
+        out = build([task()], PATCHED._replace(patched={}))
+        self.assertEqual(out.rows[0][report.PATCH], "-")
+        self.assertEqual((out.kept_patch, out.patch_unchecked), ((), 1))
+
+    def test_package_not_in_koji_has_no_patch(self):
+        cells = changed(OLD, {report.COMPONENT: "openssl", report.CVE_ID: "CVE-2026-0003"})
+        out = refresh([Record(2, cells)], PATCHED)
+        self.assertEqual(out.rows[0][report.PATCH], "-")
+        self.assertEqual(out.kept_patch, ())
+
+    def test_without_gitlab_old_marks_stay_and_nothing_is_counted(self):
+        out = refresh([Record(2, OLD)], FRESH)
+        self.assertEqual(out.rows[0][report.PATCH], "+")
+        self.assertEqual((out.kept_patch, dict(out.patch_marks)), ((), {}))
+
+    def test_marks_are_counted(self):
+        out = sync([Record(2, OLD), Record(3, BASH)], [task(), OPENSSL],
+                   PATCHED._replace(patched={"vim": frozenset({"CVE-2026-0001"})}))
+        # vim «+», bash не проверен — прежний «-», openssl без билда — «-»
+        self.assertEqual(dict(out.patch_marks), {"+": 1, "-": 2})
+        self.assertEqual((len(out.kept_patch), out.patch_unchecked), (1, 0))
+
+
+class RangeMarkTest(unittest.TestCase):
+    def test_plus_only_outside_the_ranges(self):
+        for note, mark in ((OUTSIDE, "+"), (INSIDE, "-"), (UNKNOWN, "-")):
+            with self.subTest(note=note):
+                row = build([task()], FRESH._replace(ranges={VIM: note})).rows[0]
+                self.assertEqual(row[report.RANGE], mark)
+
+    def test_failed_ranges_keep_the_old_mark(self):
+        out = refresh([Record(2, OLD)], FRESH._replace(ranges={}))
+        self.assertEqual(out.rows[0][report.RANGE], "+")
+        self.assertEqual(out.kept_range, (Note(2, "CVE-2026-0001", "vim"),))
+
+    def test_failed_ranges_of_a_new_row_are_minus(self):
+        out = build([task()], FRESH._replace(ranges={}))
+        self.assertEqual((out.rows[0][report.RANGE], out.range_unchecked), ("-", 1))
+
+    def test_refresh_overwrites_the_old_mark(self):
+        out = refresh([Record(2, OLD)], FRESH._replace(ranges={VIM: INSIDE}))
+        self.assertEqual(out.rows[0][report.RANGE], "-")
+
+    def test_without_ranges_old_marks_stay(self):
+        self.assertEqual(refresh([Record(2, OLD)], FRESH).rows[0][report.RANGE], "+")
 
     def test_ranges_are_counted(self):
-        unknown = RangeNote("1", None, None, ())
-        outside = RangeNote("5", False, CVEORG, (Interval(None, False, "3", False),))
-        fresh = FRESH._replace(ranges={("CVE-2026-0001", "vim"): INSIDE,
-                                       ("CVE-2026-0002", "bash"): outside,
-                                       ("CVE-2026-0003", "openssl"): unknown})
-        out = refresh([Record(2, OLD), Record(3, BASH), Record(4, NEW)], fresh)
-        self.assertEqual(dict(out.range_kinds), {True: 1, False: 1, None: 1})
+        fresh = FRESH._replace(ranges={VIM: INSIDE, BASH_PAIR: OUTSIDE})
+        out = refresh([Record(2, OLD), Record(3, BASH)], fresh)
+        self.assertEqual(dict(out.range_kinds), {True: 1, False: 1})
         self.assertEqual(dict(out.range_sources), {NVD: 1, CVEORG: 1})
+        self.assertEqual(dict(out.range_marks), {"+": 1, "-": 1})
+
+    def test_unknown_range_is_counted_apart(self):
+        fresh = FRESH._replace(nvrs=dict(FRESH.nvrs, openssl="openssl-1-1.sl9"),
+                               ranges={OPENSSL_PAIR: UNKNOWN})
+        out = build([OPENSSL], fresh)
+        self.assertEqual((dict(out.range_kinds), dict(out.range_marks)), ({None: 1}, {"-": 1}))
+
+
+class CommentTest(unittest.TestCase):
+    def test_comment_is_carried_over_untouched(self):
+        fresh = PATCHED._replace(ranges={VIM: OUTSIDE})
+        self.assertEqual(refresh([Record(2, OLD)], fresh).rows[0][report.COMMENT_INDEX],
+                         "ждём апстрим")
+
+    def test_new_row_has_an_empty_comment(self):
+        fresh = PATCHED._replace(ranges={VIM: OUTSIDE})
+        self.assertEqual(build([task()], fresh).rows[0][report.COMMENT_INDEX], "-")
+
+    def test_row_with_nothing_to_ask_is_left_as_is(self):
+        cells = changed(OLD, {report.CVE_ID: "-"})
+        out = refresh([Record(2, cells)], PATCHED._replace(ranges={}))
+        self.assertEqual(out.rows, [cells])
+        self.assertEqual((dict(out.patch_marks), out.kept_range), ({}, ()))
 
 
 class SyncTest(unittest.TestCase):

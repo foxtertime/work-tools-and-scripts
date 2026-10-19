@@ -8,14 +8,11 @@ docs/superpowers/specs/2026-09-24-vulnsheet-update-modes-design.md.
 """
 import types
 from collections import Counter
-from typing import Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
+from typing import AbstractSet, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
 from . import report
-from .kojiclient import ERROR
-from .patches import PatchNote
+from .kojiclient import ERROR, NOT_FOUND
 from .ranges import RangeNote
-
-Found = Mapping[str, PatchNote]  # источник (patches.SRC_*) → что известно о CVE
 from .table import Record
 from .tasks import CVE_RE, Task
 from .vex import FETCH_ERROR, Verdict
@@ -26,22 +23,17 @@ Key = Tuple[str, str, str]   # (Task ID, CVE, компонент)
 
 class Fresh(NamedTuple):
     """Ответы источников: компонент → NVR (или NOT_FOUND/ERROR);
-    (CVE, компонент) → вердикт (FETCH_ERROR — документ не получен);
-    компонент → CVE → источник → что известно о CVE в GitLab (нет — CVE не
-    упомянута нигде, или GitLab не спрашивался, или не прочитан)."""
+    (CVE, компонент) → вердикт (FETCH_ERROR — документ не получен).
+
+    patched: компонент → CVE, чьи патчи лежат в каталоге PATCH билда;
+    компонента нет — его патчи не проверены (GitLab не ответил, koji ERROR).
+    ranges: (CVE, компонент) → где версия билда относительно уязвимых
+    диапазонов; пары нет — диапазоны не получены из-за сбоя. None у обоих —
+    секции в конфиге нет: колонка не проверялась вовсе."""
     nvrs: Mapping[str, str]
     verdicts: Mapping[Pair, Verdict]
-    patched: Mapping[str, Mapping[str, Found]] = types.MappingProxyType({})
-    # (CVE, компонент) → где версия билда относительно уязвимых диапазонов;
-    # нет — не проверялось или источники не ответили
-    ranges: Mapping[Pair, RangeNote] = types.MappingProxyType({})
-
-
-# судьба пометки о патче в строке
-ADDED = "поставлена"
-UPDATED = "обновлена"
-UNCHANGED = "без изменений"
-FATES = (ADDED, UPDATED, UNCHANGED)
+    patched: Optional[Mapping[str, AbstractSet[str]]] = None
+    ranges: Optional[Mapping[Pair, RangeNote]] = None
 
 
 class Note(NamedTuple):
@@ -60,10 +52,15 @@ class Outcome(NamedTuple):
     kept_koji: Tuple[Note, ...] = ()  # koji ERROR — оставлен прежний SL NVR
     kept_vex: Tuple[Note, ...] = ()   # fetch error — оставлены прежние VEX
     skipped: Tuple[Note, ...] = ()    # спрашивать нечего — строка как есть
-    # строк с пометкой о CVE: по (источнику, виду) — (patches.SRC_PATCH,
-    # patches.FOUND)… — и по судьбе пометки (ADDED…)
-    patch_kinds: Mapping[str, int] = types.MappingProxyType({})
-    note_fates: Mapping[str, int] = types.MappingProxyType({})
+    # P и D: строк по значению («+», «-»); строк, где проверить не удалось, —
+    # новых (там «-») и прежних (там оставлено прежнее значение). Считаются,
+    # только если колонка проверялась (секция есть в конфиге)
+    patch_marks: Mapping[str, int] = types.MappingProxyType({})
+    patch_unchecked: int = 0
+    kept_patch: Tuple[Note, ...] = ()
+    range_marks: Mapping[str, int] = types.MappingProxyType({})
+    range_unchecked: int = 0
+    kept_range: Tuple[Note, ...] = ()
     # строк по диапазону: True — в нём, False — вне, None — неизвестен; и по источнику
     range_kinds: Mapping[Optional[bool], int] = types.MappingProxyType({})
     range_sources: Mapping[str, int] = types.MappingProxyType({})
@@ -72,22 +69,23 @@ class Outcome(NamedTuple):
 class _Notes:
     def __init__(self):
         self.kept_koji, self.kept_vex, self.skipped = [], [], []
-        self.patch_kinds, self.note_fates = Counter(), Counter()
+        self.patch_marks, self.range_marks = Counter(), Counter()
+        self.patch_unchecked = self.range_unchecked = 0
+        self.kept_patch, self.kept_range = [], []
         self.range_kinds, self.range_sources = Counter(), Counter()
 
-    def note(self, found: Optional[Found], ranged: Optional[RangeNote], fate: str) -> None:
-        for source, patch in (found or {}).items():
-            self.patch_kinds[(source, patch.kind)] += 1
-        if ranged is not None:
-            self.range_kinds[ranged.inside] += 1
-            if ranged.source:
-                self.range_sources[ranged.source] += 1
-        self.note_fates[fate] += 1
+    def ranged(self, note: Optional[RangeNote]) -> None:
+        if note is not None:
+            self.range_kinds[note.inside] += 1
+            if note.source:
+                self.range_sources[note.source] += 1
 
     def fields(self) -> dict:
         return {"kept_koji": tuple(self.kept_koji), "kept_vex": tuple(self.kept_vex),
-                "skipped": tuple(self.skipped), "patch_kinds": self.patch_kinds,
-                "note_fates": self.note_fates, "range_kinds": self.range_kinds,
+                "skipped": tuple(self.skipped), "patch_marks": self.patch_marks,
+                "patch_unchecked": self.patch_unchecked, "kept_patch": tuple(self.kept_patch),
+                "range_marks": self.range_marks, "range_unchecked": self.range_unchecked,
+                "kept_range": tuple(self.kept_range), "range_kinds": self.range_kinds,
                 "range_sources": self.range_sources}
 
 
@@ -204,23 +202,46 @@ def _as_task(record: Record, pair: Pair) -> Task:
 
 
 def _fresh_row(task: Task, fresh: Fresh, notes: Optional["_Notes"] = None) -> List[str]:
-    """Строка с нуля; notes=None — строку собирают поверх прежней (_updated),
-    и пометку о патче считает уже он."""
+    """Строка с нуля; где P или D проверить не удалось — «-». notes=None —
+    строку собирают поверх прежней (_updated), и признаки считает уже он."""
     pair = _task_pair(task)
-    patch, ranged, text = _comment_note(pair, fresh)
-    if text and notes is not None:
-        notes.note(patch, ranged, ADDED)
-    return report.row(task, fresh.nvrs[pair[1]], fresh.verdicts[pair], text)
+    patch, ranged = _patch_mark(pair, fresh), _range_mark(pair, fresh)
+    if notes is not None:
+        if fresh.patched is not None:
+            notes.patch_marks[patch or report.NO] += 1
+            notes.patch_unchecked += patch is None
+        if fresh.ranges is not None:
+            notes.range_marks[ranged or report.NO] += 1
+            notes.range_unchecked += ranged is None
+            notes.ranged(fresh.ranges.get(pair))
+    return report.row(task, fresh.nvrs[pair[1]], fresh.verdicts[pair],
+                      patch or report.NO, ranged or report.NO)
 
 
-def _comment_note(pair: Pair, fresh: Fresh):
-    """(что найдено в GitLab, что с диапазоном, текст пометки в комментарий
-    или None)."""
-    patch = fresh.patched.get(pair[1], {}).get(pair[0])
-    ranged = fresh.ranges.get(pair)
-    parts = [report.patch_note(patch) if patch else None,
-             report.range_note(ranged) if ranged is not None else None]
-    return patch, ranged, "; ".join(part for part in parts if part) or None
+def _patch_mark(pair: Pair, fresh: Fresh) -> Optional[str]:
+    """P: «+» — патч под CVE в каталоге PATCH билда, «-» — нет или билда
+    нет; None — неизвестно."""
+    if fresh.patched is None:
+        return None
+    if fresh.nvrs[pair[1]] == NOT_FOUND:
+        return report.NO
+    cves = fresh.patched.get(pair[1])
+    if cves is None:
+        return None
+    return report.YES if pair[0] in cves else report.NO
+
+
+def _range_mark(pair: Pair, fresh: Fresh) -> Optional[str]:
+    """D: «+» — версия билда вне уязвимых диапазонов, «-» — в диапазоне,
+    диапазон неизвестен или билда нет; None — неизвестно из-за сбоя."""
+    if fresh.ranges is None:
+        return None
+    if fresh.nvrs[pair[1]] == NOT_FOUND:
+        return report.NO
+    note = fresh.ranges.get(pair)
+    if note is None:
+        return None
+    return report.YES if note.inside is False else report.NO
 
 
 def _note(record: Record) -> Note:
@@ -229,18 +250,24 @@ def _note(record: Record) -> Note:
 
 def _updated(record: Record, task: Task, pair: Pair, fresh: Fresh, notes: _Notes) -> List[str]:
     """Свежая строка по задаче поверх прежней: ручные колонки — из прежней,
-    при сбое источника — его прежние колонки."""
+    при сбое источника — его прежние колонки; P и D, которые проверить не
+    удалось или не проверялись, — прежние."""
     old = record.cells
     cells = _fresh_row(task, fresh)
     cells[report.DEVELOPER] = old[report.DEVELOPER]
-    cells[report.COMMENT_INDEX] = old[report.COMMENT_INDEX]
-    patch, ranged, text = _comment_note(pair, fresh)
-    if text:
-        before = old[report.COMMENT_INDEX]
-        after = report.with_patch_note(before, text)
-        cells[report.COMMENT_INDEX] = after
-        notes.note(patch, ranged, UNCHANGED if after == before
-                   else UPDATED if report.has_patch_note(before) else ADDED)
+    cells[report.COMMENT] = old[report.COMMENT]
+    for index, mark, checked, marks, kept in (
+            (report.PATCH, _patch_mark(pair, fresh), fresh.patched is not None,
+             notes.patch_marks, notes.kept_patch),
+            (report.RANGE, _range_mark(pair, fresh), fresh.ranges is not None,
+             notes.range_marks, notes.kept_range)):
+        cells[index] = mark or old[index]
+        if checked:
+            marks[cells[index]] += 1
+            if mark is None:
+                kept.append(_note(record))
+    if fresh.ranges is not None:
+        notes.ranged(fresh.ranges.get(pair))
     if fresh.nvrs[pair[1]] == ERROR:
         cells[report.KOJI] = old[report.KOJI]
         notes.kept_koji.append(_note(record))

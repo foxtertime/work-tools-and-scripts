@@ -1,12 +1,10 @@
-import base64
 import logging
 import unittest
 
 from vulnsheet.gitlabclient import GitlabClient, GitlabHost
 from tests.fakes import FakeTransport, Response
 
-HOSTS = {"gitlab.example.com": GitlabHost(api="https://gitlab.example.com/api/v4",
-                                          web="https://gitlab.example.com")}
+HOSTS = {"gitlab.example.com": GitlabHost(api="https://gitlab.example.com/api/v4")}
 TREE_URL = "https://gitlab.example.com/api/v4/projects/g%2Fr/repository/tree"
 COMMITS_URL = "https://gitlab.example.com/api/v4/projects/g%2Fr/repository/commits/br"
 # токен в тестах непременно должен быть похож на настоящий: односимвольный
@@ -288,86 +286,6 @@ class ProblemLevelTest(unittest.TestCase):
 
 
 
-
-SPECS_URL_PARAMS = (("path", "SPECS"), ("per_page", "100"), ("recursive", "true"), ("ref", "br"))
-FILE_URL = ("https://gitlab.example.com/api/v4/projects/g%2Fr/repository/files/"
-            "SPECS%2Fnginx.spec")
-
-
-class TreeTest(unittest.TestCase):
-    def test_any_directory_can_be_listed(self):
-        cli, transport = client({(TREE_URL, SPECS_URL_PARAMS): Response(200, [
-            {"type": "blob", "path": "SPECS/nginx.spec"}], {})})
-        result = cli.tree("gitlab.example.com", "g/r", "br", "SPECS")
-        self.assertEqual((result.present, result.paths), (True, ["SPECS/nginx.spec"]))
-        self.assertEqual(transport.requests[0][1]["path"], "SPECS")
-
-    def test_trees_of_different_directories_are_cached_apart(self):
-        cli, transport = client({TREE_URL: TWO_FILES})
-        cli.tree("gitlab.example.com", "g/r", "br", "SPECS")
-        cli.patch_files("gitlab.example.com", "g/r", "br")
-        cli.tree("gitlab.example.com", "g/r", "br", "SPECS")
-        self.assertEqual([r[1]["path"] for r in transport.requests], ["SPECS", "PATCH"])
-
-
-class FileTextTest(unittest.TestCase):
-    def test_content_is_decoded_from_base64(self):
-        body = {"encoding": "base64",
-                "content": base64.b64encode("Name: nginx\n# ёж\n".encode()).decode()}
-        cli, transport = client({FILE_URL: Response(200, body, {})})
-        got = cli.file_text("gitlab.example.com", "g/r", "br", "SPECS/nginx.spec")
-        self.assertEqual((got.text, got.problem), ("Name: nginx\n# ёж\n", None))
-        self.assertEqual(transport.requests[0][1], {"ref": "br"})
-        self.assertEqual(transport.requests[0][2]["PRIVATE-TOKEN"], TOKEN)
-
-    def test_missing_file_is_a_problem(self):
-        cli, _ = client({FILE_URL: Response(404, {"message": "404 File Not Found"}, {})})
-        got = cli.file_text("gitlab.example.com", "g/r", "br", "SPECS/nginx.spec")
-        self.assertIsNone(got.text)
-        self.assertIn("404 File Not Found", got.problem)
-
-    def test_server_error_is_a_problem(self):
-        cli, _ = client({FILE_URL: Response(500, {"message": "boom"}, {})}, retries=1)
-        got = cli.file_text("gitlab.example.com", "g/r", "br", "SPECS/nginx.spec")
-        self.assertIsNone(got.text)
-        self.assertIn("500", got.problem)
-
-    def test_unknown_host_is_a_problem(self):
-        cli, transport = client({})
-        got = cli.file_text("nope.example.com", "g/r", "br", "SPECS/nginx.spec")
-        self.assertIn("unknown host", got.problem)
-        self.assertEqual(transport.requests, [])
-
-    def test_file_is_requested_once(self):
-        body = {"encoding": "base64", "content": base64.b64encode(b"x").decode()}
-        cli, transport = client({FILE_URL: Response(200, body, {})})
-        for _ in range(2):
-            cli.file_text("gitlab.example.com", "g/r", "br", "SPECS/nginx.spec")
-        self.assertEqual(len(transport.requests), 1)
-
-class BlobUrlTest(unittest.TestCase):
-    def test_blob_url(self):
-        cli, _ = client({})
-        self.assertEqual(
-            cli.blob_url("gitlab.example.com", "g/r", "br", "PATCH/a.patch"),
-            "https://gitlab.example.com/g/r/-/blob/br/PATCH/a.patch")
-
-    def test_blob_url_is_percent_encoded(self):
-        # пробел или «#» в имени ветки или файла без кодирования ломают ссылку
-        cli, _ = client({})
-        self.assertEqual(
-            cli.blob_url("gitlab.example.com", "g r/r", "b#1", "PATCH/a b.patch"),
-            "https://gitlab.example.com/g%20r/r/-/blob/b%231/PATCH/a%20b.patch")
-
-    def test_substituted_host_links_to_the_server_that_answered(self):
-        cli, _ = client({}, default_host="gitlab.example.com")
-        self.assertEqual(
-            cli.blob_url("mirror.example.com", "g/r", "br", "PATCH/a.patch"),
-            "https://gitlab.example.com/g/r/-/blob/br/PATCH/a.patch")
-
-    def test_unknown_host_has_no_url(self):
-        cli, _ = client({})
-        self.assertIsNone(cli.blob_url("nope", "g/r", "br", "PATCH/a.patch"))
 
 class LoggingTest(unittest.TestCase):
     """Слушаем весь пакет, а не один модуль: строка запроса приходит из
