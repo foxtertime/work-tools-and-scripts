@@ -120,3 +120,14 @@ test('дубликат — последнее основание закрыть,
   assert.deepStrictEqual(roles.closeReasons(row('X', 'Готов'), true), []);
   assert.deepStrictEqual(roles.closeReasons(row('X', ''), false), []);
 });
+
+test('ключ задачи: пара CVE + компонент без учёта регистра и пробелов; без компонента — null', function () {
+  assert.strictEqual(roles.taskKey(task(' cve-2026-1 ', 'Bash ')), roles.taskKey(task('CVE-2026-1', 'bash')));
+  assert.notStrictEqual(roles.taskKey(task('CVE-2026-1', 'bash')), roles.taskKey(task('CVE-2026-1', 'curl')));
+  assert.strictEqual(roles.taskKey(task('CVE-2026-1', ' ')), null);
+});
+
+test('счётчики шапки: уникальные задачи, CVE и компоненты', function () {
+  var rows = [task('CVE-1', 'bash'), task('cve-1 ', 'BASH'), task('CVE-1', 'curl'), task('CVE-2', ''), task('CVE-2', '')];
+  assert.deepStrictEqual(roles.uniques(rows), { tasks: 4, cves: 2, comps: 2 });
+});

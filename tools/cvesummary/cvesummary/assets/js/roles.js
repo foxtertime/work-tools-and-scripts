@@ -47,6 +47,21 @@
      с самой ранней Start date; если не взял никто — с самой ранней Task
      date. Нет даты или она не разобралась — после датированных; при
      равенстве — первая в таблице. Без компонента строка не группируется. */
+  /* Ключ задачи — пара CVE + компонент; без компонента задачу не с чем
+     сопоставить — null. */
+  const taskKey = r => (norm(r.comp) ? norm(r.cve) + '\u0000' + norm(r.comp) : null);
+
+  /* Счётчики шапки по тому же правилу, что дубликаты: уникальные задачи
+     (строка без компонента — отдельная задача), CVE и компоненты. */
+  function uniques(rows) {
+    const keys = rows.map(taskKey);
+    return {
+      tasks: new Set(keys.filter(k => k !== null)).size + keys.filter(k => k === null).length,
+      cves: new Set(rows.map(r => norm(r.cve)).filter(Boolean)).size,
+      comps: new Set(rows.map(r => norm(r.comp)).filter(Boolean)).size,
+    };
+  }
+
   function duplicates(rows) {
     const day = (r, key) => {
       const v = String(r[key] || '');
@@ -58,8 +73,8 @@
     });
     const groups = new Map();
     rows.forEach((r, i) => {
-      if (!norm(r.comp)) return;
-      const key = norm(r.cve) + '\u0000' + norm(r.comp);
+      const key = taskKey(r);
+      if (key === null) return;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(i);
     });
@@ -94,6 +109,6 @@
   const measureOrder = values => order(values, MEASURES, NO_MEASURE);
 
   return { norm, devOf, isTaken, isDone, isOpen, isWorking, isReview, isPaused,
-    needsAttention, closeReasons, duplicates, sevOf, sevOrder, measureOf, measureOrder,
+    needsAttention, closeReasons, taskKey, uniques, duplicates, sevOf, sevOrder, measureOf, measureOrder,
     SEVERITIES, MEASURES, NO_SEVERITY, NO_MEASURE };
 }));

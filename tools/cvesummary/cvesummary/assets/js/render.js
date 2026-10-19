@@ -205,8 +205,10 @@
     const open = recs.filter(r => r.open), working = recs.filter(r => r.working);
     const ready = open.filter(r => r.reasons.length);
     $('k-total').textContent = N;
-    $('k-cve').textContent = new Set(recs.map(r => r.cve)).size;
-    $('k-comp').textContent = new Set(recs.map(r => r.comp).filter(Boolean)).size;
+    const u = roles.uniques(recs);
+    $('k-uniq').textContent = u.tasks;
+    $('k-cve').textContent = u.cves;
+    $('k-comp').textContent = u.comps;
     set('k-closed', recs.filter(r => r.done).length, '#5CC48A');
     set('k-work', working.length, '#5DB3D6');
     const review = working.filter(r => r.review).length, paused = working.filter(r => r.paused).length;
