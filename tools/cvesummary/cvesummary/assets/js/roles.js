@@ -51,13 +51,13 @@
      сопоставить — null. */
   const taskKey = r => (norm(r.comp) ? norm(r.cve) + '\u0000' + norm(r.comp) : null);
 
-  /* Счётчики шапки по тому же правилу, что дубликаты: уникальные задачи
-     (строка без компонента — отдельная задача), CVE и компоненты. */
+  /* Счётчики шапки по тому же правилу, что дубликаты: уникальные задачи —
+     пары CVE + компонент (строка без компонента — отдельная задача) — и
+     компоненты. */
   function uniques(rows) {
     const keys = rows.map(taskKey);
     return {
       tasks: new Set(keys.filter(k => k !== null)).size + keys.filter(k => k === null).length,
-      cves: new Set(rows.map(r => norm(r.cve)).filter(Boolean)).size,
       comps: new Set(rows.map(r => norm(r.comp)).filter(Boolean)).size,
     };
   }

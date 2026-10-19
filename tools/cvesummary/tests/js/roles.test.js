@@ -127,7 +127,7 @@ test('ключ задачи: пара CVE + компонент без учёта
   assert.strictEqual(roles.taskKey(task('CVE-2026-1', ' ')), null);
 });
 
-test('счётчики шапки: уникальные задачи, CVE и компоненты', function () {
+test('счётчики шапки: уникальные пары CVE + компонент и компоненты', function () {
   var rows = [task('CVE-1', 'bash'), task('cve-1 ', 'BASH'), task('CVE-1', 'curl'), task('CVE-2', ''), task('CVE-2', '')];
-  assert.deepStrictEqual(roles.uniques(rows), { tasks: 4, cves: 2, comps: 2 });
+  assert.deepStrictEqual(roles.uniques(rows), { tasks: 4, comps: 2 });
 });

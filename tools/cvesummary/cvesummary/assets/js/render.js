@@ -206,8 +206,7 @@
     const ready = open.filter(r => r.reasons.length);
     $('k-total').textContent = N;
     const u = roles.uniques(recs);
-    $('k-uniq').textContent = u.tasks;
-    $('k-cve').textContent = u.cves;
+    $('k-cve').textContent = u.tasks;
     $('k-comp').textContent = u.comps;
     set('k-closed', recs.filter(r => r.done).length, '#5CC48A');
     set('k-work', working.length, '#5DB3D6');
