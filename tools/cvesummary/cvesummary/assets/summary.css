@@ -250,49 +250,52 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .foot div{margin-bottom:4px}
 
 .pace-head .sub{margin:4px 0 0}
+#pace{gap:16px}
+/* сверху вниз во всю ширину: параметры, числа темпа, прогноз, график;
+   колонки pace-left и pace-right — display:contents */
+.pace-body{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:stretch}
+.pace-left,.pace-right{display:contents}
+.pace-ctl,.pace-stats,.pace-right .fc-stack,.pace-chart{grid-column:1}
+.pace-ctl{grid-row:1}
+.pace-stats{grid-row:2}
+.pace-right .fc-stack{grid-row:3}
+.pace-chart{grid-row:4}
+
+/* параметры — без подложки, четыре равные колонки ровно над четырьмя
+   числами темпа, с теми же отступами */
+.pace-ctl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:end;min-width:0}
+.pace-ctl > *{padding:0 16px}
+.pace-ctl > :first-child{padding-left:0}
+.pace-ctl > :last-child{padding-right:0}
+.pace-ctl label{display:flex;flex-direction:column;gap:6px;font:600 11.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);min-width:0;white-space:nowrap}
+.pace-ctl input,.pace-ctl select{font:500 14px var(--f-body);letter-spacing:0;text-transform:none;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:0 10px;height:36px;min-width:0;width:100%;box-sizing:border-box}
+.pace-ctl input:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+.pace-ctl input:focus-visible,.pace-ctl select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+@media (max-width:640px){
+  .pace-ctl{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:12px}
+  .pace-ctl > :nth-child(n){padding:0 8px 0 0}
+  .pace-ctl > :nth-child(even){padding:0 0 0 8px}
+  .pace-ctl > .pair,.pace-ctl > .chk{grid-column:1/-1;padding:0}
+}
 /* режим «Когда начать»: вместо периода темпа — разработчики и темп на одного */
 .pace-ctl .plan,#pace.plan .pace-ctl .fact{display:none}
 #pace.plan .pace-ctl .plan{display:flex}
-/* «Когда начать»: разработчики и темп — вдвоём в левом слоте, справа галка;
-   на узкой колонке подписи переносятся, поля стоят по нижнему краю */
-#pace.plan .pace-ctl .pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 8px;align-items:end;min-width:0}
+/* разработчики и темп — вдвоём в одной колонке; на узкой колонке подписи
+   переносятся, поля стоят по нижнему краю */
+#pace.plan .pace-ctl .pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 10px;align-items:end;min-width:0}
 .pace-ctl .pair .cap{overflow:hidden;text-overflow:ellipsis}
 /* подпись галки — не больше двух строк, полностью — в подсказке */
 #plan-ready-l{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-#pace.plan .pace-ctl .chk{flex-direction:row;align-items:center;gap:8px;align-self:end;height:32px;font-size:12.5px;line-height:1.2;color:var(--fg);white-space:normal;cursor:pointer}
-.pace-ctl .chk input{width:auto;height:auto;margin:0;flex:none;accent-color:var(--accent)}
-/* четыре поля в две строки: сканфриз и цель, затем период темпа */
-.pace-ctl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;align-items:end;min-width:0}
-.pace-ctl label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--muted);min-width:0;white-space:nowrap}
-.pace-ctl input,.pace-ctl select{font:500 13.5px var(--f-body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:0 8px;height:32px;min-width:0;width:100%;box-sizing:border-box}
-.pace-ctl input:focus-visible,.pace-ctl select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-/* сетка 2×2: сверху плитки темпа и выбор дат, снизу график и прогноз —
-   верх и низ прогноза вровень с графиком; колонки — display:contents */
-.pace-body{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(280px,1fr);gap:12px 16px;align-items:stretch}
-.pace-left,.pace-right{display:contents}
-.pace-stats{grid-column:1;grid-row:1}
-.pace-chart{grid-column:1;grid-row:2}
-.pace-ctl{grid-column:2;grid-row:1;align-self:end}
-.pace-right .fc-stack{grid-column:2;grid-row:2}
-@media (max-width:900px){.pace-body{grid-template-columns:minmax(0,1fr)}.pace-stats,.pace-chart,.pace-ctl,.pace-right .fc-stack{grid-column:auto;grid-row:auto}}
+#pace.plan .pace-ctl .chk{flex-direction:row;align-items:center;gap:8px;align-self:end;height:32px;font:500 12.5px/1.2 var(--f-body);letter-spacing:0;text-transform:none;color:var(--fg);white-space:normal;cursor:pointer}
+.pace-ctl .chk input{width:auto;height:auto;margin:0;padding:0;flex:none;accent-color:var(--accent)}
+
 /* тексты обоих режимов лежат в одной ячейке, невидимый держит место:
    высота — по большему, и при переключении блок не прыгает */
 .stack{display:grid;min-width:0}
 .stack > *{grid-area:1/1;min-width:0}
 .stack > .off{visibility:hidden}
-/* лишняя высота прогноза уходит в главную строку */
-/* прогноз: строки обоих режимов в одной сетке — n-я строка одного режима
-   в той же ячейке, что n-я другого; высота строки — по большему, текст
-   прижат к верху, поэтому при переключении ничего не сдвигается. Лишняя
-   высота делится между строками поровну */
-.fc.fc-stack{display:grid;grid-template-columns:minmax(0,1fr)}
-.fc-set{display:contents}
-.fc-set.off{visibility:hidden}
-.fc-set > *{grid-column:1}
-.fc-set > :nth-child(1){grid-row:1}
-.fc-set > :nth-child(2){grid-row:2}
-.fc-set > :nth-child(3){grid-row:3}
-.fc-stack .fc-row{align-content:start}
+
+/* числа темпа */
 .pace-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-block:1px solid var(--line);overflow:hidden}
 @media (max-width:640px){.pace-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .ps{padding:10px 16px 12px 0;display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -301,29 +304,49 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .ps .v.bad{color:var(--bad)}.ps .v.ok{color:var(--ok)}
 .ps + .ps{border-left:1px solid var(--line);padding-left:16px}
 @media (max-width:640px){.ps:nth-child(3){border-left:0;padding-left:0}.ps:nth-child(n+3){border-top:1px solid var(--line)}}
-.pace-chart{flex:1;display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:8px;padding:12px 14px 6px;min-height:280px;min-width:0}
-/* переключатель вида — справа сверху, легенда — под графиком */
-.pace-chart-h{display:flex;justify-content:flex-end}
+
+/* прогноз — три колонки: главный итог и два сценария рядом, через
+   вертикальные линии; на узком экране — друг под другом. Строки обоих
+   режимов в одной сетке — n-я строка одного режима в той же ячейке, что
+   n-я другого; текст прижат к верху, при переключении ничего не сдвигается */
+.fc-stack{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr);align-content:start;border-block:1px solid var(--line);overflow:hidden;min-width:0}
+.fc-set{display:contents}
+.fc-set.off{visibility:hidden}
+.fc-set > :nth-child(1){grid-column:1;grid-row:1}
+.fc-set > :nth-child(2){grid-column:2;grid-row:1}
+.fc-set > :nth-child(3){grid-column:3;grid-row:1;padding-right:0}
+.fc-main{padding:14px 20px 14px 0;display:flex;flex-direction:column;gap:4px}
+.fc-main .e{font:600 11.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.fc-main .d{font-family:var(--f-display);font-weight:500;font-size:30px;line-height:1.1;font-variant-numeric:tabular-nums}
+.fc-main .d.bad{color:var(--bad);font-size:26px}
+.fc-main .d.ok{color:var(--ok);font-size:26px}
+.fc-main .s{font-size:13px;color:var(--muted);max-width:44ch}
+.fc-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-content:start;align-items:baseline;padding:14px 20px;border-left:1px solid var(--line)}
+.fc-row .t{font-weight:600;font-size:14px}
+.fc-row .d{font-family:var(--f-display);font-weight:500;font-size:18px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fc-row .d.ok{color:var(--ok)}
+.fc-row .d.bad{color:var(--bad);font-family:var(--f-body);font-size:13.5px;font-weight:600}
+.fc-row .s{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
+@media (max-width:900px){
+  .fc-stack{grid-template-columns:minmax(0,1fr);border-block:0;padding-top:14px}
+  .fc-set > :nth-child(2){grid-column:1;grid-row:2}
+  .fc-set > :nth-child(3){grid-column:1;grid-row:3}
+  .fc-row{border-left:0;border-top:1px solid var(--line);padding-left:0}
+}
+
+/* график — без рамки: подпись слева, переключатель вида справа, легенда
+   под графиком; выходные тише */
+.pace-chart{display:flex;flex-direction:column;gap:8px;min-width:0}
+.pace-chart-h{display:flex;justify-content:space-between;align-items:center}
+.pace-chart-t{font:600 11.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .pace-leg{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .tl .vmark{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 3}
 .tl text.vlab{font-size:11px;paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
 .pace-leg i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:3px;margin-right:6px}
-.fc{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden;min-width:0}
-.fc-main{background:var(--accent-soft);padding:16px 16px 14px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--line)}
-.fc-main .e{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.02em}
-.fc-main .d{font-family:var(--f-display);font-weight:500;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
-.fc-main .d.bad{color:var(--bad);font-size:22px}
-.fc-main .d.ok{color:var(--ok);font-size:22px}
-.fc-main .s{font-size:12.5px;color:var(--muted)}
-.fc-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:baseline}
-.fc-row:last-child{border-bottom:0}
-.fc-row .t{font-weight:600;font-size:13.5px}
-.fc-row .d{font-family:var(--f-display);font-weight:500;font-size:18px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.fc-row .d.ok{color:var(--ok)}
-.fc-row .d.bad{color:var(--bad);font-family:var(--f-body);font-size:13.5px;font-weight:600}
-.fc-row .s{grid-column:1/-1;font-size:12px;color:var(--muted)}
-.fc-row.need{background:var(--bg)}
-.pace-note{font-size:12px;color:var(--muted);margin:0}
+.pace-tl .wkend{opacity:.6}
+/* пояснение — мелко, отдельной строкой под линией */
+#pace > .stack{border-top:1px solid var(--line);padding-top:12px}
+.pace-note{font-size:12px;line-height:1.55;color:var(--muted);margin:0;max-width:110ch}
 #tip{position:fixed;pointer-events:none;background:var(--fg);color:var(--bg);font-size:12.5px;padding:6px 9px;border-radius:6px;z-index:20;max-width:260px}
 .drop-on .hero{outline:3px dashed var(--accent);outline-offset:-10px}
 @media (prefers-reduced-motion:no-preference){.track span,.sevstrip span{transition:flex-grow .4s ease}}
