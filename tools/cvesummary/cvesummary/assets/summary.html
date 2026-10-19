@@ -120,8 +120,11 @@
             <label for="target-date">Хотим закончить к<input type="date" id="target-date"></label>
             <label for="pace-from" class="fact">Темп с<input type="date" id="pace-from"></label>
             <label for="pace-to" class="fact">по<input type="date" id="pace-to"></label>
-            <label for="plan-devs" class="plan">Разработчиков<input type="number" id="plan-devs" min="1" step="1" inputmode="numeric"></label>
-            <label for="plan-rate" class="plan">Задач в день на одного<input type="number" id="plan-rate" min="0.01" step="any" inputmode="decimal"></label>
+            <div class="plan pair">
+              <label for="plan-devs" title="Сколько разработчиков"><span class="cap">Людей</span><input type="number" id="plan-devs" min="1" step="1" inputmode="numeric"></label>
+              <label for="plan-rate" title="Задач в рабочий день на одного разработчика"><span class="cap">На одного</span><input type="number" id="plan-rate" min="0.01" step="any" inputmode="decimal"></label>
+            </div>
+            <label for="plan-ready" class="plan chk"><input type="checkbox" id="plan-ready"><span id="plan-ready-l">Без задач с готовым решением</span></label>
           </div>
           <div class="fc fc-stack"><div class="fc-set" id="forecast"></div><div class="fc-set off" id="forecast-plan" aria-hidden="true"></div></div>
         </div>

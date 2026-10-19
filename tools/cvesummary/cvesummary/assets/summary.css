@@ -213,6 +213,14 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 /* режим «Когда начать»: вместо периода темпа — разработчики и темп на одного */
 .pace-ctl .plan,#pace.plan .pace-ctl .fact{display:none}
 #pace.plan .pace-ctl .plan{display:flex}
+/* «Когда начать»: разработчики и темп — вдвоём в левом слоте, справа галка;
+   на узкой колонке подписи переносятся, поля стоят по нижнему краю */
+#pace.plan .pace-ctl .pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 8px;align-items:end;min-width:0}
+.pace-ctl .pair .cap{overflow:hidden;text-overflow:ellipsis}
+/* подпись галки — не больше двух строк, полностью — в подсказке */
+#plan-ready-l{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#pace.plan .pace-ctl .chk{flex-direction:row;align-items:center;gap:8px;align-self:end;height:32px;font-size:12.5px;line-height:1.2;color:var(--fg);white-space:normal;cursor:pointer}
+.pace-ctl .chk input{width:auto;height:auto;margin:0;flex:none;accent-color:var(--accent)}
 /* четыре поля в две строки: сканфриз и цель, затем период темпа */
 .pace-ctl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;align-items:end;min-width:0}
 .pace-ctl label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--muted);min-width:0;white-space:nowrap}
