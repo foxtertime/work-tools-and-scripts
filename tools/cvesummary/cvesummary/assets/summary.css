@@ -67,7 +67,8 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .hero-groups > div{min-width:0;display:flex;flex-direction:column;gap:4px}
 .hero-groups .cap{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}
 .hero-groups .cap b{font:500 26px/1 var(--f-display);font-variant-numeric:tabular-nums}
-.hero-groups .cap span{font-size:13px;color:var(--hero-muted);overflow:hidden;text-overflow:ellipsis}
+.hero-groups .cap span{font-size:13px;color:var(--hero-muted);overflow:hidden}
+.hero-groups .cap.off{visibility:hidden}
 .hero-groups .br{height:6px;border:1px solid var(--hero-muted);border-bottom:0;border-radius:4px 4px 0 0;opacity:.55}
 .hero-leg{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--hero-muted);margin-top:4px}
 .hero-leg b{color:var(--hero-fg);font-weight:600;font-variant-numeric:tabular-nums}
@@ -85,7 +86,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 
 /* severity strip in hero */
 .sevstrip{display:flex;height:12px;gap:2px;border-radius:4px;overflow:hidden}
-.sevstrip span{display:flex;align-items:center;justify-content:center;height:100%;font:500 11.5px var(--f-mono);white-space:nowrap;overflow:hidden}
+.sevstrip span{display:flex;align-items:center;justify-content:center;flex-basis:0;min-width:0;padding:0 3px;box-sizing:border-box;height:100%;font:500 11.5px var(--f-mono);white-space:nowrap;overflow:hidden}
 /* сверху заголовок, как у остальных карточек, под ним полоса на всю ширину,
    ниже строки разреза */
 .cve-grid{display:flex;flex-direction:column;gap:14px;min-width:0}
@@ -134,7 +135,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .mix-h b{font-family:var(--f-display);font-weight:500;font-size:16px}
 .mix-h span{font-size:13px;color:var(--hero-muted)}
 .mixbar{display:grid;height:34px;gap:2px;border-radius:6px;overflow:hidden}
-.mixbar span{display:flex;align-items:center;justify-content:center;height:100%;min-width:0;font:500 12.5px var(--f-mono);color:#0F1D29;overflow:hidden;white-space:nowrap}
+.mixbar span{display:flex;align-items:center;justify-content:center;height:100%;min-width:0;padding:0 3px;box-sizing:border-box;font:500 12.5px var(--f-mono);color:#0F1D29;overflow:hidden;white-space:nowrap}
 .mixbar span.lt{color:#E8F0F6}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 
@@ -242,7 +243,7 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 /* полоса состава в карточке разработчика — как полосы состава в блоках:
    скруглённая, сегменты через зазор */
 .pbar{display:flex;gap:2px;height:22px;border-radius:6px;overflow:hidden;background:var(--bg)}
-.pbar span{display:flex;align-items:center;justify-content:center;height:100%;font:500 12px var(--f-mono);white-space:nowrap;overflow:hidden}
+.pbar span{display:flex;align-items:center;justify-content:center;flex-basis:0;min-width:0;padding:0 3px;box-sizing:border-box;height:100%;font:500 12px var(--f-mono);white-space:nowrap;overflow:hidden}
 
 .foot{color:var(--muted);font-size:13px;grid-column:1/-1;max-width:80ch}
 .foot dt{font-weight:600;color:var(--fg);display:inline}
