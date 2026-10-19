@@ -131,12 +131,26 @@
     const l = series.length - 1;
     [['ia', 'var(--sev-imp)'], ['oa', 'var(--ok)']].forEach(([k, c]) => F.plot.append(mk('circle', { cx: x(l), cy: F.y(series[l][k]), r: 4, fill: c, stroke: 'var(--panel)', 'stroke-width': 2 })));
     const every = Math.ceil(48 / F.step);
+    /* метка дня под курсором: направляющая и точки на всех линиях; одна на
+       график, переезжает за курсором */
+    const mark = mk('g', { class: 'mark' });
+    mark.append(mk('line', { y1: 8, y2: 208, class: 'guide' }));
+    const dots = [['i', 'var(--sev-imp)', 2.5], ['o', 'var(--ok)', 2.5], ['ia', 'var(--sev-imp)', 4.5], ['oa', 'var(--ok)', 4.5]]
+      .map(([k, c, r]) => { const d = mk('circle', { r, fill: c, stroke: 'var(--panel)', 'stroke-width': 2 }); mark.append(d); return [k, d]; });
+    const show = i => {
+      mark.firstChild.setAttribute('x1', x(i)); mark.firstChild.setAttribute('x2', x(i));
+      dots.forEach(([k, d]) => { d.setAttribute('cx', x(i)); d.setAttribute('cy', F.y(series[i][k])); });
+      mark.classList.add('on');
+    };
+    F.plot.addEventListener('pointerover', e => { const h = e.target.closest('rect[data-i]'); if (h) show(+h.dataset.i); });
+    F.plot.addEventListener('pointerleave', () => mark.classList.remove('on'));
     series.forEach((s, i) => {
       if ((l - i) % every === 0) { const t = mk('text', { x: x(i), y: 230 - 8, 'text-anchor': i === l ? 'end' : i === 0 ? 'start' : 'middle' }); if (i === l) t.setAttribute('x', F.width - 2); if (i === 0) t.setAttribute('x', 2); t.textContent = fmt(s.day).slice(0, 5); F.plot.append(t); }
-      const hit = mk('rect', { x: F.step * i, y: 8, width: F.step, height: 200, fill: 'transparent' });
+      const hit = mk('rect', { x: F.step * i, y: 8, width: F.step, height: 200, fill: 'transparent', 'data-i': i });
       hit.dataset.tip = `${fmt(s.day)}: поступило ${s.i}, закрыто ${s.o} · среднее за 7 дней ${f1(s.ia)} / ${f1(s.oa)}`;
       F.plot.append(hit);
     });
+    F.plot.append(mark);
   }
 
   function weeksOf(items, cats) {
@@ -155,20 +169,23 @@
     const { yMax, yStep } = scale(maxOf(weeks.map(w => w.all), 0));
     const F = frame(host, { count: weeks.length, minStep: WEEK_STEP, height: H2, yMax, yStep, pad: { t: 16, b: 24 } });
     const barW = Math.max(3, Math.min(56, F.step - 6)), GAP = barW >= 10 ? 2 : 1;
+    F.plot.classList.add('hlg');
     weeks.forEach((w, i) => {
+      /* неделя — одна группа: под курсором она яркая, остальные приглушены */
+      const col = mk('g', { class: 'hl' }); F.plot.append(col);
       const x = i * F.step + (F.step - barW) / 2;
       const segs = cats.filter(s => w[s.k] > 0);
       let acc = 0;
       segs.forEach((s, j) => {
         const n = w[s.k], y1 = F.y(acc + n), y0 = F.y(acc); acc += n;
         const h = Math.max(1, y0 - y1 - (j < segs.length - 1 ? GAP : 0));
-        if (j === segs.length - 1 && h > 4) { const r = Math.min(3, barW / 2); F.plot.append(mk('path', { d: `M${x},${y1 + h}V${y1 + r}Q${x},${y1} ${x + r},${y1}H${x + barW - r}Q${x + barW},${y1} ${x + barW},${y1 + r}V${y1 + h}Z`, fill: css(s.c) })); }
-        else F.plot.append(mk('rect', { x, y: y1, width: barW, height: h, fill: css(s.c) }));
+        if (j === segs.length - 1 && h > 4) { const r = Math.min(3, barW / 2); col.append(mk('path', { d: `M${x},${y1 + h}V${y1 + r}Q${x},${y1} ${x + r},${y1}H${x + barW - r}Q${x + barW},${y1} ${x + barW},${y1 + r}V${y1 + h}Z`, fill: css(s.c) })); }
+        else col.append(mk('rect', { x, y: y1, width: barW, height: h, fill: css(s.c) }));
       });
       const hit = mk('rect', { x: i * F.step, y: 16, width: F.step, height: H2 - 40, fill: 'transparent' });
       hit.dataset.tip = `Неделя с ${fmt(w.t)}: ${what} ${w.all}` + (w.all ? ' · ' + cats.filter(s => w[s.k]).map(s => `${s.k} ${w[s.k]}`).join(', ') : '');
-      F.plot.append(hit);
-      if (w.all && F.step >= 26) { const t = mk('text', { x: x + barW / 2, y: F.y(w.all) - 5, 'text-anchor': 'middle' }); t.textContent = w.all; t.style.fill = 'var(--fg)'; F.plot.append(t); }
+      col.append(hit);
+      if (w.all && F.step >= 26) { const t = mk('text', { x: x + barW / 2, y: F.y(w.all) - 5, 'text-anchor': 'middle' }); t.textContent = w.all; t.style.fill = 'var(--fg)'; col.append(t); }
       const every = Math.ceil(44 / F.step);
       if ((weeks.length - 1 - i) % every === 0) { const lab = mk('text', { x: x + barW / 2, y: H2 - 6, 'text-anchor': 'middle' }); lab.textContent = fmt(w.t).slice(0, 5); F.plot.append(lab); }
     });
@@ -179,9 +196,10 @@
     if (n <= 0) { host.replaceChildren(); return; }
     const top = maxOf(dayCounts.values(), 1);
     const F = frame(host, { count: n, minStep: DAY_STEP, height: 40, yMax: top, yStep: top, pad: { t: 2, b: 0 }, axis: false, key: 'spark:' + who });
+    F.plot.classList.add('hlg');
     for (let i = 0; i < n; i++) {
       const d = from + i, v = dayCounts.get(d) || 0, hh = Math.max(v ? 2 : 1, v / top * 36);
-      const r = mk('rect', { x: i * F.step + 0.75, y: 40 - hh, width: Math.max(1, F.step - 1.5), height: hh, fill: v ? css(color) : 'var(--grid)' });
+      const r = mk('rect', { class: 'hl', x: i * F.step + 0.75, y: 40 - hh, width: Math.max(1, F.step - 1.5), height: hh, fill: v ? css(color) : 'var(--grid)' });
       r.dataset.tip = `${who} · ${fmt(d)}: закрыто ${v}`; F.plot.append(r);
     }
   }
