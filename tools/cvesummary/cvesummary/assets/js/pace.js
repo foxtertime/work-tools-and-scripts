@@ -32,31 +32,38 @@
     return lo;
   }
 
-  /* Окно (from, asOf]: последние win дней, но не раньше начала работы since;
-     win = Infinity — весь период от since (нет since — от первой даты в
-     данных). days — календарных дней в окне, work — рабочих. */
-  function rates(rows, asOf, win, since) {
-    let from = asOf - win;
+  /* Окно (from, end]: win дней, кончающихся в end (по умолчанию и не позже
+     даты отчёта), но не раньше начала работы since; win = Infinity — весь
+     период от since (нет since — от первой даты в данных). days —
+     календарных дней в окне, work — рабочих. Открытые — на дату отчёта. */
+  function rates(rows, asOf, win, since, end) {
+    end = end === undefined || end === null ? asOf : Math.min(end, asOf);
+    let from = end - win;
     if (since !== undefined && since !== null) from = Math.max(from, since - 1);
     if (!isFinite(from)) {
-      const seen = rows.flatMap(r => [inDay(r), outDay(r)]).filter(d => d !== null && d <= asOf);
-      from = seen.reduce((a, d) => Math.min(a, d), asOf) - 1;
+      const seen = rows.flatMap(r => [inDay(r), outDay(r)]).filter(d => d !== null && d <= end);
+      from = seen.reduce((a, d) => Math.min(a, d), end) - 1;
     }
-    const within = d => d !== null && d > from && d <= asOf;
-    const days = asOf - from, work = dates.workdays(from + 1, asOf);
+    from = Math.min(from, end - 1);
+    const within = d => d !== null && d > from && d <= end;
+    const days = end - from, work = dates.workdays(from + 1, end);
     const inR = rows.map(inDay).filter(within).length / days;
     const outR = work ? rows.map(outDay).filter(within).length / work : 0;
     return { inR, outR, net: outR * 5 - inR * 7, open: rows.filter(roles.isOpen).length, days, work };
   }
 
-  function simulate(n, inR, outR, asOf, inflowUntil) {
+  /* start — день, с которого закрываем (по умолчанию завтра): до него
+     задачи только поступают */
+  function simulate(n, inR, outR, asOf, inflowUntil, start) {
     if (n <= 0) return 0;
     if (outR <= 0) return null;
     let left = n;
-    for (let d = 1; d <= HORIZON; d++) {
+    /* горизонт — от старта: дальний старт не съедает время на закрытие */
+    const lim = (start === undefined ? 0 : Math.max(0, start - asOf - 1)) + HORIZON;
+    for (let d = 1; d <= lim; d++) {
       const day = asOf + d;
       if (inflowUntil === undefined || (inflowUntil !== null && day < inflowUntil)) left += inR;
-      if (dates.isWeekend(day)) continue;
+      if (dates.isWeekend(day) || (start !== undefined && day < start)) continue;
       left -= outR;
       if (left <= EPS) return d;
     }
@@ -113,19 +120,54 @@
      каждый день до inflowUntil, закрытие по рабочим дням. inc и out —
      прибавка к накопленному на asOf; ряд кончается, когда открытых не
      осталось, или на горизонте. */
-  function project(n, inR, outR, asOf, inflowUntil, horizon) {
+  function project(n, inR, outR, asOf, inflowUntil, horizon, start) {
     const s = [];
     if (n <= 0) return s;
     let left = n, inc = 0, out = 0;
     for (let d = 1; d <= horizon; d++) {
       const day = asOf + d;
       if (inflowUntil === undefined || (inflowUntil !== null && day < inflowUntil)) { left += inR; inc += inR; }
-      if (!dates.isWeekend(day)) { const c = Math.min(outR, left); left -= c; out += c; }
+      if (!dates.isWeekend(day) && (start === undefined || day >= start)) { const c = Math.min(outR, left); left -= c; out += c; }
       if (left <= EPS) { s.push({ day, inc, out: out + left, open: 0 }); return s; }
       s.push({ day, inc, out, open: left });
     }
     return s;
   }
 
-  return { workStart, rates, simulate, need, daily, cumulative, project };
+  /* Режим «Когда начать». latestStart — самый поздний день старта (от
+     завтра до цели), при котором n открытых и новые до сканфриза stop
+     закрываются к target темпом rate в рабочий день; не успеть и со
+     старта завтра — null. Чем позже старт, тем позже конец, поэтому
+     ищем делением пополам: успеваем со старта lo, не успеваем после hi. */
+  function fits(n, inR, rate, asOf, stop, target, start) {
+    // сканфриза нет — новые приходят всё время, как в need()
+    const d = simulate(n, inR, rate, asOf, stop === null ? undefined : stop, start);
+    return d !== null && asOf + d <= target;
+  }
+  function latestStart(n, inR, rate, asOf, stop, target) {
+    const ok = s => fits(n, inR, rate, asOf, stop, target, s);
+    if (target <= asOf || !ok(asOf + 1)) return null;
+    let lo = asOf + 1, hi = target;
+    while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (ok(mid)) lo = mid; else hi = mid - 1; }
+    return lo;
+  }
+  /* Сколько разработчиков по perDev задач в рабочий день нужно, чтобы со
+     старта завтра закончить к target; рабочих дней до цели нет или темп
+     нулевой — null. Верхняя граница — из need() (удваивается, пока не
+     хватает), дальше делением пополам до наименьшего числа: need() считает
+     поступление до самой цели, и при цели в выходной она с запасом. */
+  function devsNeeded(n, inR, perDev, asOf, stop, target) {
+    if (n <= 0) return 0;
+    if (perDev <= 0 || target <= asOf) return null;
+    const nd = need(n, inR, asOf, stop, target);
+    if (!nd.left) return null;
+    const ok = k => fits(n, inR, k * perDev, asOf, stop, target, asOf + 1);
+    if (ok(1)) return 1;
+    let lo = 1, hi = Math.max(2, Math.ceil(nd.perDay / perDev - EPS));
+    while (!ok(hi)) { lo = hi; hi *= 2; }
+    while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (ok(mid)) hi = mid; else lo = mid; }
+    return hi;
+  }
+
+  return { HORIZON, workStart, rates, simulate, need, daily, cumulative, project, latestStart, devsNeeded };
 }));

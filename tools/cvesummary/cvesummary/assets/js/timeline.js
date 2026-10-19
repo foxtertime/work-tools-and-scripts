@@ -24,7 +24,35 @@
     return { left: left > SLOP, right: left + clientWidth < scrollWidth - SLOP };
   }
 
+  /* Шкала значений: самый мелкий шаг из 1, 2, 2,5, 5 × 10ⁿ (2,5 — только
+     с 25), при котором делений не больше шести — и на десятке задач, и на
+     десятках тысяч. */
+  const MAX_TICKS = 6;
+  function scale(top) {
+    top = Math.max(1, top);
+    for (let p = 1; ; p *= 10) {
+      for (const m of p === 1 ? [1, 2, 5] : [1, 2, 2.5, 5]) {
+        const step = m * p;
+        if (Math.ceil(top / step) <= MAX_TICKS) return { yMax: Math.ceil(top / step) * step, yStep: step };
+      }
+    }
+  }
+
+  /* Строки подписей по возрастающим x: подпись встаёт в первую строку, где
+     ближайшая левая подпись дальше gap. */
+  function lanes(xs, gap) {
+    const last = [];
+    return xs.map(x => {
+      let row = 0;
+      while (row < last.length && x - last[row] < gap) row++;
+      last[row] = x;
+      return row;
+    });
+  }
+
   function sync(box) {
+    // график могли перерисовать, а прокрутка старого ещё доходит
+    if (!box.parentElement) return;
     const e = edges(box.scrollLeft, box.scrollWidth, box.clientWidth);
     box.parentElement.classList.toggle('fade-l', e.left);
     box.parentElement.classList.toggle('fade-r', e.right);
@@ -51,5 +79,5 @@
     box.addEventListener('pointercancel', stop);
   }
 
-  return { layout, edges, sync, attach };
+  return { layout, edges, scale, lanes, sync, attach };
 }));

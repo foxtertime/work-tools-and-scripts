@@ -49,9 +49,9 @@
         <div class="grp">
           <div class="grp-h"><b>Риски и темп</b></div>
           <div class="tiles">
-            <div class="kpi hot"><span class="v" id="k-ci">—</span><span class="l">Critical и Important открыты</span></div>
-            <div class="kpi"><span class="v" id="k-att">—</span><span class="l">есть проблема / нужна доработка</span></div>
-            <div class="kpi"><span class="v" id="k-hours">—</span><span class="l" id="k-hours-l">часов на задачу</span></div>
+            <div class="kpi" style="--k:#FF8A6B"><span class="v" id="k-ci">—</span><span class="l" id="k-ci-l">Critical и Important открыты</span></div>
+            <div class="kpi" style="--k:#FF8A6B"><span class="v" id="k-att">—</span><span class="l" id="k-att-l">есть проблема / нужна доработка</span></div>
+            <div class="kpi" style="--k:#8FA6B8"><span class="v" id="k-hours">—</span><span class="l" id="k-hours-l">часов на задачу</span></div>
           </div>
         </div>
       </div>
@@ -83,14 +83,23 @@
 
     <section class="card wide" id="pace">
       <div class="pace-head">
-        <div><h2>Темп и прогноз</h2><p class="sub" id="pace-sub">—</p></div>
+        <div>
+          <div class="card-h">
+            <h2>Темп и прогноз</h2>
+            <div class="seg" role="group" aria-label="Режим" id="pace-mode">
+              <button type="button" data-by="fact" aria-pressed="true">Прогноз</button>
+              <button type="button" data-by="plan" aria-pressed="false">Когда начать</button>
+            </div>
+          </div>
+          <div class="stack"><p class="sub" id="pace-sub">—</p><p class="sub off" id="pace-sub-plan" aria-hidden="true"></p></div>
+        </div>
       </div>
       <div class="pace-body">
         <div class="pace-left">
           <div class="pace-stats">
             <div class="ps"><span class="v" id="p-in">—</span><span class="l">поступает в день</span></div>
-            <div class="ps"><span class="v" id="p-out">—</span><span class="l">закрывается в рабочий день</span></div>
-            <div class="ps"><span class="v" id="p-net">—</span><span class="l" id="p-net-l">баланс за неделю</span></div>
+            <div class="ps"><span class="v" id="p-out">—</span><span class="l" id="p-out-l">закрывается в рабочий день</span></div>
+            <div class="ps"><span class="v" id="p-net">—</span><span class="l" id="p-net-l">баланс за период</span></div>
             <div class="ps"><span class="v" id="p-open">—</span><span class="l">открыто сейчас</span></div>
           </div>
           <div class="pace-chart">
@@ -109,17 +118,20 @@
           <div class="pace-ctl">
             <label for="stop-date">Сканфриз<input type="date" id="stop-date"></label>
             <label for="target-date">Хотим закончить к<input type="date" id="target-date"></label>
-            <label for="pace-win">Темп за<select id="pace-win"><option value="7">7 дней</option><option value="14" selected>14 дней</option><option value="30">30 дней</option><option value="all">Весь период</option></select></label>
+            <label for="pace-from" class="fact">Темп с<input type="date" id="pace-from"></label>
+            <label for="pace-to" class="fact">по<input type="date" id="pace-to"></label>
+            <label for="plan-devs" class="plan">Разработчиков<input type="number" id="plan-devs" min="1" step="1" inputmode="numeric"></label>
+            <label for="plan-rate" class="plan">Задач в день на одного<input type="number" id="plan-rate" min="0.01" step="any" inputmode="decimal"></label>
           </div>
-          <div class="fc" id="forecast"></div>
+          <div class="fc fc-stack"><div class="fc-set" id="forecast"></div><div class="fc-set off" id="forecast-plan" aria-hidden="true"></div></div>
         </div>
       </div>
-      <p class="pace-note" id="pace-note"></p>
+      <div class="stack"><p class="pace-note" id="pace-note"></p><p class="pace-note off" id="pace-note-plan" aria-hidden="true"></p></div>
     </section>
 
     <section class="card wide" id="attention">
-      <h2>Требует внимания<span class="cnt" id="att-n"></span></h2>
-      <p class="sub">Задачи со статусом «Есть проблема» или «Нужна доработка». Отсортировано по CVSS.</p>
+      <h2>Требует внимания</h2>
+      <p class="sub" id="att-sub">Задачи со статусом «Есть проблема» или «Нужна доработка». Отсортировано по CVSS.</p>
       <div class="tablewrap"><table>
         <thead><tr><th>CVE</th><th>Компонент</th><th>Критичность</th><th>CVSS</th><th>RHEL</th><th>Сборка RHEL</th><th>Статус</th><th>Разработчик</th><th>Часов</th></tr></thead>
         <tbody id="att-body"></tbody>
@@ -129,12 +141,13 @@
     <section class="card wide" id="closable">
       <div class="cve-grid">
         <div class="cve-sum">
-          <h2>Можно закрыть<span class="cnt" id="close-n"></span></h2>
-          <p class="sub" style="margin:0">открытые задачи, по которым решение уже есть; одна задача может иметь несколько оснований</p>
+          <h2>Можно закрыть</h2>
+          <p class="sub" style="margin:0" id="close-sub">открытые задачи, по которым решение уже есть; одна задача может иметь несколько оснований</p>
           <div class="sevstrip" id="close-strip"></div>
         </div>
         <div class="cve-rows" id="close-why"></div>
       </div>
+      <hr class="cve-div">
       <div class="tablewrap"><table>
         <thead><tr><th>CVE</th><th>Компонент</th><th>Критичность</th><th>CVSS</th><th>Основание</th><th>Статус</th><th>Разработчик</th><th>Часов</th></tr></thead>
         <tbody id="close-body"></tbody>
@@ -201,7 +214,7 @@
       <p class="sub">Сжигание: задачи со статусом «Готов» по End date, с разбивкой по разработчикам</p>
       <div class="sevlegend comp-leg" id="burnleg"></div>
       <div class="tl" id="burn" role="img" aria-label="Закрытые задачи по неделям и разработчикам"></div>
-      <div class="sevlegend comp-leg" id="statleg"></div>
+      <hr class="cve-div">
       <div class="people" id="people"></div>
     </section>
 
