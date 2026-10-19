@@ -345,7 +345,7 @@
   }
 
   function renderBars() {
-    const comps = count(recs, r => r.comp).slice(0, 12);
+    const comps = count(recs, r => r.comp);
     hbars('components', comps.map(([c, n]) => ({ label: c, n, segs: SEV.map(s => ({ name: s.k, color: s.c, n: recs.filter(r => r.comp === c && r.sevN === s.k).length })) })), comps.length ? comps[0][1] : 1);
     legend('compleg', SEV);
     const rs = count(recs, r => r.rstate || 'не указано');
