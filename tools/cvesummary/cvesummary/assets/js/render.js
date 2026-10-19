@@ -403,7 +403,12 @@
       const r = el('div', 'fc-row need'); r.append(el('div', 't', `Закончить к ${fmt(target)}`));
       const nd = pace.need(R.open, R.inR, AS_OF, stop, target);
       if (nd === null) r.append(el('div', 'd bad', 'дата прошла'), el('div', 's', 'Выберите дату позже ' + fmt(AS_OF) + '.'));
-      else r.append(el('div', 'd', `${f1(nd.perDay)}/день`), el('div', 's', `Нужно закрывать в день. ${days(nd.left)}, с учётом ≈ ${Math.round(nd.incoming)} новых. ${R.outR ? (nd.perDay <= R.outR ? 'Текущего темпа хватает.' : `В ${f1(nd.perDay / R.outR)} раза больше текущего.`) : ''}`));
+      else {
+        const coming = Math.round(nd.incoming);
+        const what = `Столько нужно закрывать в день, чтобы за ${days(nd.left)} закрыть ${tasks(R.open)}` + (coming ? ` и ≈ ${coming} новых.` : '.');
+        const now = !R.outR ? ' Сейчас не закрываем ни одной.' : nd.perDay <= R.outR ? ` Сейчас закрываем ${f1(R.outR)} в день — темпа хватает.` : ` Сейчас закрываем ${f1(R.outR)} в день — нужно в ${f1(nd.perDay / R.outR)} раза быстрее.`;
+        r.append(el('div', 'd', `${f1(nd.perDay)}/день`), el('div', 's', what + now));
+      }
       fc.append(r);
     }
     drawPace(FIRST === null ? [] : pace.daily(recs, FIRST, AS_OF), AS_OF - WIN);
