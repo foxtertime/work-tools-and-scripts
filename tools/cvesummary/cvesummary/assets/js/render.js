@@ -207,8 +207,11 @@
     $('k-cve').textContent = new Set(recs.map(r => r.cve)).size;
     $('k-comp').textContent = new Set(recs.map(r => r.comp).filter(Boolean)).size;
     set('k-closed', recs.filter(r => r.done).length, '#5CC48A');
-    set('k-work', working.length, '#FF8A6B');
-    $('k-work-l').textContent = `в работе, из них на ревью ${working.filter(r => r.review).length}, на паузе ${working.filter(r => r.paused).length}`;
+    set('k-work', working.length, '#5DB3D6');
+    const review = working.filter(r => r.review).length, paused = working.filter(r => r.paused).length;
+    const wl = $('k-work-l');
+    wl.textContent = `в работе · ревью ${review} · пауза ${paused}`;
+    wl.dataset.tip = `в работе ${working.length}, из них на ревью ${review}, на паузе ${paused}`;
     set('k-free', recs.filter(r => !r.taken && !r.done).length, '#8FA6B8');
     $('k-ready').textContent = `${ready.length} задач без повторов · ${pct(ready.length)}% от всех`;
     set('k-fixed', ready.filter(r => r.reasons.includes('fixed')).length, '#BFE3F2');
