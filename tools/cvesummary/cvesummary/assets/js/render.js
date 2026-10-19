@@ -383,6 +383,28 @@
   }
 
   /* ---------- блоки ---------- */
+  /* Любая подпись на полосе или над ней рисуется, только если влезает
+     целиком; не влезшая не рисуется, её значение — в легенде или таблице
+     рядом. Ширина зависит от окна и шрифтов, поэтому всё пересчитывается при
+     каждой отрисовке и когда шрифты догрузятся.
+     Подписи групп над полосой шапки — [подпись, её строка в легенде]: не
+     влезла — прячется (место держит), и появляется строка в легенде.
+     Подписи на сегментах — полный текст в data-label */
+  const clipped = e => [e, ...e.children].some(x => x.scrollWidth > x.clientWidth + 0.5);
+  let heroCaps = [];
+  function fitLabels() {
+    for (const [cap, li] of heroCaps) {
+      cap.classList.remove('off');
+      const off = clipped(cap);
+      cap.classList.toggle('off', off); li.hidden = !off;
+    }
+    for (const s of document.querySelectorAll('#hero-bar > span, main .sevstrip > span, .dev .pbar > span')) {
+      s.textContent = s.dataset.label || '';
+      if (s.textContent && clipped(s)) s.textContent = '';
+    }
+  }
+  if (document.fonts) document.fonts.ready.then(fitLabels);
+
   function renderHead() {
     const N = recs.length, pct = n => (N ? Math.round(n / N * 100) : 0);
     const tds = recs.map(r => r.tdateD).filter(d => d !== null).sort((a, b) => a - b);
@@ -416,7 +438,7 @@
     const G = [
       { g: 'done', n: sum('done'), l: 'готово' },
       { g: 'none', n: sum('none'), l: 'без решения' },
-      { g: 'ready', n: sum('ready'), l: 'можно закрыть сразу' },
+      { g: 'ready', n: sum('ready'), l: 'можно закрыть' },
     ];
     /* скобки и полоса — на одной сетке: колонка на сегмент, ширина — по
        числу задач; скобка занимает колонки сегментов своей группы и встаёт
@@ -425,16 +447,23 @@
     const gb = $('hero-groups'), mb = $('hero-bar'), lg = $('hero-leg');
     gb.replaceChildren(); mb.replaceChildren(); lg.replaceChildren();
     gb.style.gridTemplateColumns = mb.style.gridTemplateColumns = shown.map(x => `minmax(3px,${x.n}fr)`).join(' ');
+    /* подпись группы — над скобкой, если влезает целиком, иначе — в легенде
+       (см. fitLabels); скобка — всегда */
+    heroCaps = [];
     for (const x of G) {
       if (!x.n) continue;
-      const span = shown.filter(p => p.g === x.g).length;
+      const mine = shown.filter(p => p.g === x.g), span = mine.length;
       const d = el('div'); d.style.gridColumn = `span ${span}`; d.dataset.parts = span;
       const cap = el('div', 'cap'); cap.append(el('b', null, String(x.n)), el('span', null, x.l)); cap.dataset.tip = `${x.l}: ${x.n} из ${N} (${pct(x.n)}%)`;
       d.append(cap, el('div', 'br')); gb.append(d);
+      const li = el('span'); li.hidden = true;
+      if (span === 1) { const sw = el('i', 'sw'); sw.style.background = mine[0].c; li.append(sw); }
+      li.append(`${x.l} `, el('b', null, String(x.n))); lg.append(li);
+      heroCaps.push([cap, li]);
     }
     for (const x of shown) {
-      const lab = x.g === 'ready' ? String(x.n) : (pct(x.n) >= 6 ? pct(x.n) + '%' : '');
-      const sp = el('span', null, lab); sp.style.background = x.c; sp.dataset.tip = `${x.k}: ${x.n} из ${N} (${pct(x.n)}%)`; mb.append(sp);
+      const lab = x.g === 'ready' ? String(x.n) : pct(x.n) + '%';
+      const sp = el('span', null, lab); sp.dataset.label = lab; sp.style.background = x.c; sp.dataset.tip = `${x.k}: ${x.n} из ${N} (${pct(x.n)}%)`; mb.append(sp);
       if (x.g === 'ready') { const li = el('span'); const sw = el('i', 'sw'); sw.style.background = x.c; li.append(sw, `${x.l} `, el('b', null, String(x.n))); lg.append(li); }
     }
     const extra = ready.filter(r => r.reasons.length > 1).length;
@@ -452,7 +481,7 @@
     row(st, 'Не взято', 'без разработчика', recs.filter(r => !r.taken && !r.done).length, null, '', '--st-idle');
     const rk = $('hero-risk'); rk.replaceChildren();
     const problem = recs.filter(r => roles.norm(r.status) === 'есть проблема').length, rework = recs.filter(r => roles.norm(r.status) === 'нужна доработка').length;
-    row(rk, 'Есть проблема / нужна доработка', `${problem} + ${rework}`, recs.filter(r => r.attention).length, 'bad');
+    row(rk, 'Есть проблема / нужна доработка', `${problem} + ${rework}`, recs.filter(r => r.attention).length);
     const crit = open.filter(r => r.sevN === 'Critical').length, imp = open.filter(r => r.sevN === 'Important').length;
     row(rk, 'Critical и Important открыты', `${crit} + ${imp}`, crit + imp);
     const s = Hm.summary(closedWithHours(recs));
@@ -970,22 +999,23 @@
   }
 
   /* подписи на полосах состава в блоках (доли) и у разработчиков (числа);
-     цвет подписи зависит от темы — при её смене пересчитывается */
+     влезут ли — решает fitLabels. Цвет подписи зависит от темы — при её
+     смене пересчитывается */
   function labelStrips() {
-    const label = (bar, min, how) => {
-      const parts = [...bar.children], text = strips.labels(parts.map(s => +s.style.flexGrow || 0), min, how);
-      parts.forEach((s, i) => { s.textContent = text[i]; s.style.color = strips.ink(getComputedStyle(s).backgroundColor); });
+    const label = (bar, how) => {
+      const parts = [...bar.children], text = strips.labels(parts.map(s => +s.style.flexGrow || 0), how);
+      parts.forEach((s, i) => { s.dataset.label = text[i]; s.style.color = strips.ink(getComputedStyle(s).backgroundColor); });
     };
-    document.querySelectorAll('main .sevstrip').forEach(bar => label(bar, 0.08, 'pct'));
-    document.querySelectorAll('.dev .pbar').forEach(bar => label(bar, 0.06, 'n'));
+    document.querySelectorAll('main .sevstrip').forEach(bar => label(bar, 'pct'));
+    document.querySelectorAll('.dev .pbar').forEach(bar => label(bar, 'n'));
   }
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', labelStrips);
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { labelStrips(); fitLabels(); });
 
   function render() {
     renderHead(); renderCuts(); renderTables(); renderBars();
     const W = renderPace();
     renderPeople(W); renderAnomalies();
-    labelStrips(); navSync();
+    labelStrips(); fitLabels(); navSync();
   }
 
   /* строка разделов: подсвечен раздел, чей верх ушёл под неё (модуль nav).
