@@ -127,14 +127,39 @@
     return { plot, step, width, y, height: o.height };
   }
 
-  function drawPace(series, from) {
+  /* Отметки дат на графиках темпа — отчёт, сканфриз, цель: пунктирная
+     вертикаль и подпись на подложке цвета фона; близкие отметки разносятся
+     по строкам. Подписи возвращаются — их добавляют поверх линий в конце. */
+  function dateMarks(F, x, first, end, stop, target) {
+    const out = [], rows = [];
+    [[AS_OF, 'отчёт'], [stop, 'сканфриз'], [target, 'цель']]
+      .filter(([d]) => d !== null && d >= first && d <= end).sort((a, b) => a[0] - b[0])
+      .forEach(([d, label], j, all) => {
+        const xi = x(d - first);
+        F.plot.append(mk('line', { x1: xi, x2: xi, y1: 8, y2: 208, class: 'vmark' }));
+        const row = all.slice(0, j).filter(([p]) => xi - x(p - first) < 64).length;
+        const right = xi + 64 > F.width, t = mk('text', { x: right ? xi - 4 : xi + 4, y: 18 + row * 13, class: 'vlab', 'text-anchor': right ? 'end' : 'start' });
+        t.textContent = label; out.push(t); rows.push(row);
+      });
+    return out;
+  }
+  /* будущая дата в пределах двух лет — иначе ось до даты отчёта */
+  const nearDay = d => (d !== null && d > AS_OF && d <= AS_OF + 2 * 365 ? d : AS_OF);
+
+  function drawPace(series, from, stop, target) {
     const host = $('pace-chart');
     if (!series.length) { host.replaceChildren(el('div', 'empty', 'Нет дат в Task date и End date')); return; }
     const { yMax, yStep } = scale(maxOf(series.map(s => Math.max(s.i, s.o)), 0));
-    const F = frame(host, { count: series.length, minStep: DAY_STEP, height: 230, yMax, yStep, pad: { t: 8, b: 22 } });
+    /* ось продолжается до сканфриза или цели — будущее пустое, но отметки видны */
+    const first = series[0].day, end = Math.max(AS_OF, nearDay(stop), nearDay(target)), n = end - first + 1;
+    const fresh = !POS.has(host.id);
+    const F = frame(host, { count: n, minStep: DAY_STEP, height: 230, yMax, yStep, pad: { t: 8, b: 22 } });
     const x = i => F.step * i + F.step / 2;
+    /* при первом показе дата отчёта — на 70 % ширины, а не пустое будущее */
+    if (fresh) { const box = F.plot.parentNode; box.scrollLeft = Math.max(0, x(series.length - 1) - box.clientWidth * 0.7); timeline.sync(box); }
     const fi = series.findIndex(s => s.day > from);
-    if (fi >= 0) F.plot.prepend(mk('rect', { x: F.step * fi, y: 8, width: F.width - F.step * fi, height: 230 - 30, fill: 'var(--accent-soft)' }));
+    if (fi >= 0) F.plot.prepend(mk('rect', { x: F.step * fi, y: 8, width: F.step * (series.length - fi), height: 230 - 30, fill: 'var(--accent-soft)' }));
+    const labels = dateMarks(F, x, first, end, stop, target);
     const path = (k, c, w, op) => F.plot.append(mk('path', { d: series.map((s, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + F.y(s[k]).toFixed(1)).join(''), fill: 'none', stroke: c, 'stroke-width': w, 'stroke-opacity': op, 'stroke-linejoin': 'round' }));
     path('i', 'var(--sev-imp)', 1, 0.4); path('o', 'var(--ok)', 1, 0.4);
     path('ia', 'var(--sev-imp)', 2.5, 1); path('oa', 'var(--ok)', 2.5, 1);
@@ -154,12 +179,18 @@
     };
     F.plot.addEventListener('pointerover', e => { const h = e.target.closest('rect[data-i]'); if (h) show(+h.dataset.i); });
     F.plot.addEventListener('pointerleave', () => mark.classList.remove('on'));
+    for (let i = 0; i < n; i++) {
+      if ((l - i) % every !== 0) continue;
+      const edge = x(i) + 18 > F.width, start = x(i) < 18;
+      const t = mk('text', { x: edge ? F.width - 2 : start ? 2 : x(i), y: 230 - 8, 'text-anchor': edge ? 'end' : start ? 'start' : 'middle' });
+      t.textContent = fmt(first + i).slice(0, 5); F.plot.append(t);
+    }
     series.forEach((s, i) => {
-      if ((l - i) % every === 0) { const t = mk('text', { x: x(i), y: 230 - 8, 'text-anchor': i === l ? 'end' : i === 0 ? 'start' : 'middle' }); if (i === l) t.setAttribute('x', F.width - 2); if (i === 0) t.setAttribute('x', 2); t.textContent = fmt(s.day).slice(0, 5); F.plot.append(t); }
       const hit = mk('rect', { x: F.step * i, y: 8, width: F.step, height: 200, fill: 'transparent', 'data-i': i });
       hit.dataset.tip = `${fmt(s.day)}: поступило ${s.i}, закрыто ${s.o} · среднее за 7 дней ${f1(s.ia)} / ${f1(s.oa)}`;
       F.plot.append(hit);
     });
+    labels.forEach(t => F.plot.append(t));
     F.plot.append(mark);
   }
 
@@ -177,7 +208,7 @@
     if (paceBy === 'flow') {
       paceLegend([['поступило', 'background:var(--sev-imp)'], ['закрыто', 'background:var(--ok)'], ['по дням', 'background:var(--muted);height:1px;opacity:.6'], ['среднее за 7 дней', 'background:var(--muted)'], ['окно расчёта', 'background:var(--accent-soft);height:10px;vertical-align:-1px']]);
       $('pace-chart').setAttribute('aria-label', 'Поступление и закрытие задач по дням');
-      drawPace(FIRST === null ? [] : pace.daily(recs, FIRST, AS_OF), AS_OF - paceCtx.WIN);
+      drawPace(FIRST === null ? [] : pace.daily(recs, FIRST, AS_OF), AS_OF - paceCtx.WIN, paceCtx.stop, paceCtx.target);
     } else drawBurn(paceBy);
   }
 
@@ -198,8 +229,7 @@
     const proj = pace.project(last.open, R.inR, R.outR, AS_OF, stop !== null ? stop : undefined, BURN_HORIZON);
     if (proj.length && proj[proj.length - 1].open > 0) legendFor('прогноз — не сходится, показан год');
     /* цель и сканфриз — в пределах двух лет, чтобы идеальная линия дошла до нуля */
-    const near = d => (d !== null && d > AS_OF && d <= AS_OF + 2 * BURN_HORIZON ? d : AS_OF);
-    const end = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, near(stop), near(target));
+    const end = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, nearDay(stop), nearDay(target));
     const n = end - FIRST + 1, ai = AS_OF - FIRST;
     const at = i => (i <= ai ? hist[i] : proj[i - ai - 1]
       ? { inc: last.inc + proj[i - ai - 1].inc, out: last.out + proj[i - ai - 1].out, open: proj[i - ai - 1].open } : null);
@@ -214,18 +244,7 @@
     /* при первом показе вида дата отчёта — на 70 % ширины, а не хвост прогноза */
     if (first) { const box = F.plot.parentNode; box.scrollLeft = Math.max(0, x(ai) - box.clientWidth * 0.7); timeline.sync(box); }
     const line = (pts, color, w, dash) => { if (pts.length < 2) return; F.plot.append(mk('path', Object.assign({ d: pts.map(([i, v], j) => (j ? 'L' : 'M') + x(i).toFixed(1) + ',' + F.y(v).toFixed(1)).join(''), fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linejoin': 'round' }, dash ? { 'stroke-dasharray': dash } : {}))); };
-    /* отметки дат: подписи — на подложке цвета фона; близкие отметки
-       разносятся по строкам, чтобы подписи не налезали друг на друга */
-    const labels = [];
-    [[AS_OF, 'отчёт'], [stop, 'сканфриз'], [target, 'цель']]
-      .filter(([d]) => d !== null && d >= FIRST && d <= end).sort((a, b) => a[0] - b[0])
-      .forEach(([d, label], j, all) => {
-        const xi = x(d - FIRST);
-        F.plot.append(mk('line', { x1: xi, x2: xi, y1: 8, y2: 208, class: 'vmark' }));
-        const row = all.slice(0, j).filter(([p]) => xi - x(p - FIRST) < 64).length;
-        const right = xi + 64 > F.width, t = mk('text', { x: right ? xi - 4 : xi + 4, y: 18 + row * 13, class: 'vlab', 'text-anchor': right ? 'end' : 'start' });
-        t.textContent = label; labels.push({ row, t });
-      });
+    const labels = dateMarks(F, x, FIRST, end, stop, target);
     const color = { inc: 'var(--sev-imp)', out: 'var(--ok)', open: 'var(--accent)' };
     const factPts = k => hist.map((v, i) => [i, v[k]]);
     const projPts = k => { const p = [[ai, last[k]]]; for (let i = ai + 1; i < n; i++) { const v = at(i); if (v) p.push([i, v[k]]); } return p; };
@@ -259,7 +278,7 @@
         : `${when}: открыто ${R0(v.open)}` + (id !== null && day > AS_OF ? ` · по идеальной линии ${R0(id)}` : '');
       F.plot.append(hit);
     }
-    labels.forEach(l => F.plot.append(l.t));
+    labels.forEach(t => F.plot.append(t));
     F.plot.append(mark);
   }
 
