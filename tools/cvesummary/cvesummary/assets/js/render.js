@@ -301,7 +301,7 @@
     }
 
     const ready = recs.filter(r => r.open && r.reasons.length);
-    const why = [['Фикс в RHEL (RHEL state = Fixed)', 'fixed', '--ok'], ['Устранено ранее (P = +)', 'patch', '--accent'], ['Версия вне уязвимого диапазона (D = +)', 'range', '--sev-none'], ['Дубликат (та же пара CVE + компонент)', 'dup', '--c1']];
+    const why = [['Фикс в RHEL (RHEL state = Fixed)', 'fixed', '--ok'], ['Устранено ранее (P = +)', 'patch', '--accent'], ['Версия вне уязвимого диапазона (D = +)', 'range', '--sev-none'], ['Дубликат (та же пара CVE + компонент)', 'dup', '--c7']];
     hbars('close-why', why.map(([l, k, c]) => { const n = ready.filter(r => r.reasons.includes(k)).length; return { label: l, n, segs: [{ n, color: c, name: '' }] }; })
       .concat([{ label: 'Всего задач', n: ready.length, segs: [{ n: ready.length, color: '--fg', name: '' }] }]), Math.max(1, ready.length));
     $('close-n').textContent = ready.length;
