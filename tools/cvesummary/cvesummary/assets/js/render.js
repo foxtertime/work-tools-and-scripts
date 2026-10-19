@@ -7,7 +7,7 @@
   const AS_OF = dates.dayOf(DATA.meta.as_of);
   const NS = 'http://www.w3.org/2000/svg';
   const AXIS_W = 32;
-  const DAY_STEP = 10, WEEK_STEP = 28, SPARK_STEP = 6;
+  const DAY_STEP = 10, WEEK_STEP = 28;
 
   const $ = id => document.getElementById(id);
   const css = t => `var(${t})`;
@@ -78,11 +78,17 @@
     return { yMax: Math.ceil(top / step) * step, yStep: step };
   }
   /* Рамка: слева ось значений (стоит на месте), справа листаемая область
-     со столбиками. Если пользователь отлистал график назад, перерисовка
-     оставляет его там же; иначе график стоит в конце — на последних днях. */
+     со столбиками. Положение запоминается как расстояние до правого края
+     (0 — график в конце, на последних днях) по прокрутке самого
+     пользователя; при перерисовке оно восстанавливается. Прокрутка,
+     которую делает браузер при изменении размера окна, не считается:
+     пока идёт resize, расстояние не обновляется. */
+  const POS = new Map();
+  let resizing = false;
   function frame(host, o) {
-    const old = host.querySelector('.tl-scroll');
-    const keep = old && timeline.edges(old.scrollLeft, old.scrollWidth, old.clientWidth).right ? old.scrollLeft : null;
+    const key = o.key || host.id;
+    const st = POS.get(key) || { dist: 0 };
+    POS.set(key, st);
     host.replaceChildren();
     const axisW = o.axis === false ? 0 : AXIS_W;
     const box = el('div', 'tl-scroll');
@@ -101,7 +107,8 @@
       }
     }
     timeline.attach(box);
-    box.scrollLeft = keep === null ? box.scrollWidth : keep;
+    box.addEventListener('scroll', () => { if (!resizing) st.dist = Math.max(0, box.scrollWidth - box.clientWidth - box.scrollLeft); }, { passive: true });
+    box.scrollLeft = Math.max(0, box.scrollWidth - box.clientWidth - st.dist);
     timeline.sync(box);
     return { plot, step, width, y, height: o.height };
   }
@@ -121,7 +128,7 @@
     [['ia', 'var(--sev-imp)'], ['oa', 'var(--ok)']].forEach(([k, c]) => F.plot.append(mk('circle', { cx: x(l), cy: F.y(series[l][k]), r: 4, fill: c, stroke: 'var(--panel)', 'stroke-width': 2 })));
     const every = Math.ceil(48 / F.step);
     series.forEach((s, i) => {
-      if ((l - i) % every === 0) { const t = mk('text', { x: x(i), y: 230 - 8, 'text-anchor': 'middle' }); t.textContent = fmt(s.day).slice(0, 5); F.plot.append(t); }
+      if ((l - i) % every === 0) { const t = mk('text', { x: x(i), y: 230 - 8, 'text-anchor': i === l ? 'end' : i === 0 ? 'start' : 'middle' }); if (i === l) t.setAttribute('x', F.width - 2); if (i === 0) t.setAttribute('x', 2); t.textContent = fmt(s.day).slice(0, 5); F.plot.append(t); }
       const hit = mk('rect', { x: F.step * i, y: 8, width: F.step, height: 200, fill: 'transparent' });
       hit.dataset.tip = `${fmt(s.day)}: поступило ${s.i}, закрыто ${s.o} · среднее за 7 дней ${f1(s.ia)} / ${f1(s.oa)}`;
       F.plot.append(hit);
@@ -167,7 +174,7 @@
     const n = AS_OF - from + 1;
     if (n <= 0) { host.replaceChildren(); return; }
     const top = Math.max(1, ...dayCounts.values());
-    const F = frame(host, { count: n, minStep: SPARK_STEP, height: 40, yMax: top, yStep: top, pad: { t: 2, b: 0 }, axis: false });
+    const F = frame(host, { count: n, minStep: DAY_STEP, height: 40, yMax: top, yStep: top, pad: { t: 2, b: 0 }, axis: false, key: 'spark:' + who });
     for (let i = 0; i < n; i++) {
       const d = from + i, v = dayCounts.get(d) || 0, hh = Math.max(v ? 2 : 1, v / top * 36);
       const r = mk('rect', { x: i * F.step + 0.75, y: 40 - hh, width: Math.max(1, F.step - 1.5), height: hh, fill: v ? css(color) : 'var(--grid)' });
@@ -341,7 +348,7 @@
       const inflowDays = Math.max(0, stop - AS_OF - 1);
       row(`Сканфриз ${fmt(stop)}`, pace.simulate(R.open, R.inR, R.outR, AS_OF, stop), `До этой даты придёт ещё ≈ ${Math.round(R.inR * inflowDays)}, дальше только закрываем по ${f1(R.outR)} в день.`, true, R.open);
     } else {
-      row('При текущем темпе, без сканфриза', R.net > 0 ? pace.simulate(R.open, R.inR, R.outR, AS_OF) : null, R.net > 0 ? 'Новые задачи продолжают поступать в том же темпе.' : 'Приходит не меньше, чем закрывается. Укажите дату сканфриза.', true, R.open);
+      row('При текущем темпе, без сканфриза', R.open === 0 || R.net > 0 ? pace.simulate(R.open, R.inR, R.outR, AS_OF) : null, R.open === 0 ? 'Открытых задач нет.' : R.net > 0 ? 'Новые задачи продолжают поступать в том же темпе.' : 'Приходит не меньше, чем закрывается. Укажите дату сканфриза.', true, R.open);
     }
     row('Если новые перестанут поступать сегодня', pace.simulate(R.open, R.inR, R.outR, AS_OF, null), `По ${f1(R.outR)} в день.`, false, R.open);
     row('Без задач с готовым решением', pace.simulate(R.open - ready, R.inR, R.outR, AS_OF, stop === null ? null : stop), `Если ${ready} задач с готовым решением закрыть сразу.` + (stop === null ? ' Без новых.' : ` С новыми до ${fmt(stop)}.`), false, R.open - ready);
@@ -453,9 +460,10 @@
   }
 
   ['stop-date', 'target-date', 'pace-win'].forEach(id => $(id).addEventListener('change', () => {
-    LS.set('cve.stopDate', $('stop-date').value); LS.set('cve.targetDate', $('target-date').value);
+    LS.set('cve.stopDate', $('stop-date').value); LS.set('cve.targetDate', $('target-date').value); LS.set('cve.paceWin', $('pace-win').value);
     render();
   }));
-  let rT; addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(render, 150); });
+  let rT; addEventListener('resize', () => { resizing = true; clearTimeout(rT); rT = setTimeout(() => { render(); setTimeout(() => { resizing = false; }, 100); }, 150); });
+  { const w = LS.get('cve.paceWin'); if (['7', '14', '30'].includes(w)) $('pace-win').value = w; }
   render();
 }());

@@ -95,6 +95,9 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .cve-leg{display:flex;gap:12px;font-size:11.5px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:500;justify-content:flex-start}
 .cve-leg i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px;background:var(--sev-imp)}
 .cve-leg i.lite{opacity:.3}
+.cve-rows .h.bar{min-width:0;white-space:normal}
+.cve-leg{flex-wrap:wrap;gap:2px 12px}
+.cve-leg span{white-space:nowrap}
 @media (max-width:560px){.cve-rows{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px 10px}.cve-rows .k{grid-column:1/-1;margin-top:8px}.cve-rows .b{grid-column:1/-1}.cve-rows .h.l,.cve-rows .h.bar{display:none}.cve-rows .h{white-space:normal;font-size:10px;letter-spacing:.02em}}
 .sevlegend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--hero-muted);margin-top:10px}
 .comp-leg{color:var(--muted);margin-top:-4px}
