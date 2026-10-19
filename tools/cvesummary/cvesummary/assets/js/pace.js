@@ -1,8 +1,9 @@
 /* Темп и прогноз в задачах — как в образце сводки. Поступление — по Task
    date, закрытие — «Готов» по End date; всё, что позже даты отчёта, ещё
-   не случилось. Темп — на рабочий день (Пн–Пт, без праздников): задачи за
-   календарное окно делятся на число рабочих дней в нём; прогноз шагает
-   только по рабочим дням. */
+   не случилось. Новые задачи приходят каждый день, и в выходные: темп
+   поступления — на календарный день. Закрывают по рабочим дням (Пн–Пт,
+   без праздников): темп закрытия — на рабочий день. Баланс — за неделю:
+   5 рабочих дней закрытия против 7 календарных поступления. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(require('./dates.js'), require('./roles.js'));
@@ -23,10 +24,9 @@
     const from = asOf - win;
     const within = d => d !== null && d > from && d <= asOf;
     const work = dates.workdays(from + 1, asOf);
-    const per = n => (work ? n / work : 0);
-    const inR = per(rows.map(inDay).filter(within).length);
-    const outR = per(rows.map(outDay).filter(within).length);
-    return { inR, outR, net: outR - inR, open: rows.filter(roles.isOpen).length };
+    const inR = rows.map(inDay).filter(within).length / win;
+    const outR = work ? rows.map(outDay).filter(within).length / work : 0;
+    return { inR, outR, net: outR * 5 - inR * 7, open: rows.filter(roles.isOpen).length };
   }
 
   function simulate(n, inR, outR, asOf, inflowUntil) {
@@ -35,8 +35,8 @@
     let left = n;
     for (let d = 1; d <= HORIZON; d++) {
       const day = asOf + d;
-      if (dates.isWeekend(day)) continue;
       if (inflowUntil === undefined || (inflowUntil !== null && day < inflowUntil)) left += inR;
+      if (dates.isWeekend(day)) continue;
       left -= outR;
       if (left <= EPS) return d;
     }
@@ -44,11 +44,11 @@
   }
 
   /* left — рабочих дней после даты отчёта до цели включительно; нет ни
-     одного — perDay бесконечен */
+     одного — perDay бесконечен. Новые — по календарным дням до сканфриза */
   function need(n, inR, asOf, stop, target) {
     if (target <= asOf) return null;
     const left = dates.workdays(asOf + 1, target);
-    const inflowDays = stop === null ? left : dates.workdays(asOf + 1, Math.min(target, stop - 1));
+    const inflowDays = stop === null ? target - asOf : Math.max(0, Math.min(target, stop - 1) - asOf);
     const incoming = inR * inflowDays;
     return { perDay: left ? (n + incoming) / left : Infinity, left, incoming };
   }

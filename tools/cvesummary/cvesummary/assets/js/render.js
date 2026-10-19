@@ -364,11 +364,11 @@
     const ready = recs.filter(r => r.open && r.reasons.length).length;
     const fc = $('forecast'); fc.replaceChildren();
     $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп за ${days(WIN)}, из них ${wdays(dates.workdays(AS_OF - WIN + 1, AS_OF))}`;
-    $('pace-note').textContent = `Точка отсчёта — дата отчёта (${fmt(AS_OF)}). Закрытой считается задача со статусом «Готов» и заполненным End date. Темп и сроки — в рабочих днях, Пн–Пт; праздники не учитываются. До сканфриза новые задачи прибывают в текущем темпе.`;
+    $('pace-note').textContent = `Точка отсчёта — дата отчёта (${fmt(AS_OF)}). Закрытой считается задача со статусом «Готов» и заполненным End date. Новые задачи прибывают каждый календарный день, до сканфриза — в текущем темпе; закрываем по рабочим дням, Пн–Пт, праздники не учитываются. Баланс — за неделю.`;
     $('p-in').textContent = f1(R.inR);
     $('p-out').textContent = f1(R.outR);
     const pn = $('p-net'); pn.textContent = (R.net > 0 ? '−' : R.net < 0 ? '+' : '') + f1(Math.abs(R.net)); pn.className = 'v ' + (R.net > 0 ? 'ok' : R.net < 0 ? 'bad' : '');
-    $('p-net-l').textContent = R.net > 0 ? 'бэклог сокращается в рабочий день' : R.net < 0 ? 'бэклог растёт в рабочий день' : 'бэклог не меняется';
+    $('p-net-l').textContent = R.net > 0 ? 'бэклог сокращается за неделю' : R.net < 0 ? 'бэклог растёт за неделю' : 'бэклог не меняется';
     $('p-open').textContent = R.open;
     const sd = $('stop-date'), td = $('target-date');
     if (!sd.value) sd.value = LS.get('cve.stopDate');
@@ -386,7 +386,7 @@
       fc.append(r);
     };
     if (stop !== null) {
-      const coming = Math.round(R.inR * dates.workdays(AS_OF + 1, stop - 1));
+      const coming = Math.round(R.inR * Math.max(0, stop - AS_OF - 1));
       row(`Сканфриз ${fmt(stop)}`, pace.simulate(R.open, R.inR, R.outR, AS_OF, stop),
         R.open === 0 ? 'Открытых задач нет.' + (coming ? ` До сканфриза придёт ещё ≈ ${coming}.` : '')
           : `До этой даты придёт ещё ≈ ${coming}, дальше только закрываем по ${f1(R.outR)} в рабочий день.`, true, R.open);
