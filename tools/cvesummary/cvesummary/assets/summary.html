@@ -84,11 +84,6 @@
     <section class="card wide" id="pace">
       <div class="pace-head">
         <div><h2>Темп и прогноз</h2><p class="sub" id="pace-sub">—</p></div>
-        <div class="pace-ctl">
-          <label for="stop-date">Сканфриз<input type="date" id="stop-date"></label>
-          <label for="target-date">Хотим закончить к<input type="date" id="target-date"></label>
-          <label for="pace-win">Темп за<select id="pace-win"><option value="7">7 дней</option><option value="14" selected>14 дней</option><option value="30">30 дней</option></select></label>
-        </div>
       </div>
       <div class="pace-body">
         <div class="pace-left">
@@ -103,7 +98,14 @@
             <div class="tl pace-tl" id="pace-chart" role="img" aria-label="Поступление и закрытие задач по дням"></div>
           </div>
         </div>
-        <div class="fc" id="forecast"></div>
+        <div class="pace-right">
+          <div class="pace-ctl">
+            <label for="stop-date">Сканфриз<input type="date" id="stop-date"></label>
+            <label for="target-date">Хотим закончить к<input type="date" id="target-date"></label>
+            <label for="pace-win">Темп за<select id="pace-win"><option value="7">7 дней</option><option value="14" selected>14 дней</option><option value="30">30 дней</option></select></label>
+          </div>
+          <div class="fc" id="forecast"></div>
+        </div>
       </div>
       <p class="pace-note" id="pace-note"></p>
     </section>
