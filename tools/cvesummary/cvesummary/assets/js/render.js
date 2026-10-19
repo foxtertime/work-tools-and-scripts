@@ -7,7 +7,9 @@
   const AS_OF = dates.dayOf(DATA.meta.as_of);
   const NS = 'http://www.w3.org/2000/svg';
   const AXIS_W = 32;
-  const DAY_STEP = 10, WEEK_STEP = 28;
+  /* минимальный шаг по оси: меньше — график листается по горизонтали.
+     Столбики по дням шире линий, чтобы их было видно и в них попадал курсор */
+  const DAY_STEP = 10, WEEK_STEP = 28, BAR_DAY_STEP = 18;
 
   const $ = id => document.getElementById(id);
   const css = t => `var(${t})`;
@@ -304,8 +306,8 @@
     if (!weeks.length) { host.replaceChildren(el('div', 'empty', 'Нет данных с датами')); return; }
     const H2 = 230;
     const { yMax, yStep } = scale(maxOf(weeks.map(w => w.all), 0));
-    const F = frame(host, { count: weeks.length, minStep: byDay ? DAY_STEP : WEEK_STEP, height: H2, yMax, yStep, pad: { t: 16, b: 24 }, key: host.id + (byDay ? ':d' : ':w') });
-    const barW = Math.max(3, Math.min(56, F.step - (byDay ? 2 : 6))), GAP = barW >= 10 ? 2 : 1;
+    const F = frame(host, { count: weeks.length, minStep: byDay ? BAR_DAY_STEP : WEEK_STEP, height: H2, yMax, yStep, pad: { t: 16, b: 24 }, key: host.id + (byDay ? ':d' : ':w') });
+    const barW = Math.max(3, Math.min(56, F.step - (byDay ? 4 : 6))), GAP = barW >= 10 ? 2 : 1;
     F.plot.classList.add('hlg');
     weeks.forEach((w, i) => {
       /* неделя — одна группа: под курсором она яркая, остальные приглушены */
