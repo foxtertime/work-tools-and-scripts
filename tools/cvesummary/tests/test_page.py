@@ -41,6 +41,15 @@ class RenderTest(unittest.TestCase):
     def test_css_is_inlined(self):
         self.assertIn(".tl-scroll{", self.html)
 
+    def test_section_bar_links_every_section(self):
+        nav = re.search(r'<nav class="secnav".*?</nav>', self.html, re.S)
+        self.assertIsNotNone(nav)
+        links = re.findall(r'<a href="#([^"]+)"', nav.group(0))
+        main = self.html[self.html.index("<main"):]
+        sections = re.findall(r'<section\b[^>]*\bid="([^"]+)"', main)
+        self.assertEqual(links, sections)
+        self.assertEqual(len(re.findall(r'<section\b', main)), len(sections))
+
 
 class AssetsTest(unittest.TestCase):
     def test_assets_cannot_break_out_of_their_tags(self):

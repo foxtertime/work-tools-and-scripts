@@ -59,6 +59,23 @@
   </div>
 </header>
 
+<nav class="secnav" id="secnav" aria-label="Разделы">
+  <div class="wrap">
+    <div class="links">
+      <a href="#cve">CVE</a>
+      <a href="#pace">Темп и прогноз</a>
+      <a href="#attention">Требует внимания <span class="badge bad" id="nb-att">—</span></a>
+      <a href="#closable">Можно закрыть <span class="badge ok" id="nb-close">—</span></a>
+      <a href="#comps">Компоненты</a>
+      <a href="#rhel-state">Состояние в RHEL</a>
+      <a href="#task-status">Статус задач</a>
+      <a href="#inflow">Поступление</a>
+      <a href="#devs">Разработчики</a>
+      <a href="#anomalies">Аномалии <span class="badge" id="nb-anom">—</span></a>
+    </div>
+  </div>
+</nav>
+
 <main>
   <div class="wrap">
     <section class="card wide" id="cve">
@@ -157,7 +174,7 @@
       </table></div>
     </section>
 
-    <section class="card wide">
+    <section class="card wide" id="comps">
       <div class="card-h">
         <h2>Компоненты</h2>
         <div class="seg" role="group" aria-label="Разбивка" id="comp-by">
@@ -171,7 +188,7 @@
       <div class="hbars" id="components"></div>
     </section>
 
-    <section class="card wide states">
+    <section class="card wide states" id="rhel-state">
       <div class="cve-grid">
         <div class="cve-sum">
           <h2>Состояние в RHEL</h2>
@@ -182,7 +199,7 @@
       </div>
     </section>
 
-    <section class="card wide states">
+    <section class="card wide states" id="task-status">
       <div class="cve-grid">
         <div class="cve-sum">
           <h2>Статус задач</h2>
@@ -193,7 +210,7 @@
       </div>
     </section>
 
-    <section class="card wide">
+    <section class="card wide" id="inflow">
       <div class="card-h">
         <h2>Поступление задач</h2>
         <div class="seg" role="group" aria-label="Шаг" id="inflow-by">
@@ -206,7 +223,7 @@
       <div class="tl" id="weeks" role="img" aria-label="Количество задач по неделям"></div>
     </section>
 
-    <section class="card wide">
+    <section class="card wide" id="devs">
       <div class="card-h">
         <h2>Разработчики</h2>
         <div class="seg" role="group" aria-label="Шаг" id="burn-by">
