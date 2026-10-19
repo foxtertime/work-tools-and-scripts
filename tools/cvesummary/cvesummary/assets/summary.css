@@ -160,6 +160,14 @@ table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:760px}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 th{font-weight:600;color:var(--muted);font-size:12px;letter-spacing:.04em;text-transform:uppercase;background:var(--bg);position:sticky;top:0}
 tr:last-child td{border-bottom:0}
+/* «Можно закрыть»: пилюли оснований переносятся, а не тянут строку вширь;
+   отступы ячеек поуже — таблица помещается без горизонтальной прокрутки */
+table.tight th,table.tight td{padding:9px 8px}
+table.tight th:first-child,table.tight td:first-child{padding-left:12px}
+td.why{white-space:normal;min-width:150px}
+td.why .pill{margin:2px 6px 2px 0;white-space:nowrap}
+/* на узкой ширине переносятся и статус с разработчиком */
+@media (max-width:1000px){table.tight td:nth-child(6),table.tight td:nth-child(7){white-space:normal}}
 td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underline}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
 .pill i{width:8px;height:8px;border-radius:2px;display:inline-block}

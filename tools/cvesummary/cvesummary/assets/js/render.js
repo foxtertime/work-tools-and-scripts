@@ -386,7 +386,10 @@
     const N = recs.length, pct = n => (N ? Math.round(n / N * 100) : 0);
     const tds = recs.map(r => r.tdateD).filter(d => d !== null).sort((a, b) => a - b);
     $('period').textContent = tds.length ? `Период задач: ${fmt(tds[0])} — ${fmt(tds[tds.length - 1])}` : 'Период: даты задач не найдены';
-    $('asof').textContent = `на ${fmt(AS_OF)}`;
+    /* релиз из --release — перед датой отчёта и во вкладке браузера */
+    const release = DATA.meta.release;
+    $('asof').textContent = (release ? `${release} ` : '') + `на ${fmt(AS_OF)}`;
+    if (release) document.title = `Сводка по CVE — ${release}`;
     const where = DATA.meta.sheet == null ? 'CSV' : `лист «${DATA.meta.sheet}»`;
     $('src').textContent = `${DATA.meta.source}, ${where}, шапка в строке ${DATA.meta.header_row}; cvesummary ${DATA.meta.version}`;
     /* set — из образца: значение плитки, мини-полоса и процент */
@@ -567,7 +570,7 @@
     const cb = $('close-body'); cb.replaceChildren();
     if (!ready.length) emptyRow(cb, 8, 'Открытых задач с готовым решением нет');
     for (const r of [...ready].sort(byCvss)) {
-      const c5 = el('td'); c5.style.display = 'flex'; c5.style.gap = '6px';
+      const c5 = el('td', 'why');
       /* у пилюли основания — квадратик его цвета, как в полосе выше */
       const why = (k, p) => { const i = el('i'); i.style.background = css(CLOSE_WHY.find(w => w[1] === k)[2]); p.prepend(i); c5.append(p); return p; };
       if (r.reasons.includes('fixed')) why('fixed', link(r.rhsa, r.rhnvr || 'RHEL Fixed', 'pill') || el('span', 'pill', r.rhnvr || 'RHEL Fixed'));
