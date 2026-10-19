@@ -386,7 +386,10 @@
     const N = recs.length, pct = n => (N ? Math.round(n / N * 100) : 0);
     const tds = recs.map(r => r.tdateD).filter(d => d !== null).sort((a, b) => a - b);
     $('period').textContent = tds.length ? `Период задач: ${fmt(tds[0])} — ${fmt(tds[tds.length - 1])}` : 'Период: даты задач не найдены';
-    $('asof').textContent = `на ${fmt(AS_OF)}`;
+    /* релиз из --release — перед датой отчёта и во вкладке браузера */
+    const release = DATA.meta.release;
+    $('asof').textContent = (release ? `${release} ` : '') + `на ${fmt(AS_OF)}`;
+    if (release) document.title = `Сводка по CVE — ${release}`;
     const where = DATA.meta.sheet == null ? 'CSV' : `лист «${DATA.meta.sheet}»`;
     $('src').textContent = `${DATA.meta.source}, ${where}, шапка в строке ${DATA.meta.header_row}; cvesummary ${DATA.meta.version}`;
     /* set — из образца: значение плитки, мини-полоса и процент */

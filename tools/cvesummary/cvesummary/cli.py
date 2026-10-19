@@ -41,6 +41,8 @@ def _parse(argv):
                         help="куда записать страницу; по умолчанию рядом с таблицей, <имя>.html")
     parser.add_argument("--as-of", type=_date,
                         help="дата отчёта ГГГГ-ММ-ДД; по умолчанию сегодня")
+    parser.add_argument("--release",
+                        help="название релиза для шапки страницы, например 9.3.2")
     parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
     return parser.parse_args(argv)
 
@@ -57,6 +59,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = _parse(argv)
     _setup_logging()
     as_of = args.as_of or _today()
+    release = (args.release or "").strip() or None
     output = args.output or default_output(args.table)
     if (os.path.exists(output) and os.path.exists(args.table)
             and os.path.samefile(output, args.table)):
@@ -92,11 +95,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not found.rows:
         logger.warning("строк с CVE ID нет — страница будет пустой")
     logger.info("дата отчёта: %s", as_of.isoformat())
+    if release:
+        logger.info("релиз: %s", release)
 
     data = {
         "meta": {"version": __version__, "source": os.path.basename(args.table),
                  "sheet": None if is_csv else sheet.name, "header_row": found.header_row,
-                 "as_of": as_of.isoformat(), "skipped": found.skipped,
+                 "as_of": as_of.isoformat(), "release": release, "skipped": found.skipped,
                  "missing": found.missing, "bad_dates": found.bad_dates},
         "rows": found.rows,
     }
