@@ -210,7 +210,6 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .foot div{margin-bottom:4px}
 
 .pace-head .sub{margin:4px 0 0}
-.pace-title{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
 /* режим «Когда начать»: вместо периода темпа — разработчики и темп на одного */
 .pace-ctl .plan,#pace.plan .pace-ctl .fact{display:none}
 #pace.plan .pace-ctl .plan{display:flex}
