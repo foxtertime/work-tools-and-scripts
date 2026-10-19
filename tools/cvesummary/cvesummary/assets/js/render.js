@@ -705,12 +705,24 @@
       const bar = el('div', 'pbar');
       [[cnt.g, '--ok', 'Готово'], [cnt.w, '--accent', 'В работе'], [cnt.rv, '--c7', 'Ожидает ревью'], [cnt.u, '--warn', 'На паузе'], [cnt.p, '--bad', 'Проблемы']].forEach(([k, c, s]) => { if (!k) return; const sp = el('span'); sp.style.flexGrow = k; sp.style.background = css(c); sp.dataset.tip = `${d} · ${s}: ${k}`; bar.append(sp); });
       c1.append(bar);
-      const load = el('div', 'load');
-      const li = (lab, v, cls) => { const s = el('span'); s.append(lab + ' ', el('b', cls || null, String(v))); load.append(s); };
-      li('готово', cnt.g); li('в работе', cnt.w); li('ревью', cnt.rv); li('пауза', cnt.u); li('проблемы', cnt.p, cnt.p ? 'bad' : null);
+      /* статусы — сеткой: метка цвета сегмента полосы, название, число;
+         нулевые бледнее, но на месте, чтобы карточки не прыгали */
+      const stat = el('div', 'dstat');
+      [[cnt.g, '--ok', 'готово'], [cnt.w, '--accent', 'в работе'], [cnt.rv, '--c7', 'ревью'], [cnt.u, '--warn', 'пауза'], [cnt.p, '--bad', 'проблемы']].forEach(([k, c, s]) => {
+        const row = el('div', k ? null : 'zero'); const i = el('i'); i.style.background = css(c);
+        row.append(i, el('span', null, s), el('b', null, String(k))); stat.append(row);
+      });
+      c1.append(stat);
+      /* нагрузка: сколько задач висит на нём в дату отчёта и сколько часов
+         его дня достаётся каждой (8 ч делятся поровну) */
       const hanging = (H.load.get(d) && H.load.get(d).get(AS_OF)) || 0;
-      li('висит сейчас', hanging ? `${hanging}, по ${f1(Hm.HOURS_PER_DAY / hanging)} ч` : '0');
-      c1.append(load);
+      const now = el('div', 'dnow');
+      if (hanging) {
+        now.append('Сейчас на нём ', el('b', null, String(hanging)), ` ${plural(hanging, 'задача', 'задачи', 'задач')} — по `, el('b', null, f1(Hm.HOURS_PER_DAY / hanging) + ' ч'), ' в день на каждую');
+        const today = mine.filter(r => r.done && r.endD === AS_OF).length;
+        now.dataset.tip = `Его ${Hm.HOURS_PER_DAY}-часовой рабочий день делится поровну между задачами, которые на нём висят` + (today ? `; включая закрытые сегодня: ${today}` : '');
+      } else now.append('Сейчас задач на нём нет');
+      c1.append(now);
       card.append(c1);
 
       const c3 = el('div'); c3.append(el('div', 'cap', `Сделано по принятой мере · ${done.length}`));
