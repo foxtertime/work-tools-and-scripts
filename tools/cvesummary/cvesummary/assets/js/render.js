@@ -497,15 +497,11 @@
       c1.append(load);
       card.append(c1);
 
-      const c2 = el('div'); c2.append(el('div', 'cap', `Сделано по критичности · ${done.length}`));
-      const kv2 = el('div', 'kv'); const maxS = Math.max(1, ...SEV.map(s => done.filter(r => r.sevN === s.k).length));
-      SEV.forEach(s => { const v = done.filter(r => r.sevN === s.k).length; if (v) kvRow(kv2, s.k, v, maxS, s.c, `${d} · ${s.k}: ${v}`); });
-      c2.append(kv2);
       const c3 = el('div'); c3.append(el('div', 'cap', `Сделано по принятой мере · ${done.length}`));
       const kv3 = el('div', 'kv'); const maxM = maxOf(measKeys.map(k => done.filter(r => r.measureN === k).length), 1);
       measKeys.forEach(k => { const v = done.filter(r => r.measureN === k).length; if (v) kvRow(kv3, k, v, maxM, col, `${d} · ${k}: ${v}`); });
       c3.append(kv3);
-      card.append(c2, c3);
+      card.append(c3);
 
       const c4 = el('div'); c4.append(el('div', 'cap', 'Скорость'));
       const s = Hm.summary(closedWithHours(mine));
