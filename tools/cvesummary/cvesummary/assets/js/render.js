@@ -167,15 +167,23 @@
     for (const [d, k] of items) { if (d === null || d > AS_OF || d < lo) continue; const w = weeks[(dates.mondayOf(d) - lo) / 7]; w.all++; w[k]++; }
     return weeks;
   }
+  /* то же по дням: от первой даты до даты отчёта */
+  function daysOf(items, cats) {
+    if (FIRST === null) return [];
+    const out = [];
+    for (let t = FIRST; t <= AS_OF; t++) { const w = { t, all: 0 }; cats.forEach(c => { w[c.k] = 0; }); out.push(w); }
+    for (const [d, k] of items) { if (d === null || d > AS_OF || d < FIRST) continue; const w = out[d - FIRST]; w.all++; w[k]++; }
+    return out;
+  }
 
   /* stackChart — из образца, перенесён на frame(): x считается от F.step,
-     высота — F.y, ось — в рамке */
-  function stackChart(host, weeks, cats, what) {
+     высота — F.y, ось — в рамке. byDay — столбик на день, а не на неделю */
+  function stackChart(host, weeks, cats, what, byDay) {
     if (!weeks.length) { host.replaceChildren(el('div', 'empty', 'Нет данных с датами')); return; }
     const H2 = 230;
     const { yMax, yStep } = scale(maxOf(weeks.map(w => w.all), 0));
-    const F = frame(host, { count: weeks.length, minStep: WEEK_STEP, height: H2, yMax, yStep, pad: { t: 16, b: 24 } });
-    const barW = Math.max(3, Math.min(56, F.step - 6)), GAP = barW >= 10 ? 2 : 1;
+    const F = frame(host, { count: weeks.length, minStep: byDay ? DAY_STEP : WEEK_STEP, height: H2, yMax, yStep, pad: { t: 16, b: 24 }, key: host.id + (byDay ? ':d' : ':w') });
+    const barW = Math.max(3, Math.min(56, F.step - (byDay ? 2 : 6))), GAP = barW >= 10 ? 2 : 1;
     F.plot.classList.add('hlg');
     weeks.forEach((w, i) => {
       /* неделя — одна группа: под курсором она яркая, остальные приглушены */
@@ -190,11 +198,16 @@
         else col.append(mk('rect', { x, y: y1, width: barW, height: h, fill: css(s.c) }));
       });
       const hit = mk('rect', { x: i * F.step, y: 16, width: F.step, height: H2 - 40, fill: 'transparent' });
-      hit.dataset.tip = `Неделя с ${fmt(w.t)}: ${what} ${w.all}` + (w.all ? ' · ' + cats.filter(s => w[s.k]).map(s => `${s.k} ${w[s.k]}`).join(', ') : '');
+      hit.dataset.tip = `${byDay ? fmt(w.t) : 'Неделя с ' + fmt(w.t)}: ${what} ${w.all}` + (w.all ? ' · ' + cats.filter(s => w[s.k]).map(s => `${s.k} ${w[s.k]}`).join(', ') : '');
       col.append(hit);
       if (w.all && F.step >= 26) { const t = mk('text', { x: x + barW / 2, y: F.y(w.all) - 5, 'text-anchor': 'middle' }); t.textContent = w.all; t.style.fill = 'var(--fg)'; col.append(t); }
       const every = Math.ceil(44 / F.step);
-      if ((weeks.length - 1 - i) % every === 0) { const lab = mk('text', { x: x + barW / 2, y: H2 - 6, 'text-anchor': 'middle' }); lab.textContent = fmt(w.t).slice(0, 5); F.plot.append(lab); }
+      if ((weeks.length - 1 - i) % every === 0) {
+        /* подпись у правого края не должна обрезаться — прижимаем её к краю */
+        const cx = x + barW / 2, edge = cx + 18 > F.width;
+        const lab = mk('text', { x: edge ? F.width - 2 : cx, y: H2 - 6, 'text-anchor': edge ? 'end' : 'middle' });
+        lab.textContent = fmt(w.t).slice(0, 5); F.plot.append(lab);
+      }
     });
   }
 
@@ -370,6 +383,17 @@
     for (const b of $('comp-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === compBy));
   }
 
+  /* поступление: по неделям или по дням; выбор помнится */
+  let inflowBy = LS.get('cve.inflowBy') === 'day' ? 'day' : 'week';
+  function renderInflow() {
+    const byDay = inflowBy === 'day', items = recs.map(r => [r.tdateD, r.sevN]);
+    $('weeks-h').textContent = `Поступление задач по ${byDay ? 'дням' : 'неделям'}`;
+    $('weeks-sub').textContent = `По полю Task date${byDay ? '' : ', неделя начинается в понедельник'}, с разбивкой по критичности (RHEL severity)`;
+    $('weeks').setAttribute('aria-label', `Количество задач по ${byDay ? 'дням' : 'неделям'}`);
+    for (const b of $('inflow-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === inflowBy));
+    stackChart($('weeks'), byDay ? daysOf(items, SEV) : weeksOf(items, SEV), SEV, 'поступило', byDay);
+  }
+
   function renderBars() {
     renderComps();
     const rs = count(recs, verdictOf);
@@ -378,7 +402,7 @@
     const dsColor = k => roleColor(recs.find(r => statusKey(r) === k));
     hbars('devstatus', ds.map(([k, n]) => ({ label: k, n, segs: [{ n, color: dsColor(k), name: '' }] })), ds.length ? ds[0][1] : 1);
     legend('weekleg', SEV);
-    stackChart($('weeks'), weeksOf(recs.map(r => [r.tdateD, r.sevN]), SEV), SEV, 'поступило');
+    renderInflow();
   }
 
   function renderPace() {
@@ -546,6 +570,11 @@
     const b = e.target.closest('button[data-by]');
     if (!b || b.dataset.by === compBy) return;
     compBy = b.dataset.by; LS.set('cve.compBy', compBy); renderComps();
+  });
+  $('inflow-by').addEventListener('click', e => {
+    const b = e.target.closest('button[data-by]');
+    if (!b || b.dataset.by === inflowBy) return;
+    inflowBy = b.dataset.by; LS.set('cve.inflowBy', inflowBy); renderInflow();
   });
   let rT; addEventListener('resize', () => { resizing = true; clearTimeout(rT); rT = setTimeout(() => { render(); setTimeout(() => { resizing = false; }, 100); }, 150); });
   { const w = LS.get('cve.paceWin'); if (['7', '14', '30'].includes(w)) $('pace-win').value = w; }

@@ -156,8 +156,14 @@
     </section>
 
     <section class="card wide">
-      <h2>Поступление задач по неделям</h2>
-      <p class="sub">По полю Task date, неделя начинается в понедельник, с разбивкой по критичности (RHEL severity)</p>
+      <div class="card-h">
+        <h2 id="weeks-h">Поступление задач по неделям</h2>
+        <div class="seg" role="group" aria-label="Шаг" id="inflow-by">
+          <button type="button" data-by="day" aria-pressed="false">По дням</button>
+          <button type="button" data-by="week" aria-pressed="true">По неделям</button>
+        </div>
+      </div>
+      <p class="sub" id="weeks-sub">По полю Task date, неделя начинается в понедельник, с разбивкой по критичности (RHEL severity)</p>
       <div class="sevlegend comp-leg" id="weekleg"></div>
       <div class="tl" id="weeks" role="img" aria-label="Количество задач по неделям"></div>
     </section>
