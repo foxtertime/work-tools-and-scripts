@@ -292,21 +292,22 @@
     return weeks;
   }
   /* то же по дням: от первой даты до даты отчёта */
-  function daysOf(items, cats) {
-    if (FIRST === null) return [];
+  function daysOf(items, cats, from = FIRST) {
+    if (from === null) return [];
     const out = [];
-    for (let t = FIRST; t <= AS_OF; t++) { const w = { t, all: 0 }; cats.forEach(c => { w[c.k] = 0; }); out.push(w); }
-    for (const [d, k] of items) { if (d === null || d > AS_OF || d < FIRST) continue; const w = out[d - FIRST]; w.all++; w[k]++; }
+    for (let t = from; t <= AS_OF; t++) { const w = { t, all: 0 }; cats.forEach(c => { w[c.k] = 0; }); out.push(w); }
+    for (const [d, k] of items) { if (d === null || d > AS_OF || d < from) continue; const w = out[d - from]; w.all++; w[k]++; }
     return out;
   }
 
   /* stackChart — из образца, перенесён на frame(): x считается от F.step,
-     высота — F.y, ось — в рамке. byDay — столбик на день, а не на неделю */
-  function stackChart(host, weeks, cats, what, byDay) {
+     высота — F.y, ось — в рамке. byDay — столбик на день, а не на неделю;
+     opts.height и opts.key — для маленьких графиков в карточках */
+  function stackChart(host, weeks, cats, what, byDay, opts = {}) {
     if (!weeks.length) { host.replaceChildren(el('div', 'empty', 'Нет данных с датами')); return; }
-    const H2 = 230;
+    const H2 = opts.height || 230;
     const { yMax, yStep } = scale(maxOf(weeks.map(w => w.all), 0));
-    const F = frame(host, { count: weeks.length, minStep: byDay ? BAR_DAY_STEP : WEEK_STEP, height: H2, yMax, yStep, pad: { t: 16, b: 24 }, key: host.id + (byDay ? ':d' : ':w') });
+    const F = frame(host, { count: weeks.length, minStep: byDay ? BAR_DAY_STEP : WEEK_STEP, height: H2, yMax, yStep, pad: { t: 16, b: 24 }, key: opts.key || host.id + (byDay ? ':d' : ':w') });
     const barW = Math.max(3, Math.min(56, F.step - (byDay ? 4 : 6))), GAP = barW >= 10 ? 2 : 1;
     F.plot.classList.add('hlg');
     weeks.forEach((w, i) => {
@@ -335,19 +336,6 @@
         lab.textContent = fmt(w.t).slice(0, 5); F.plot.append(lab);
       }
     });
-  }
-
-  function spark(host, dayCounts, from, color, who) {
-    const n = AS_OF - from + 1;
-    if (n <= 0) { host.replaceChildren(); return; }
-    const top = maxOf(dayCounts.values(), 1);
-    const F = frame(host, { count: n, minStep: DAY_STEP, height: 40, yMax: top, yStep: top, pad: { t: 2, b: 0 }, axis: false, key: 'spark:' + who });
-    F.plot.classList.add('hlg');
-    for (let i = 0; i < n; i++) {
-      const d = from + i, v = dayCounts.get(d) || 0, hh = Math.max(v ? 2 : 1, v / top * 36);
-      const r = mk('rect', { class: 'hl', x: i * F.step + 0.75, y: 40 - hh, width: Math.max(1, F.step - 1.5), height: hh, fill: v ? css(color) : 'var(--grid)' });
-      r.dataset.tip = `${who} · ${fmt(d)}: закрыто ${v}`; F.plot.append(r);
-    }
   }
 
   /* ---------- блоки ---------- */
@@ -753,11 +741,13 @@
       c4.append(sp);
       const starts = mine.map(r => r.startD).filter(x => x !== null && x <= AS_OF);
       if (starts.length) {
-        const sh = el('div', 'tl spark-tl'); c4.append(sh);
-        const per = new Map(); closedDays.forEach(x => per.set(x, (per.get(x) || 0) + 1));
+        /* закрытия по дням, столбики разбиты по принятой мере в её цветах —
+           как график поступления, только меньше */
+        const sh = el('div', 'tl dev-tl'); c4.append(sh);
         card.append(c4); ppl.append(card);
         const first = minOf(starts, Infinity);
-        spark(sh, per, first, col, d);
+        const mcats = measKeys.map(k => ({ k, c: measColor(k) }));
+        stackChart(sh, daysOf(done.map(r => [r.endD, r.measureN]), mcats, first), mcats, 'закрыто', true, { height: 130, key: 'dev:' + d });
         c4.append(el('div', 'cap', `закрыто по дням с ${fmt(first)} по ${fmt(AS_OF)}`));
         continue;
       }

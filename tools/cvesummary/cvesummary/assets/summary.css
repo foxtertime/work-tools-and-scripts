@@ -276,7 +276,7 @@ img{max-width:100%}
 .tl::after{right:0;background:linear-gradient(to left,var(--fade,var(--panel)),transparent)}
 .tl.fade-l::before,.tl.fade-r::after{opacity:1}
 .pace-tl{flex:1;min-height:230px}
-.spark-tl{--axis:0px}
+.dev-tl{min-height:130px}
 .anom-notes{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px}
 .anom-notes:empty{display:none}
 
