@@ -410,6 +410,27 @@
     }
   }
 
+  /* строки статусов: «готово/открыто» тут — сам статус, поэтому колонки
+     другие: доля, у скольких разработчиков, вложенные часы */
+  function statusTable(boxId, title, groups) {
+    const box = $(boxId); box.replaceChildren(); const mx = maxOf(groups.map(g => g.recs.length), 1), N = recs.length;
+    const mob = matchMedia('(max-width:560px)').matches;
+    [[title, 'h l'], ['', 'h bar'], ['Всего', 'h'], ['% от всех', 'h'], ['Разраб.', 'h'], ['Часов', 'h'], ['Ср. часов', 'h']].forEach(([x, c]) => box.append(el('div', c, x)));
+    if (!groups.length) { const e = el('div', 'p', 'Нет данных'); e.style.gridColumn = '1/-1'; e.style.textAlign = 'left'; box.append(e); return; }
+    for (const g of groups) {
+      const n = g.recs.length, devs = new Set(g.recs.map(r => r.devKey).filter(Boolean)).size;
+      const hrs = g.recs.map(r => r.hours).filter(h => h !== null), sum = hrs.reduce((a, h) => a + h, 0);
+      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.k); k.title = g.k;
+      const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
+      const c1 = el('span'); c1.style.flexGrow = 1; c1.style.background = css(g.c); w.append(c1); b.append(w);
+      b.dataset.tip = `${g.k}: ${n} из ${N}`;
+      const cells = [k, b, el('div', 'n', String(n)), el('div', 'p', (N ? Math.round(n / N * 100) : 0) + '%'), el('div', 'n', String(devs)),
+        el('div', 'n', sum ? f1(sum) + ' ч' : '—'), el('div', 'n', hrs.length && sum ? f1(sum / hrs.length) + ' ч' : '—')];
+      if (sum) { cells[5].dataset.tip = 'Часы, вложенные в задачи этого статуса по модели часов'; cells[6].dataset.tip = `В среднем на задачу, по ${hrs.length} задачам с часами`; }
+      if (mob) box.append(cells[0], ...cells.slice(2), cells[1]); else cells.forEach(x => box.append(x));
+    }
+  }
+
   function renderCuts() {
     const N = recs.length;
     const sevC = SEV.map(s => Object.assign({}, s, { recs: recs.filter(r => r.sevN === s.k) }));
@@ -530,11 +551,18 @@
 
   function renderBars() {
     renderComps();
-    const rs = count(recs, verdictOf);
-    hbars('rhel', rs.map(([k, n]) => ({ label: k, n, segs: [{ n, color: verdictColor(k), name: '' }] })), rs.length ? rs[0][1] : 1);
-    const ds = count(recs, statusKey);
+    /* состояние в RHEL и статус задач — как разрезы в блоке CVE: полоса
+       состава и строки с готово/открыто и часами */
+    const strip = (id, groups) => {
+      const st = $(id); st.replaceChildren(); const N = recs.length;
+      for (const g of groups) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${N ? Math.round(g.recs.length / N * 100) : 0}%)`; st.append(sp); }
+    };
+    const rg = count(recs, verdictOf).map(([k]) => ({ k, c: verdictColor(k), recs: recs.filter(r => verdictOf(r) === k) }))
+      .sort((a, b) => (a.k === NO_VERDICT) - (b.k === NO_VERDICT));
+    strip('rhelstrip', rg); statTable('rhel', 'Состояние', rg);
     const dsColor = k => roleColor(recs.find(r => statusKey(r) === k));
-    hbars('devstatus', ds.map(([k, n]) => ({ label: k, n, segs: [{ n, color: dsColor(k), name: '' }] })), ds.length ? ds[0][1] : 1);
+    const dg = count(recs, statusKey).map(([k]) => ({ k, c: dsColor(k), recs: recs.filter(r => statusKey(r) === k) }));
+    strip('statusstrip', dg); statusTable('devstatus', 'Статус', dg);
     legend('weekleg', SEV);
     renderInflow();
   }

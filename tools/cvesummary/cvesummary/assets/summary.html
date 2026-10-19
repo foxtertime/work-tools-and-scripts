@@ -155,16 +155,24 @@
       <div class="hbars" id="components"></div>
     </section>
 
-    <section class="card">
-      <h2>Состояние в RHEL</h2>
-      <p class="sub">Поле RHEL state</p>
-      <div class="hbars" id="rhel"></div>
-    </section>
-
-    <section class="card">
-      <h2>Статус задач</h2>
-      <p class="sub">Статус у разработчика</p>
-      <div class="hbars" id="devstatus"></div>
+    <section class="card wide" id="states">
+      <div class="cve-grid">
+        <div class="cve-sum">
+          <h2>Состояние в RHEL</h2>
+          <p class="sub" style="margin:0">поле RHEL state</p>
+          <div class="sevstrip" id="rhelstrip"></div>
+        </div>
+        <div class="cve-rows" id="rhel"></div>
+      </div>
+      <hr class="cve-div">
+      <div class="cve-grid">
+        <div class="cve-sum">
+          <h3 class="cve-h3">Статус задач</h3>
+          <p class="sub" style="margin:0">статус у разработчика</p>
+          <div class="sevstrip" id="statusstrip"></div>
+        </div>
+        <div class="cve-rows" id="devstatus"></div>
+      </div>
     </section>
 
     <section class="card wide">

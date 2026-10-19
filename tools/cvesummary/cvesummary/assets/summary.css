@@ -82,7 +82,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .cve-n{display:flex;align-items:baseline;gap:8px;margin-top:4px}
 .cve-n span{font-family:var(--f-display);font-size:44px;font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
 .cve-n small{color:var(--muted);font-size:13px}
-#cve .sevstrip,#closable .sevstrip{height:14px;margin-top:4px}
+#cve .sevstrip,#closable .sevstrip,#states .sevstrip{height:14px;margin-top:4px}
 .cve-rows{display:grid;grid-template-columns:230px minmax(80px,1fr) repeat(5,4.4em);gap:12px 14px;align-items:center;font-variant-numeric:tabular-nums}
 .cve-rows .h{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;text-align:right;white-space:nowrap}
 .cve-rows .h.l{text-align:left}
