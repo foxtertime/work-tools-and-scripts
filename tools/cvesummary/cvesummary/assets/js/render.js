@@ -481,7 +481,7 @@
     row(st, 'Не взято', 'без разработчика', recs.filter(r => !r.taken && !r.done).length, null, '', '--st-idle');
     const rk = $('hero-risk'); rk.replaceChildren();
     const problem = recs.filter(r => roles.norm(r.status) === 'есть проблема').length, rework = recs.filter(r => roles.norm(r.status) === 'нужна доработка').length;
-    row(rk, 'Есть проблема / нужна доработка', `${problem} + ${rework}`, recs.filter(r => r.attention).length, 'bad');
+    row(rk, 'Есть проблема / нужна доработка', `${problem} + ${rework}`, recs.filter(r => r.attention).length);
     const crit = open.filter(r => r.sevN === 'Critical').length, imp = open.filter(r => r.sevN === 'Important').length;
     row(rk, 'Critical и Important открыты', `${crit} + ${imp}`, crit + imp);
     const s = Hm.summary(closedWithHours(recs));

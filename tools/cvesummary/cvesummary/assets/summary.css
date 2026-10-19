@@ -81,7 +81,6 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .hero-list .k i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:-1px}
 .hero-list .k small{color:var(--hero-muted);font-size:13px}
 .hero-list b{font:500 18px var(--f-display);font-variant-numeric:tabular-nums;white-space:nowrap}
-.hero-list .bad b{color:#FF8A6B}
 @media (max-width:720px){.hero-total{text-align:left}.hero-cols{grid-template-columns:minmax(0,1fr)}.hero-groups .cap{flex-direction:column;gap:2px}.hero-groups .cap span{font-size:11px}.hero-groups .cap b{font-size:20px}}
 
 /* severity strip in hero */
