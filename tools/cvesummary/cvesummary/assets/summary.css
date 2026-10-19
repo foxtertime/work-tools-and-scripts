@@ -233,7 +233,10 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .stack > *{grid-area:1/1;min-width:0}
 .stack > .off{visibility:hidden}
 /* лишняя высота прогноза уходит в главную строку */
-.pace-right .fc-main{flex:1 0 auto}
+/* лишняя высота — поровну всем строкам прогноза, текст в каждой по центру */
+.pace-right .fc > *{flex:1 0 auto}
+.pace-right .fc-main{justify-content:center}
+.pace-right .fc-row{align-content:center}
 .pace-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
 @media (max-width:640px){.pace-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .ps{background:var(--panel);padding:10px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
