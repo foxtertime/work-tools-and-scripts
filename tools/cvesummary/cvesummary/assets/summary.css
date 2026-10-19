@@ -199,6 +199,10 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .pace-left{display:flex;flex-direction:column;gap:12px;min-width:0}
 /* справа — выбор дат и окна, под ним прогноз; начинается на уровне плиток темпа */
 .pace-right{display:flex;flex-direction:column;gap:12px;min-width:0}
+/* прогноз тянется до низа колонки — вровень с графиком слева; лишняя высота
+   уходит в главную строку */
+.pace-right .fc{flex:1}
+.pace-right .fc-main{flex:1 0 auto}
 .pace-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
 @media (max-width:640px){.pace-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .ps{background:var(--panel);padding:10px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
