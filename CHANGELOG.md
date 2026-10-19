@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-19
+
 ### Добавлено
 
 - `cvesummary` (1.3.0): «Темп за: Весь период»; окно темпа не уходит раньше
@@ -213,7 +215,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.9.1...v0.10.0
