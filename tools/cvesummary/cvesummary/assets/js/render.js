@@ -567,7 +567,7 @@
     const cb = $('close-body'); cb.replaceChildren();
     if (!ready.length) emptyRow(cb, 8, 'Открытых задач с готовым решением нет');
     for (const r of [...ready].sort(byCvss)) {
-      const c5 = el('td'); c5.style.display = 'flex'; c5.style.gap = '6px';
+      const c5 = el('td', 'why');
       /* у пилюли основания — квадратик его цвета, как в полосе выше */
       const why = (k, p) => { const i = el('i'); i.style.background = css(CLOSE_WHY.find(w => w[1] === k)[2]); p.prepend(i); c5.append(p); return p; };
       if (r.reasons.includes('fixed')) why('fixed', link(r.rhsa, r.rhnvr || 'RHEL Fixed', 'pill') || el('span', 'pill', r.rhnvr || 'RHEL Fixed'));
