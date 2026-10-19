@@ -58,11 +58,12 @@
 
   /* ---------- данные ---------- */
   const H = Hm.compute(DATA.rows, AS_OF);
+  const DUP = roles.duplicates(DATA.rows);
   const recs = DATA.rows.map((r, i) => Object.assign({}, r, {
     i, devKey: roles.devOf(r), sevN: roles.sevOf(r), measureN: roles.measureOf(r),
     done: roles.isDone(r), open: roles.isOpen(r), taken: roles.isTaken(r), working: roles.isWorking(r),
     review: roles.isReview(r), paused: roles.isPaused(r), attention: roles.needsAttention(r),
-    reasons: roles.closeReasons(r), cvssN: parseFloat(String(r.cvss).replace(',', '.')) || 0,
+    reasons: roles.closeReasons(r, DUP[i] !== null), dupOf: DUP[i], cvssN: parseFloat(String(r.cvss).replace(',', '.')) || 0,
     tdateD: dates.dayOf(r.tdate), startD: dates.dayOf(r.start), endD: dates.dayOf(r.end), hours: H.hours[i],
   }));
   const closedWithHours = list => list.filter(r => r.done && r.endD !== null && r.hours !== null).map(r => r.hours);
@@ -217,17 +218,21 @@
     set('k-fixed', ready.filter(r => r.reasons.includes('fixed')).length, '#BFE3F2');
     set('k-own', ready.filter(r => r.reasons.includes('patch')).length, '#7FC6E4');
     set('k-out', ready.filter(r => r.reasons.includes('range')).length, '#3E9CC4');
+    set('k-dup', ready.filter(r => r.reasons.includes('dup')).length, '#9AA9D6');
     set('k-ci', open.filter(r => r.sevN === 'Critical' || r.sevN === 'Important').length, '#FF8A6B');
     set('k-att', recs.filter(r => r.attention).length, '#FF8A6B');
     const s = Hm.summary(closedWithHours(recs));
     $('k-hours').textContent = s.n ? f1(s.mean) : '—';
     $('k-hours-l').textContent = s.n ? `часов на задачу, медиана ${f1(s.median)} · по ${s.n} задачам` : 'часов на задачу: закрытых с датами нет';
 
+    /* каждая задача — в одном сегменте: по первому основанию закрыть,
+       основания идут в порядке fixed, patch, range, dup */
     const grp = [
       { k: 'Готово', c: '#5CC48A', f: r => r.done },
-      { k: 'Фикс в RHEL', c: '#BFE3F2', f: r => r.open && r.reasons.includes('fixed') },
-      { k: 'Устранено ранее', c: '#7FC6E4', f: r => r.open && !r.reasons.includes('fixed') && r.reasons.includes('patch') },
-      { k: 'Вне диапазона', c: '#3E9CC4', f: r => r.open && r.reasons.length === 1 && r.reasons[0] === 'range' },
+      { k: 'Фикс в RHEL', c: '#BFE3F2', f: r => r.open && r.reasons[0] === 'fixed' },
+      { k: 'Устранено ранее', c: '#7FC6E4', f: r => r.open && r.reasons[0] === 'patch' },
+      { k: 'Вне диапазона', c: '#3E9CC4', f: r => r.open && r.reasons[0] === 'range' },
+      { k: 'Дубликат', c: '#9AA9D6', f: r => r.open && r.reasons[0] === 'dup' },
       { k: 'Без решения', c: '#FF8A6B', f: r => r.open && !r.reasons.length },
     ];
     const mb = $('mixbar'), ml = $('mixleg'); mb.replaceChildren(); ml.replaceChildren();
@@ -296,7 +301,7 @@
     }
 
     const ready = recs.filter(r => r.open && r.reasons.length);
-    const why = [['Фикс в RHEL (RHEL state = Fixed)', 'fixed', '--ok'], ['Устранено ранее (P = +)', 'patch', '--accent'], ['Версия вне уязвимого диапазона (D = +)', 'range', '--sev-none']];
+    const why = [['Фикс в RHEL (RHEL state = Fixed)', 'fixed', '--ok'], ['Устранено ранее (P = +)', 'patch', '--accent'], ['Версия вне уязвимого диапазона (D = +)', 'range', '--sev-none'], ['Дубликат (та же пара CVE + компонент)', 'dup', '--c1']];
     hbars('close-why', why.map(([l, k, c]) => { const n = ready.filter(r => r.reasons.includes(k)).length; return { label: l, n, segs: [{ n, color: c, name: '' }] }; })
       .concat([{ label: 'Всего задач', n: ready.length, segs: [{ n: ready.length, color: '--fg', name: '' }] }]), Math.max(1, ready.length));
     $('close-n').textContent = ready.length;
@@ -307,6 +312,11 @@
       if (r.reasons.includes('fixed')) c5.append(link(r.rhsa, r.rhnvr || 'RHEL Fixed', 'pill') || el('span', 'pill', r.rhnvr || 'RHEL Fixed'));
       if (r.reasons.includes('patch')) c5.append(el('span', 'pill', 'устранено ранее'));
       if (r.reasons.includes('range')) c5.append(el('span', 'pill', 'вне диапазона'));
+      if (r.reasons.includes('dup')) {
+        const main = recs[r.dupOf], p = el('span', 'pill', 'дубликат');
+        p.dataset.tip = `основная — строка ${main.row}` + (main.task ? `, ${main.task}` : '') + (main.done ? ', готова' : '');
+        c5.append(p);
+      }
       const tr = el('tr');
       tr.append(cveCell(r), el('td', null, r.comp), pill(r), el('td', 'num', r.cvss || '—'), c5, el('td', null, r.status || '—'), el('td', null, r.dev || 'не назначен'), el('td', 'num', hoursText(r)));
       cb.append(tr);

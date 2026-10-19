@@ -61,6 +61,8 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .grp-h{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline}
 .grp-h b{font-family:var(--f-display);font-size:13px;letter-spacing:0;text-transform:none;color:var(--hero-fg);font-weight:500;white-space:nowrap}
 .tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--hero-line);border:1px solid var(--hero-line);border-radius:10px;overflow:hidden}
+.tiles.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:700px){.tiles.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .kpi{background:var(--hero-bg);padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0;position:relative}
 .kpi::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:0 2px 2px 0;background:var(--k,transparent)}
 .kpi .v{font-family:var(--f-display);font-size:28px;font-weight:500;line-height:1.1;font-variant-numeric:tabular-nums}

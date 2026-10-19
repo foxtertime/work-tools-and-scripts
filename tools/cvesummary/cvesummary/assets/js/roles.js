@@ -29,12 +29,48 @@
   const isPaused = r => norm(r.status) === PAUSED;
   const needsAttention = r => ATTENTION.includes(norm(r.status));
 
-  function closeReasons(r) {
+  /* dup — строка открытый дубликат (см. duplicates); основание последнее */
+  function closeReasons(r, dup) {
     if (isDone(r)) return [];
     const out = [];
     if (norm(r.rstate) === 'fixed') out.push('fixed');
     if (String(r.p || '').trim() === '+') out.push('patch');
     if (String(r.d || '').trim() === '+') out.push('range');
+    if (dup) out.push('dup');
+    return out;
+  }
+
+  /* Задача — пара CVE ID + компонент; строк с одной парой бывает несколько.
+     Для каждой строки — индекс основной строки группы, если сама строка
+     открытый дубликат, иначе null. Основная: строка «Готов», если такая в
+     группе есть (тогда дубликаты все открытые); иначе взятая разработчиком
+     с самой ранней Start date; если не взял никто — с самой ранней Task
+     date. Нет даты или она не разобралась — после датированных; при
+     равенстве — первая в таблице. Без компонента строка не группируется. */
+  function duplicates(rows) {
+    const day = (r, key) => {
+      const v = String(r[key] || '');
+      return /^\d{4}-\d{2}-\d{2}$/.test(v) && !(r.bad || []).includes(key) ? v : null;
+    };
+    const earliest = (idx, key) => idx.reduce((best, i) => {
+      const a = day(rows[i], key), b = day(rows[best], key);
+      return a !== null && (b === null || a < b) ? i : best;
+    });
+    const groups = new Map();
+    rows.forEach((r, i) => {
+      if (!norm(r.comp)) return;
+      const key = norm(r.cve) + '\u0000' + norm(r.comp);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(i);
+    });
+    const out = rows.map(() => null);
+    for (const idx of groups.values()) {
+      if (idx.length < 2) continue;
+      const done = idx.filter(i => isDone(rows[i]));
+      const taken = idx.filter(i => isTaken(rows[i]));
+      const main = done.length ? done[0] : taken.length ? earliest(taken, 'start') : earliest(idx, 'tdate');
+      for (const i of idx) if (i !== main && isOpen(rows[i])) out[i] = main;
+    }
     return out;
   }
 
@@ -58,6 +94,6 @@
   const measureOrder = values => order(values, MEASURES, NO_MEASURE);
 
   return { norm, devOf, isTaken, isDone, isOpen, isWorking, isReview, isPaused,
-    needsAttention, closeReasons, sevOf, sevOrder, measureOf, measureOrder,
+    needsAttention, closeReasons, duplicates, sevOf, sevOrder, measureOf, measureOrder,
     SEVERITIES, MEASURES, NO_SEVERITY, NO_MEASURE };
 }));

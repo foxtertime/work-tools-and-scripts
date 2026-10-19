@@ -64,3 +64,59 @@ test('основания закрыть — только у открытых', f
   assert.deepStrictEqual(roles.closeReasons(row('X', 'Готов', { rstate: 'Fixed' })), []);
   assert.deepStrictEqual(roles.closeReasons(row('X', '', { p: '-', d: '' })), []);
 });
+
+/* Дубликаты: пара CVE + компонент. duplicates(rows) → для каждой строки
+   индекс основной строки группы, если эта строка — открытый дубликат,
+   иначе null. */
+function task(cve, comp, dev, status, extra) {
+  return row(dev, status, Object.assign({ cve: cve, comp: comp, start: '', tdate: '', bad: [] }, extra || {}));
+}
+
+test('одиночные строки — не дубликаты', function () {
+  assert.deepStrictEqual(roles.duplicates([task('CVE-1', 'bash', '', ''), task('CVE-1', 'curl', '', ''),
+    task('CVE-2', 'bash', '', '')]), [null, null, null]);
+});
+
+test('в группе есть «Готов» — все открытые строки группы дубликаты', function () {
+  var rows = [task('CVE-1', 'bash', 'A', 'В работе'), task('CVE-1', 'bash', 'B', 'Готов'),
+    task('CVE-1', 'bash', '', ''), task('CVE-1', 'bash', 'C', 'Готов')];
+  assert.deepStrictEqual(roles.duplicates(rows), [1, null, 1, null]);
+});
+
+test('без «Готов» основная — взятая с самой ранней Start date', function () {
+  var rows = [task('CVE-1', 'bash', '', '', { tdate: '2026-01-01' }),
+    task('CVE-1', 'bash', 'A', 'В работе', { start: '2026-10-05' }),
+    task('CVE-1', 'bash', 'B', 'На паузе', { start: '2026-10-02' }),
+    task('CVE-1', 'bash', 'C', 'В работе')];
+  assert.deepStrictEqual(roles.duplicates(rows), [2, 2, null, 2]);
+});
+
+test('взятые без Start date — первая в таблице', function () {
+  var rows = [task('CVE-1', 'bash', '', ''), task('CVE-1', 'bash', 'A', 'В работе'),
+    task('CVE-1', 'bash', 'B', 'В работе', { start: '05.10.0206', bad: ['start'] })];
+  assert.deepStrictEqual(roles.duplicates(rows), [1, null, 1]);
+});
+
+test('никто не взял — основная с самой ранней Task date, без даты — после', function () {
+  var rows = [task('CVE-1', 'bash', '', ''), task('CVE-1', 'bash', '', '', { tdate: '2026-10-09' }),
+    task('CVE-1', 'bash', '', '', { tdate: '2026-10-01' })];
+  assert.deepStrictEqual(roles.duplicates(rows), [2, 2, null]);
+});
+
+test('равные даты — первая в таблице', function () {
+  var rows = [task('CVE-1', 'bash', '', '', { tdate: '2026-10-01' }), task('CVE-1', 'bash', '', '', { tdate: '2026-10-01' })];
+  assert.deepStrictEqual(roles.duplicates(rows), [null, 0]);
+});
+
+test('ключ без учёта регистра и пробелов; без компонента не группируется', function () {
+  var rows = [task('CVE-2026-1', 'bash', '', ''), task(' cve-2026-1 ', ' Bash ', '', ''),
+    task('CVE-2026-2', '', '', ''), task('CVE-2026-2', ' ', '', '')];
+  assert.deepStrictEqual(roles.duplicates(rows), [null, 0, null, null]);
+});
+
+test('дубликат — последнее основание закрыть, у закрытой строки его нет', function () {
+  var r = row('X', 'В работе', { rstate: 'fixed' });
+  assert.deepStrictEqual(roles.closeReasons(r, true), ['fixed', 'dup']);
+  assert.deepStrictEqual(roles.closeReasons(row('X', 'Готов'), true), []);
+  assert.deepStrictEqual(roles.closeReasons(row('X', ''), false), []);
+});

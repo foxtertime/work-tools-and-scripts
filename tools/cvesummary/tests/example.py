@@ -5,7 +5,8 @@ python3 -m tests.example пример.csv     # то же самое в CSV че
 
 Данные вымышленные, детерминированные (seed). Над шапкой — строка
 группировки, даты — текстом дд.мм.гггг, как в живой выгрузке; две строки
-— намеренные аномалии («Готов» без End date, End раньше Start).
+— намеренные аномалии («Готов» без End date, End раньше Start); несколько
+строк повторяют пару CVE + компонент более ранних — дубликаты задач.
 """
 import csv
 import datetime
@@ -31,6 +32,8 @@ PACKAGES = ["openssl", "bash", "curl", "httpd", "glibc", "systemd", "git", "libx
             "sudo", "openssh", "nodejs", "postgresql", "kernel", "podman", "samba"]
 SEVERITY = [("Low", "3.3"), ("Moderate", "5.5"), ("Moderate", "6.5"), ("Important", "7.5"),
             ("Important", "8.1"), ("Critical", "9.8"), ("", "")]
+# дубликаты задач: строка n повторяет пару CVE + компонент строки DUPLICATES[n]
+DUPLICATES = {40: 3, 41: 3, 55: 12, 70: 25, 71: 30, 90: 31}
 STATES = ["Affected"] * 4 + ["Fixed"] * 3 + ["Under investigation", "Will not fix", "not listed"]
 
 
@@ -62,6 +65,8 @@ def rows():
             dev, status, start, end = DEVS[0], "Готов", _d(AS_OF), "-"
         if n == 8:
             dev, status, start, end = DEVS[1], "В работе", _d(AS_OF), _d(AS_OF - datetime.timedelta(days=3))
+        if n in DUPLICATES:  # та же пара CVE + компонент, что у строки DUPLICATES[n]
+            pkg, cve = out[2 + DUPLICATES[n]][10], out[2 + DUPLICATES[n]][6]
         out.append([dev, status, start, end, measure, "TASKID-%d" % (182000 + n), cve,
                     rnd.choice(["В работу", "В работе", "Выполнена"]), _d(tdate),
                     rnd.choice(["КМ", "ПП", "АС", "ДВ"]), pkg,
