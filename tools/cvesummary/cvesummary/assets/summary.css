@@ -49,9 +49,11 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 
 .board{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);gap:14px}
 @media (max-width:900px){.board{grid-template-columns:minmax(0,1fr)}}
-.total{border:1px solid var(--hero-line);border-radius:12px;padding:22px 22px 20px;display:flex;flex-direction:column;gap:14px;background:linear-gradient(160deg,#152A3A,var(--hero-bg) 70%);min-width:0}
+.total{border:1px solid var(--hero-line);border-radius:12px;padding:22px 22px 20px;display:flex;flex-direction:column;gap:14px;background:linear-gradient(160deg,#152A3A,var(--hero-bg) 70%);min-width:0;container-type:inline-size}
 .total .e,.grp-h{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--hero-muted)}
-.total .n{font-family:var(--f-display);font-weight:700;font-size:clamp(76px,10vw,128px);line-height:.9;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+/* кегль не больше, чем влезает в карточку: цифра шрифта — около 0,74 em,
+   --len — число знаков; 10000 задач не вылезают за край */
+.total .n{font-family:var(--f-display);font-weight:700;font-size:min(clamp(76px,10vw,128px),calc(100cqi / (var(--len,4) * .78)));line-height:.9;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
 .total .s{font-size:13.5px;color:var(--hero-muted)}
 .total .s b{color:var(--hero-fg);font-weight:600}
 .total .mixbar{height:26px;margin-top:auto}

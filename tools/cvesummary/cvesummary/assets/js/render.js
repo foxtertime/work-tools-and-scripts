@@ -374,6 +374,7 @@
     const open = recs.filter(r => r.open), working = recs.filter(r => r.working);
     const ready = open.filter(r => r.reasons.length);
     $('k-total').textContent = N;
+    $('k-total').style.setProperty('--len', String(N).length);  // кегль под число знаков — см. .total .n
     const u = roles.uniques(recs);
     $('k-cve').textContent = u.tasks;
     $('k-comp').textContent = u.comps;
