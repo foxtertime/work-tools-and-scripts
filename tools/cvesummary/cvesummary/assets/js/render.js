@@ -145,6 +145,18 @@
       });
     return out;
   }
+  /* Выходные — светло-серая заливка во всю высоту поля, по суббот-
+     воскресным отрезкам; поверх окна темпа, под сеткой и данными. */
+  function weekends(F, from, n, top, bottom) {
+    const g = mk('g', { class: 'wkend', fill: 'var(--weekend)' });
+    for (let i = 0; i < n; i++) {
+      if (!dates.isWeekend(from + i)) continue;
+      let j = i; while (j + 1 < n && dates.isWeekend(from + j + 1)) j++;
+      g.append(mk('rect', { x: F.step * i, y: top, width: F.step * (j - i + 1), height: bottom - top }));
+      i = j;
+    }
+    F.plot.insertBefore(g, F.plot.querySelector('.gl'));
+  }
   /* будущая дата в пределах двух лет — иначе ось до даты отчёта */
   const nearDay = d => (d !== null && d > AS_OF && d <= AS_OF + 2 * 365 ? d : AS_OF);
 
@@ -161,6 +173,7 @@
     if (fresh) { const box = F.plot.parentNode; box.scrollLeft = Math.max(0, x(series.length - 1) - box.clientWidth * 0.7); timeline.sync(box); }
     const fi = Math.max(0, win.from - first), li = Math.min(series.length - 1, win.to - first);
     if (li >= fi) F.plot.prepend(mk('rect', { x: F.step * fi, y: 8, width: F.step * (li - fi + 1), height: 230 - 30, fill: 'var(--accent-soft)' }));
+    weekends(F, first, n, 8, 208);
     const labels = dateMarks(F, x, first, end, stop, target);
     const path = (k, c, w, op) => F.plot.append(mk('path', { d: series.map((s, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + F.y(s[k]).toFixed(1)).join(''), fill: 'none', stroke: c, 'stroke-width': w, 'stroke-opacity': op, 'stroke-linejoin': 'round' }));
     path('i', 'var(--sev-imp)', 1, 0.4); path('o', 'var(--ok)', 1, 0.4);
@@ -246,6 +259,7 @@
     /* при первом показе вида дата отчёта — на 70 % ширины, а не хвост прогноза */
     if (first) { const box = F.plot.parentNode; box.scrollLeft = Math.max(0, x(ai) - box.clientWidth * 0.7); timeline.sync(box); }
     const line = (pts, color, w, dash) => { if (pts.length < 2) return; F.plot.append(mk('path', Object.assign({ d: pts.map(([i, v], j) => (j ? 'L' : 'M') + x(i).toFixed(1) + ',' + F.y(v).toFixed(1)).join(''), fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linejoin': 'round' }, dash ? { 'stroke-dasharray': dash } : {}))); };
+    weekends(F, FIRST, n, 8, 208);
     const labels = dateMarks(F, x, FIRST, end, stop, target);
     const color = { inc: 'var(--sev-imp)', out: 'var(--ok)', open: 'var(--accent)' };
     const factPts = k => hist.map((v, i) => [i, v[k]]);
@@ -315,6 +329,7 @@
       const hit = weeks.map((w, i) => (w.t <= to && w.t + span - 1 >= from ? i : -1)).filter(i => i >= 0);
       if (hit.length) F.plot.prepend(mk('rect', { x: F.step * hit[0], y: 16, width: F.step * (hit[hit.length - 1] - hit[0] + 1), height: H2 - 40, fill: 'var(--accent-soft)' }));
     }
+    if (byDay) weekends(F, weeks[0].t, weeks.length, 16, H2 - 24);
     F.plot.classList.add('hlg');
     weeks.forEach((w, i) => {
       /* неделя — одна группа: под курсором она яркая, остальные приглушены */
