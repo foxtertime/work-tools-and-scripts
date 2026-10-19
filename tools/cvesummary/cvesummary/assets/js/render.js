@@ -726,8 +726,16 @@
       card.append(c1);
 
       const c3 = el('div'); c3.append(el('div', 'cap', `Сделано по принятой мере · ${done.length}`));
-      const kv3 = el('div', 'kv'); const maxM = maxOf(measKeys.map(k => done.filter(r => r.measureN === k).length), 1);
-      measKeys.forEach(k => { const v = done.filter(r => r.measureN === k).length; if (v) kvRow(kv3, k, v, maxM, col, `${d} · ${k}: ${v}`); });
+      /* меры — в их общих цветах; справа — сколько часов в среднем на задачу */
+      const kv3 = el('div', 'kv kv4'); const maxM = maxOf(measKeys.map(k => done.filter(r => r.measureN === k).length), 1);
+      kv3.append(el('span'), el('span'), el('span', 'kh', 'задач'), el('span', 'kh', 'ч на задачу'));
+      measKeys.forEach(k => {
+        const mk3 = done.filter(r => r.measureN === k), v = mk3.length; if (!v) return;
+        kvRow(kv3, k, v, maxM, measColor(k), `${d} · ${k}: ${v}`);
+        const s = Hm.summary(closedWithHours(mk3)), h = el('span', 'h', s.n ? f1(s.mean) + ' ч' : '—');
+        if (s.n) h.dataset.tip = `${k}: в среднем ${f1(s.mean)} ч, медиана ${f1(s.median)} ч, по ${s.n} ${plural(s.n, 'задаче', 'задачам', 'задачам')}`;
+        kv3.append(h);
+      });
       c3.append(kv3);
       card.append(c3);
 
