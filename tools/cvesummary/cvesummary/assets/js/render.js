@@ -172,6 +172,15 @@
     return out;
   }
 
+  /* окно расчёта темпа — заливка за выбранными днями, одинаково на всех
+     видах графика темпа; first — день первой колонки, last — индекс
+     последнего дня с фактом. В легенде — WIN_LEG */
+  const WIN_LEG = ['окно расчёта', 'background:var(--accent-soft);height:10px;vertical-align:-1px'];
+  function paceWindow(F, win, first, last) {
+    const fi = Math.max(0, win.from - first), li = Math.min(last, win.to - first);
+    if (li >= fi) F.plot.prepend(mk('rect', { x: F.step * fi, y: 8, width: F.step * (li - fi + 1), height: 230 - 30, fill: 'var(--accent-soft)' }));
+  }
+
   function drawPace(series, win, stop, target, plan) {
     const host = $('pace-chart');
     if (!series.length) { host.replaceChildren(el('div', 'empty', 'Нет дат в Task date и End date')); return; }
@@ -185,8 +194,7 @@
     const x = i => F.step * i + F.step / 2;
     /* при первом показе дата отчёта — на 70 % ширины, а не пустое будущее */
     if (fresh) { const box = F.plot.parentNode; box.scrollLeft = Math.max(0, x(series.length - 1) - box.clientWidth * 0.7); timeline.sync(box); }
-    const fi = Math.max(0, win.from - first), li = Math.min(series.length - 1, win.to - first);
-    if (li >= fi) F.plot.prepend(mk('rect', { x: F.step * fi, y: 8, width: F.step * (li - fi + 1), height: 230 - 30, fill: 'var(--accent-soft)' }));
+    paceWindow(F, win, first, series.length - 1);
     weekends(F, first, n, 8, 208);
     const labels = dateMarks(F, x, first, end, stop, target, plan ? plan.start : null);
     const path = (k, c, w, op) => F.plot.append(mk('path', { d: series.map((s, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + F.y(s[k]).toFixed(1)).join(''), fill: 'none', stroke: c, 'stroke-width': w, 'stroke-opacity': op, 'stroke-linejoin': 'round' }));
@@ -240,7 +248,7 @@
     for (const b of $('pace-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === paceBy));
     if (paceBy === 'flow') {
       paceLegend([['поступило', 'background:var(--sev-imp)'], ['закрыто', 'background:var(--ok)'], ['по дням', 'background:var(--muted);height:1px;opacity:.6'], ['среднее за 7 дней', 'background:var(--muted)'],
-        ['окно расчёта', 'background:var(--accent-soft);height:10px;vertical-align:-1px'],
+        WIN_LEG,
         ['симуляция', 'background:repeating-linear-gradient(90deg,var(--muted) 0 5px,transparent 5px 8px)', !paceCtx.plan]]);
       $('pace-chart').setAttribute('aria-label', 'Поступление и закрытие задач по дням');
       drawPace(FIRST === null ? [] : pace.daily(recs, FIRST, AS_OF), paceCtx.WINDOW, paceCtx.stop, paceCtx.target, paceCtx.plan);
@@ -254,8 +262,8 @@
   function drawBurn(mode) {
     const host = $('pace-chart'), up = mode === 'up';
     const legendFor = forecast => paceLegend(up
-      ? [['всего поступило', 'background:var(--sev-imp)'], ['всего закрыто', 'background:var(--ok)'], [forecast, 'background:repeating-linear-gradient(90deg,var(--muted) 0 5px,transparent 5px 8px)']]
-      : [['открыто', 'background:var(--accent)'], [forecast, 'background:repeating-linear-gradient(90deg,var(--accent) 0 5px,transparent 5px 8px)'],
+      ? [['всего поступило', 'background:var(--sev-imp)'], ['всего закрыто', 'background:var(--ok)'], WIN_LEG, [forecast, 'background:repeating-linear-gradient(90deg,var(--muted) 0 5px,transparent 5px 8px)']]
+      : [['открыто', 'background:var(--accent)'], WIN_LEG, [forecast, 'background:repeating-linear-gradient(90deg,var(--accent) 0 5px,transparent 5px 8px)'],
         ['идеально к цели', 'background:repeating-linear-gradient(90deg,var(--muted) 0 2px,transparent 2px 5px)', !!paceCtx.plan]]);
     const plan = paceCtx.plan, word = plan ? 'симуляция' : 'прогноз', pre = plan ? plan.pre : 0;
     legendFor(word);
@@ -282,6 +290,7 @@
     /* при первом показе вида дата отчёта — на 70 % ширины, а не хвост прогноза */
     if (first) { const box = F.plot.parentNode; box.scrollLeft = Math.max(0, x(ai) - box.clientWidth * 0.7); timeline.sync(box); }
     const line = (pts, color, w, dash) => { if (pts.length < 2) return; F.plot.append(mk('path', Object.assign({ d: pts.map(([i, v], j) => (j ? 'L' : 'M') + x(i).toFixed(1) + ',' + F.y(v).toFixed(1)).join(''), fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linejoin': 'round' }, dash ? { 'stroke-dasharray': dash } : {}))); };
+    paceWindow(F, paceCtx.WINDOW, FIRST, ai);
     weekends(F, FIRST, n, 8, 208);
     const labels = dateMarks(F, x, FIRST, end, stop, target, plan ? plan.start : null);
     const color = { inc: 'var(--sev-imp)', out: 'var(--ok)', open: 'var(--accent)' };
