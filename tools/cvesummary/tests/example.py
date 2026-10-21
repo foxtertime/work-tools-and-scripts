@@ -7,7 +7,8 @@ python3 -m tests.example пример.csv     # то же самое в CSV че
 группировки, даты — текстом дд.мм.гггг, как в живой выгрузке; две строки
 — намеренные аномалии («Готов» без End date, End раньше Start); несколько
 строк повторяют пару CVE + компонент более ранних — дубликаты задач. Колонки
-ai_* — как их пишет vulnsheet --ai: примерно половина пар прогнана через AI.
+ai_* — как их пишет vulnsheet --ai из results.json плагина rhel-security:
+примерно половина пар прогнана через AI, вердикты и remediation — его токены.
 """
 import csv
 import datetime
@@ -37,9 +38,13 @@ SEVERITY = [("Low", "3.3"), ("Moderate", "5.5"), ("Moderate", "6.5"), ("Importan
 # дубликаты задач: строка n повторяет пару CVE + компонент строки DUPLICATES[n]
 DUPLICATES = {40: 3, 41: 3, 55: 12, 70: 25, 71: 30, 90: 31}
 STATES = ["Affected"] * 4 + ["Fixed"] * 3 + ["Under investigation", "Will not fix", "not listed"]
-AI_VERDICTS = ["affected", "affected", "not affected", "fixed upstream"]
+# вердикт AI → remediation, которые при нём бывают
+AI_RESULTS = [("affected", ["backport prepared", "vendor update available", "rebuild required",
+                            "manual remediation required", "upstream fix unavailable"])] * 4 + [
+    ("not affected", ["not required"])] * 2 + [
+    ("unclear", ["not determined"]), ("invalid CVE", ["not required"]),
+    ("rejected CVE", ["not required"]), ("not processed", ["-"])]
 AI_CONFIDENCE = ["high", "high", "medium", "low"]
-AI_REMEDIATION = ["vendor update available", "backport prepared", "no action needed"]
 
 
 def _d(day):
@@ -74,8 +79,12 @@ def rows():
         ai = ["-"] * 5
         if ai_rnd.random() < 0.55:
             run = AS_OF + datetime.timedelta(days=ai_rnd.randrange(3))
-            ai = ["%s-1.0-2.el9" % pkg, ai_rnd.choice(AI_VERDICTS), ai_rnd.choice(AI_CONFIDENCE),
-                  ai_rnd.choice(AI_REMEDIATION), run.isoformat() if n % 2 else _d(run)]
+            verdict, remediations = ai_rnd.choice(AI_RESULTS)
+            confidence = ai_rnd.choice(AI_CONFIDENCE)
+            if verdict in ("not processed", "rejected CVE"):  # так пишет плагин
+                confidence = "-" if verdict == "not processed" else "high"
+            ai = ["%s-1.0-2.el9" % pkg, verdict, confidence, ai_rnd.choice(remediations),
+                  run.isoformat() if n % 2 else _d(run)]
         if n in DUPLICATES:  # та же пара CVE + компонент, что у строки DUPLICATES[n]
             first = out[2 + DUPLICATES[n]]
             pkg, cve, ai = first[10], first[6], first[21:26]

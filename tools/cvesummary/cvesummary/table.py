@@ -13,7 +13,7 @@ from typing import List, NamedTuple, Optional
 from .xlsx import Cell, Sheet, serial_date
 
 # ключ в данных страницы → имя колонки vulnsheet 3.0 (без Task state; из ai_* —
-# только то, что нужно блоку «AI-покрытие»)
+# то, что нужно блокам «AI» и «Remediation»: ai_nvr не читается)
 FIELDS = (
     ("dev", "Разработчик"), ("status", "Статус"), ("start", "Start date"),
     ("end", "End date"), ("measure", "Принятая мера"), ("task", "Task ID"),
@@ -22,7 +22,8 @@ FIELDS = (
     ("slnvr", "SL NVR (latest build)"), ("rhnvr", "RHEL NVR (if fixed)"),
     ("fixdate", "Fix date"), ("rstate", "RHEL state"), ("sev", "RHEL severity"),
     ("cvss", "RHEL CVSS"), ("rhsa", "Advisory (RHSA)"), ("link", "CVE link"),
-    ("comment", "Комментарий"), ("ai_verdict", "ai_verdict"), ("ai_run", "ai_run"),
+    ("comment", "Комментарий"), ("ai_verdict", "ai_verdict"),
+    ("ai_conf", "ai_confidence"), ("ai_rem", "ai_remediation"), ("ai_run", "ai_run"),
 )
 REQUIRED = ("cve", "comp", "rstate", "sev")
 DATES = ("tdate", "start", "end", "fixdate", "ai_run")

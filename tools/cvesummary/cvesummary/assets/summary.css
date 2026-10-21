@@ -118,7 +118,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .ai-total .n{font:700 44px/1 var(--f-display);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .ai-total .s{font-size:14px;color:var(--muted)}
 .ai-total .s b{color:var(--fg);font-weight:600}
-@media (max-width:560px){#ai-rows{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
 .cve-leg span{white-space:nowrap}
 @media (max-width:560px){.cve-rows{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px 10px}.cve-rows .k{grid-column:1/-1;margin-top:8px}.cve-rows .b{grid-column:1/-1}.cve-rows .h.l,.cve-rows .h.bar{display:none}.cve-rows .h{white-space:normal;font-size:10px;letter-spacing:.02em}}
 /* у мер — только «Всего» и «Ср. часов», в тех же колонках, что у критичности */

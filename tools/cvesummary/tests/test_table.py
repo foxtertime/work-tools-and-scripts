@@ -20,7 +20,8 @@ EXPECTED = {"row": 2, "dev": "Иванов И.И.", "status": "Готов", "sta
             "p": "+", "d": "", "slnvr": "openssl-3.2.2-6.sl9", "rhnvr": "", "fixdate": "",
             "rstate": "Affected", "sev": "Important", "cvss": "7.5", "rhsa": "",
             "link": "https://access.redhat.com/security/cve/CVE-2026-1", "comment": "",
-            "ai_verdict": "affected", "ai_run": "2026-10-21", "bad": []}
+            "ai_verdict": "affected", "ai_conf": "high", "ai_rem": "backport prepared",
+            "ai_run": "2026-10-21", "bad": []}
 REQUIRED = ["CVE ID", "Компонент", "RHEL state", "RHEL severity"]
 
 

@@ -1,9 +1,12 @@
-/* AI-покрытие: сколько пар CVE + компонент уже прогнано через AI. Пара —
-   по тому же правилу, что счётчик задач в шапке (строка без компонента —
-   отдельная пара); прогнана, если хотя бы у одной её строки есть
-   ai_verdict. Группа пары — как группы шапки: «готово», если хоть одна
-   строка готова, иначе «без решения», если такая строка есть, иначе
-   «можно закрыть». */
+/* Данные AI (колонки ai_*, их пишет vulnsheet --ai из results.json плагина
+   rhel-security): что AI сказал по парам CVE + компонент и сколько ещё не
+   прогнано. Пара — по тому же правилу, что счётчик задач в шапке (строка
+   без компонента — отдельная пара). Её данные — из строки с вердиктом и
+   самой поздней ai_run; при равной или неразобранной — из первой такой.
+   Прогнана — пара с настоящим вердиктом; not processed (пара была в
+   прогоне, но не разобрана) и пара без вердикта — ещё осталось прогнать.
+   Значения сравниваются без учёта регистра; знакомые пишутся по
+   справочнику, незнакомые — как пришли. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(require('./roles.js'));
@@ -14,37 +17,66 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, function (roles) {
   'use strict';
 
-  const GROUPS = ['done', 'none', 'ready'];  // и порядок старшинства
+  const NOT_PROCESSED = 'not processed';
+  const VERDICTS = ['affected', 'not affected', 'unclear', 'invalid CVE', 'rejected CVE', NOT_PROCESSED];
+  const CONFIDENCE = ['high', 'medium', 'low'];
+  /* сначала фикс есть или готов, потом ручная работа, блокеры, в конце —
+     решения без работы */
+  const REMEDIATIONS = ['backport prepared', 'vendor update available', 'rebuild required',
+    'manual integration required', 'manual remediation required', 'upstream fix unavailable',
+    'pending', 'not determined', 'not required'];
 
-  /* groupOf(row) — группа строки: 'done', 'none' или 'ready' */
-  function coverage(rows, groupOf) {
-    const pairs = new Map();
+  const runOf = r => (r.ai_run && !(r.bad || []).includes('ai_run') ? r.ai_run : null);
+
+  /* Строка с данными AI на каждую пару; у пары без вердикта — null */
+  function pairs(rows) {
+    const out = new Map();
     rows.forEach((r, i) => {
       const key = roles.taskKey(r) ?? '\u0001' + i;
-      const p = pairs.get(key) || { covered: false, g: GROUPS.length };
-      p.covered = p.covered || !!r.ai_verdict;
-      p.g = Math.min(p.g, GROUPS.indexOf(groupOf(r)));
-      pairs.set(key, p);
+      const best = out.get(key) ?? null;
+      if (!r.ai_verdict) { if (!out.has(key)) out.set(key, null); return; }
+      const run = runOf(r);
+      if (best === null || (run !== null && (runOf(best) === null || run > runOf(best)))) out.set(key, r);
     });
-    const groups = Object.fromEntries(GROUPS.map(g => [g, { total: 0, covered: 0 }]));
-    let covered = 0;
-    for (const p of pairs.values()) {
-      covered += p.covered;
-      const g = groups[GROUPS[p.g]];
-      if (g) { g.total++; g.covered += p.covered; }
-    }
-    return { total: pairs.size, covered, groups };
+    return [...out.values()];
   }
 
-  /* Последний прогон — самая поздняя разобранная ai_run (ISO); нет — null */
-  function lastRun(rows) {
-    let last = null;
-    for (const r of rows) {
-      const v = r.ai_run;
-      if (v && !(r.bad || []).includes('ai_run') && (last === null || v > last)) last = v;
-    }
-    return last;
+  /* Счётчик значений: знакомые — в порядке справочника и его написанием,
+     незнакомые — следом, по убыванию числа, затем по алфавиту */
+  function tally(known) {
+    const by = new Map();
+    return {
+      add(raw, extra) {
+        const k = roles.norm(raw), i = known.findIndex(v => roles.norm(v) === k);
+        if (!by.has(k)) by.set(k, Object.assign({ k: i >= 0 ? known[i] : String(raw).trim(), known: i >= 0, n: 0, rank: i }, extra && extra()));
+        const x = by.get(k); x.n++; return x;
+      },
+      list() {
+        return [...by.values()].sort((a, b) => (a.known === b.known ? (a.known ? a.rank - b.rank : b.n - a.n || a.k.localeCompare(b.k)) : a.known ? -1 : 1))
+          .map(({ rank, ...x }) => x);
+      },
+    };
   }
 
-  return { GROUPS, coverage, lastRun };
+  function summary(rows) {
+    const verdicts = tally(VERDICTS), remediations = tally(REMEDIATIONS);
+    const s = { total: 0, run: 0, notProcessed: 0, notRun: 0, noRemediation: 0, last: null };
+    for (const r of pairs(rows)) {
+      s.total++;
+      if (r === null) { s.notRun++; continue; }
+      const v = verdicts.add(r.ai_verdict, () => ({ conf: { high: 0, medium: 0, low: 0, other: 0 } }));
+      const c = roles.norm(r.ai_conf);
+      v.conf[CONFIDENCE.includes(c) ? c : 'other']++;
+      if (roles.norm(r.ai_verdict) === NOT_PROCESSED) { s.notProcessed++; continue; }
+      s.run++;
+      if (r.ai_rem) remediations.add(r.ai_rem); else s.noRemediation++;
+    }
+    for (const r of rows) { const run = runOf(r); if (run !== null && (s.last === null || run > s.last)) s.last = run; }
+    s.left = s.notRun + s.notProcessed;
+    s.verdicts = verdicts.list();
+    s.remediations = remediations.list();
+    return s;
+  }
+
+  return { VERDICTS, CONFIDENCE, REMEDIATIONS, NOT_PROCESSED, summary };
 }));

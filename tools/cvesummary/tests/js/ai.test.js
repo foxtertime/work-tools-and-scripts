@@ -3,56 +3,89 @@ var test = require('node:test');
 var assert = require('node:assert');
 var ai = require('../../cvesummary/assets/js/ai.js');
 
-function row(cve, comp, group, verdict, run) {
-  return { cve: cve, comp: comp, g: group, ai_verdict: verdict || '', ai_run: run || '', bad: [] };
+function row(cve, comp, verdict, conf, rem, run) {
+  return { cve: cve, comp: comp, ai_verdict: verdict || '', ai_conf: conf || '', ai_rem: rem || '',
+    ai_run: run || '', bad: [] };
 }
-var groupOf = function (r) { return r.g; };
+function counts(list) {
+  return list.map(function (x) { return [x.k, x.n]; });
+}
 
-test('coverage: пара прогнана, если вердикт есть хотя бы у одной её строки', function () {
-  var c = ai.coverage([
-    row('CVE-1', 'bash', 'none', 'affected'),
-    row('CVE-1', 'bash', 'ready'),
-    row('CVE-2', 'bash', 'none'),
-    row('CVE-1', 'curl', 'done', 'not affected'),
-  ], groupOf);
-  assert.deepStrictEqual([c.total, c.covered], [3, 2]);
+test('summary: прогнано — пары с настоящим вердиктом; осталось — не прогнанные и not processed', function () {
+  var s = ai.summary([
+    row('CVE-1', 'bash', 'affected', 'high', 'backport prepared'),
+    row('CVE-1', 'bash'),
+    row('CVE-2', 'bash', 'not processed'),
+    row('CVE-3', 'bash'),
+    row('CVE-4', 'curl', 'not affected', 'low', 'not required'),
+  ]);
+  assert.deepStrictEqual([s.total, s.run, s.notProcessed, s.notRun, s.left], [4, 2, 1, 1, 2]);
 });
 
-test('coverage: пара — по тому же правилу, что счётчик шапки', function () {
-  var c = ai.coverage([
-    row(' cve-1 ', 'Bash', 'none', 'affected'),
-    row('CVE-1', 'bash ', 'none'),
-    row('CVE-3', '', 'none', 'affected'),
-    row('CVE-3', '', 'none'),
-  ], groupOf);
+test('summary: пара — по тому же правилу, что счётчик шапки', function () {
+  var s = ai.summary([
+    row(' cve-1 ', 'Bash', 'affected'), row('CVE-1', 'bash '),
+    row('CVE-3', '', 'affected'), row('CVE-3', ''),
+  ]);
   // CVE-1/bash — одна пара; строки без компонента — каждая сама по себе
-  assert.deepStrictEqual([c.total, c.covered], [3, 2]);
+  assert.deepStrictEqual([s.total, s.run, s.notRun], [3, 2, 1]);
 });
 
-test('coverage: группа пары — готово, иначе без решения, иначе можно закрыть', function () {
-  var c = ai.coverage([
-    row('CVE-1', 'bash', 'ready', 'affected'), row('CVE-1', 'bash', 'done'),
-    row('CVE-2', 'bash', 'ready'), row('CVE-2', 'bash', 'none'),
-    row('CVE-3', 'bash', 'ready', 'affected'),
-  ], groupOf);
-  assert.deepStrictEqual(c.groups, {
-    done: { total: 1, covered: 1 }, none: { total: 1, covered: 0 }, ready: { total: 1, covered: 1 },
-  });
-  assert.deepStrictEqual(ai.GROUPS, ['done', 'none', 'ready']);
+test('summary: вердикты в порядке справочника, незнакомые — следом по числу, написание из справочника', function () {
+  var s = ai.summary([
+    row('CVE-1', 'a', 'maybe'), row('CVE-2', 'a', 'Not Affected'), row('CVE-3', 'a', 'AFFECTED'),
+    row('CVE-4', 'a', 'not processed'), row('CVE-5', 'a', 'odd'), row('CVE-6', 'a', 'odd'),
+    row('CVE-7', 'a', 'invalid cve'),
+  ]);
+  assert.deepStrictEqual(counts(s.verdicts), [['affected', 1], ['not affected', 1], ['invalid CVE', 1],
+    ['not processed', 1], ['odd', 2], ['maybe', 1]]);
+  assert.deepStrictEqual(s.verdicts.map(function (v) { return v.known; }), [true, true, true, true, false, false]);
 });
 
-test('coverage: пустая таблица', function () {
-  var c = ai.coverage([], groupOf);
-  assert.deepStrictEqual([c.total, c.covered, c.groups.done], [0, 0, { total: 0, covered: 0 }]);
+test('summary: уверенность по вердикту; незнакомая и пустая — только в общем числе', function () {
+  var s = ai.summary([
+    row('CVE-1', 'a', 'affected', 'High'), row('CVE-2', 'a', 'affected', 'low'),
+    row('CVE-3', 'a', 'affected', 'certain'), row('CVE-4', 'a', 'affected'),
+  ]);
+  assert.deepStrictEqual(s.verdicts[0], { k: 'affected', known: true, n: 4,
+    conf: { high: 1, medium: 0, low: 1, other: 2 } });
 });
 
-test('lastRun: самая поздняя разобранная дата прогона', function () {
-  var bad = row('CVE-4', 'bash', 'none', 'affected', 'вчера');
+test('summary: remediation в порядке справочника; not processed и пустая — отдельно', function () {
+  var s = ai.summary([
+    row('CVE-1', 'a', 'not affected', 'high', 'not required'),
+    row('CVE-2', 'a', 'affected', 'high', 'Backport Prepared'),
+    row('CVE-3', 'a', 'affected', 'high', 'magic'),
+    row('CVE-4', 'a', 'affected', 'high'),
+    row('CVE-5', 'a', 'not processed'),
+    row('CVE-6', 'a'),
+  ]);
+  assert.deepStrictEqual(counts(s.remediations), [['backport prepared', 1], ['not required', 1], ['magic', 1]]);
+  assert.deepStrictEqual([s.noRemediation, s.notProcessed, s.notRun], [1, 1, 1]);
+});
+
+test('summary: у пары с разными данными AI берётся строка с самым поздним прогоном', function () {
+  var s = ai.summary([
+    row('CVE-1', 'a', 'affected', 'high', 'pending', '2026-10-20'),
+    row('CVE-1', 'a', 'not affected', 'medium', 'not required', '2026-10-21'),
+    row('CVE-1', 'a', 'unclear', 'low', 'not determined'),
+  ]);
+  assert.deepStrictEqual(counts(s.verdicts), [['not affected', 1]]);
+  assert.deepStrictEqual(counts(s.remediations), [['not required', 1]]);
+});
+
+test('summary: при равном или неразобранном прогоне — первая строка с вердиктом', function () {
+  var late = row('CVE-1', 'a', 'unclear', 'low', '', 'вчера');
+  late.bad = ['ai_run'];
+  var s = ai.summary([row('CVE-1', 'a'), row('CVE-1', 'a', 'affected'), late]);
+  assert.deepStrictEqual(counts(s.verdicts), [['affected', 1]]);
+});
+
+test('summary: пустая таблица и последний прогон', function () {
+  var s = ai.summary([]);
+  assert.deepStrictEqual([s.total, s.run, s.left, s.verdicts, s.remediations, s.last], [0, 0, 0, [], [], null]);
+  var bad = row('CVE-4', 'a', 'affected', '', '', 'вчера');
   bad.bad = ['ai_run'];
-  assert.strictEqual(ai.lastRun([
-    row('CVE-1', 'bash', 'none', 'affected', '2026-10-20'),
-    row('CVE-2', 'bash', 'none', 'affected', '2026-10-21'),
-    row('CVE-3', 'bash', 'none'), bad,
-  ]), '2026-10-21');
-  assert.strictEqual(ai.lastRun([row('CVE-1', 'bash', 'none')]), null);
+  assert.strictEqual(ai.summary([row('CVE-1', 'a', 'affected', '', '', '2026-10-20'),
+    row('CVE-2', 'a', 'affected', '', '', '2026-10-21'), bad]).last, '2026-10-21');
 });
