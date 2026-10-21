@@ -1,15 +1,17 @@
 """Строка итоговой таблицы и запись CSV.
 
-Формат фиксирован процессом: 22 колонки, разделитель ';', пустая ячейка —
+Формат фиксирован процессом: 27 колонок, разделитель ';', пустая ячейка —
 '-', даты — dd.mm.yyyy. Колонки процесса (разработчик, статус, даты работ,
 принятая мера, комментарий) заполняют люди, здесь они — прочерки. P и D —
 признаки про билд из SL NVR: «+» — патч под CVE лежит в каталоге PATCH
 коммита сборки (P), апстрим-версия вне уязвимых диапазонов (D); «-» —
-нет патча, версия в диапазоне или проверить не удалось.
+нет патча, версия в диапазоне или проверить не удалось. ai_* — поля
+результата из JSON с AI-вердиктами (--ai) по паре CVE + компонент, перед
+комментарием; нет результата — прочерки.
 """
 import csv
 import re
-from typing import Iterable, List
+from typing import Iterable, List, Sequence
 
 from .vex import FIXED
 
@@ -22,8 +24,11 @@ COLUMNS = [
     "Task ID", "CVE ID", "Task state", "Task date", "Исполнитель",
     "Компонент", "P", "D", "SL NVR (latest build)", "RHEL NVR (if fixed)",
     "Fix date", "RHEL state", "RHEL severity", "RHEL CVSS",
-    "Advisory (RHSA)", "CVE link", "Комментарий",
+    "Advisory (RHSA)", "CVE link",
+    "ai_nvr", "ai_verdict", "ai_confidence", "ai_remediation", "ai_run",
+    "Комментарий",
 ]
+AI_EMPTY = (EMPTY,) * 5
 
 MISSING = "Missing"  # Task state строки, чьей задачи больше нет в блоках
 
@@ -43,6 +48,7 @@ KOJI = _group("SL NVR (latest build)", "SL NVR (latest build)")
 VEX = _group("RHEL NVR (if fixed)", "Advisory (RHSA)")
 LINK = _group("CVE link", "CVE link")
 COMMENT = _group("Комментарий", "Комментарий")
+AI = _group("ai_nvr", "ai_run")
 
 TASK_ID = COLUMNS.index("Task ID")
 CVE_ID = COLUMNS.index("CVE ID")
@@ -68,7 +74,8 @@ def format_date(value: str) -> str:
     return "%s.%s.%s" % (day, month, year)
 
 
-def row(task, nvr: str, verdict, patch: str = NO, ranged: str = NO) -> List[str]:
+def row(task, nvr: str, verdict, patch: str = NO, ranged: str = NO,
+        ai: Sequence[str] = AI_EMPTY) -> List[str]:
     fixed = verdict.state == FIXED
     cells = [
         "", "", "", "", "",
@@ -79,6 +86,7 @@ def row(task, nvr: str, verdict, patch: str = NO, ranged: str = NO) -> List[str]
         verdict.state, verdict.severity, verdict.cvss,
         verdict.advisory_url if fixed else "",
         CVE_PAGE.format(cve=task.cve),
+    ] + list(ai) + [
         "",
     ]
     # пустое — только None и "": CVSS 0.0 — настоящее значение

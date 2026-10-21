@@ -9,7 +9,7 @@ from vulnsheet.vex import Verdict
 TASK = Task("TASKID-181229", "CVE-2026-73070", "vim", "Отменен", "22.09.2026", "КМ")
 EXAMPLE = ("-;-;-;-;-;TASKID-181229;CVE-2026-73070;Отменен;22.09.2026;КМ;vim;-;-;"
            "vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;Moderate;5.5;-;"
-           "https://access.redhat.com/security/cve/CVE-2026-73070;-")
+           "https://access.redhat.com/security/cve/CVE-2026-73070;-;-;-;-;-;-")
 RHSA = "https://access.redhat.com/errata/RHSA-2026:1234"
 
 
@@ -23,7 +23,9 @@ class RowTest(unittest.TestCase):
             "Task ID", "CVE ID", "Task state", "Task date", "Исполнитель",
             "Компонент", "P", "D", "SL NVR (latest build)", "RHEL NVR (if fixed)",
             "Fix date", "RHEL state", "RHEL severity", "RHEL CVSS",
-            "Advisory (RHSA)", "CVE link", "Комментарий"])
+            "Advisory (RHSA)", "CVE link",
+            "ai_nvr", "ai_verdict", "ai_confidence", "ai_remediation", "ai_run",
+            "Комментарий"])
 
     def test_example_from_the_task(self):
         verdict = Verdict(state="Under investigation", severity="Moderate", cvss="5.5")
@@ -50,6 +52,17 @@ class RowTest(unittest.TestCase):
                           cells["RHEL severity"], cells["CVE link"]),
                          ("NOT_FOUND", "no VEX record", "-",
                           "https://access.redhat.com/security/cve/CVE-2026-73070"))
+
+
+class AiTest(unittest.TestCase):
+    VERDICT = Verdict(state="Affected", severity="Low", cvss="3.1")
+
+    def test_ai_cells_default_to_dashes(self):
+        self.assertEqual(row(TASK, "vim-1-1.sl9", self.VERDICT)[report.AI], ["-"] * 5)
+
+    def test_ai_cells_are_written_as_given(self):
+        ai = ("vim-1-1.el9", "affected", "high", "backport prepared", "2026-10-21T12:04")
+        self.assertEqual(row(TASK, "vim-1-1.sl9", self.VERDICT, ai=ai)[report.AI], list(ai))
 
 
 class MarksTest(unittest.TestCase):
@@ -87,7 +100,7 @@ class WriteTest(unittest.TestCase):
 
 class GroupsTest(unittest.TestCase):
     GROUPS = [report.DEVELOPER, report.TASK, report.MARKS, report.KOJI, report.VEX,
-              report.LINK, report.COMMENT]
+              report.LINK, report.AI, report.COMMENT]
 
     def test_groups_cover_all_columns_in_order(self):
         self.assertEqual(sum((COLUMNS[group] for group in self.GROUPS), []), COLUMNS)
@@ -104,6 +117,8 @@ class GroupsTest(unittest.TestCase):
             "RHEL CVSS", "Advisory (RHSA)"])
         self.assertEqual(COLUMNS[report.LINK], ["CVE link"])
         self.assertEqual(COLUMNS[report.COMMENT], ["Комментарий"])
+        self.assertEqual(COLUMNS[report.AI], ["ai_nvr", "ai_verdict", "ai_confidence",
+                                              "ai_remediation", "ai_run"])
 
     def test_row_fields_land_on_named_indices(self):
         cells = row(TASK, "vim-1", Verdict(state="Affected"))

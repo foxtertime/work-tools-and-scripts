@@ -21,9 +21,10 @@ from vulnsheet.vex import vex_url
 BLOCK = "Состоит из\nTASKID-181229\nCVE-2026-73070 vim\nОтменен\n22.09.2026\nКМ"
 BAD = "Состоит из\nTASKID-181231\nCVE-2026-73072 bash\nВ работу\n23.09.2026"
 HEADER = ";".join(COLUMNS)
+AI_DASHES = ";-;-;-;-;-"  # колонки ai_* без файла AI
 EXPECTED = ("-;-;-;-;-;TASKID-181229;CVE-2026-73070;Отменен;22.09.2026;КМ;vim;-;-;"
             "vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;Moderate;5.5;-;"
-            "https://access.redhat.com/security/cve/CVE-2026-73070;-")
+            "https://access.redhat.com/security/cve/CVE-2026-73070" + AI_DASHES + ";-")
 COMMON = ["--rhel", "9", "--koji-url", "https://koji.example.com/kojihub", "--tag", "sl9"]
 VIM_DOC = csaf("CVE-2026-73070", [("under_investigation", RHEL9, "vim")],
                scores=[{"cvss_v3": {"baseScore": 5.5}, "products": [pid(RHEL9, "vim")]}])
@@ -332,25 +333,25 @@ class ConfigTest(CliCase):
 # строка прежней таблицы: ручные колонки заполнены, koji и VEX устарели
 OLD_ROW = ("Иванов;В работе;01.09.2026;-;обновить;TASKID-181229;CVE-2026-73070;"
            "В работу;01.09.2026;КМ;vim;+;+;vim-8.2.2637-20.sl9;-;-;Affected;Low;3.1;-;"
-           "https://access.redhat.com/security/cve/CVE-2026-73070;ждём апстрим")
+           "https://access.redhat.com/security/cve/CVE-2026-73070" + AI_DASHES + ";ждём апстрим")
 # OLD_ROW после режима 2: обновлены только koji и VEX
 REFRESHED = ("Иванов;В работе;01.09.2026;-;обновить;TASKID-181229;CVE-2026-73070;"
              "В работу;01.09.2026;КМ;vim;+;+;vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;"
-             "Moderate;5.5;-;https://access.redhat.com/security/cve/CVE-2026-73070;ждём апстрим")
+             "Moderate;5.5;-;https://access.redhat.com/security/cve/CVE-2026-73070" + AI_DASHES + ";ждём апстрим")
 # OLD_ROW после режима 3 с BLOCK: данные задачи — из блока
 SYNCED = ("Иванов;В работе;01.09.2026;-;обновить;TASKID-181229;CVE-2026-73070;"
           "Отменен;22.09.2026;КМ;vim;+;+;vim-8.2.2637-26.sl9_8.6^4;-;-;Under investigation;"
-          "Moderate;5.5;-;https://access.redhat.com/security/cve/CVE-2026-73070;ждём апстрим")
+          "Moderate;5.5;-;https://access.redhat.com/security/cve/CVE-2026-73070" + AI_DASHES + ";ждём апстрим")
 # задача, которой больше нет в блоках
 GONE_ROW = ("Петров;Готово;-;-;-;TASKID-100000;CVE-2026-73071;Выполнена;01.08.2026;КМ;"
             "openssl;+;+;openssl-3-1.sl9;-;-;Fixed;Low;2.0;-;"
-            "https://access.redhat.com/security/cve/CVE-2026-73071;-")
+            "https://access.redhat.com/security/cve/CVE-2026-73071" + AI_DASHES + ";-")
 GONE_MISSING = ("Петров;Готово;-;-;-;TASKID-100000;CVE-2026-73071;Missing;01.08.2026;КМ;"
                 "openssl;+;+;NOT_FOUND;-;-;no VEX record;-;-;-;"
-                "https://access.redhat.com/security/cve/CVE-2026-73071;-")
+                "https://access.redhat.com/security/cve/CVE-2026-73071" + AI_DASHES + ";-")
 NEW_BLOCK = BLOCK.replace("181229", "181230").replace("73070", "73071").replace("vim", "openssl")
 NEW_ROW = ("-;-;-;-;-;TASKID-181230;CVE-2026-73071;Отменен;22.09.2026;КМ;openssl;-;-;NOT_FOUND;"
-           "-;-;no VEX record;-;-;-;https://access.redhat.com/security/cve/CVE-2026-73071;-")
+           "-;-;no VEX record;-;-;-;https://access.redhat.com/security/cve/CVE-2026-73071" + AI_DASHES + ";-")
 
 
 VIM_NVR = "vim-8.2.2637-26.sl9_8.6^4"
@@ -615,6 +616,7 @@ class HeaderTest(CliCase):
             "VEX: RHEL 9, кэш %s (живёт 3600 с), потоков 8" % cache,
             "GitLab: не задан в конфиге — колонка P не проверяется",
             "диапазоны: не заданы в конфиге — колонка D не сверяется",
+            "AI: файл не подан — колонки ai_* не обновляются",
             "план: koji — пакетов 1, VEX — CVE 1",
         ])
 
@@ -722,6 +724,7 @@ class FooterTest(CliCase):
             "    - Under investigation 1",
             "  - GitLab: не задан — колонка P не проверялась",
             "  - диапазоны версий: не заданы — колонка D не сверялась",
+            "  - AI: файл не подан — колонки ai_* не обновлялись",
             "  - код возврата 0",
         ])
         self.assertRegex(footer[-1], r"^всего за \d+\.\d с$")
@@ -737,7 +740,7 @@ class FooterTest(CliCase):
                          EXIT_OK)
         footer = self.footer()
         start = footer.index("  - GitLab, колонка P:")
-        self.assertEqual(footer[start:start + 11], [
+        self.assertEqual(footer[start:start + 12], [
             "  - GitLab, колонка P:",
             "    - «+» 2",
             "    - «-» 1",
@@ -748,6 +751,7 @@ class FooterTest(CliCase):
             "    - из SRPM 0",
             "    - ошибок 0",
             "  - диапазоны версий: не заданы — колонка D не сверялась",
+            "  - AI: файл не подан — колонки ai_* не обновлялись",
             "  - код возврата 0",
         ])
 
@@ -1032,3 +1036,82 @@ class VersionFlagTest(unittest.TestCase):
             main(["--version"])
         self.assertEqual(caught.exception.code, 0)
         self.assertEqual(out.getvalue().strip(), "vulnsheet " + __version__)
+
+
+AI_VIM = {"cve": "CVE-2026-73070", "package": "vim", "nvr": "vim-8.2.2637-22.el9_6",
+          "verdict": "affected", "confidence": "high", "remediation": "backport prepared",
+          "run": "2026-10-21T12:04"}
+AI_CELLS = ";vim-8.2.2637-22.el9_6;affected;high;backport prepared;21.10.2026"
+# EXPECTED с колонками ai_* из AI_VIM и та же строка в таблице vulnsheet 2.x
+EXPECTED_AI = EXPECTED.replace(AI_DASHES + ";-", AI_CELLS + ";-")
+EXPECTED_2 = EXPECTED.replace(AI_DASHES + ";-", ";-")
+HEADER_2 = ";".join(c for c in COLUMNS if not c.startswith("ai_"))
+
+
+class AiTest(CliCase):
+    """Колонки ai_* из JSON с AI-вердиктами (--ai)."""
+
+    def write_ai(self, *results, body=None):
+        path = self.path("ai.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(body if body is not None else
+                      {"format": 1, "plugin": "4.0.0",
+                       "generated": "2026-10-21T12:31:00+03:00", "results": list(results)},
+                      handle)
+        return path
+
+    def write_table(self, *rows, header=HEADER):
+        path = self.path("old.csv")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join((header,) + rows) + "\n")
+        return path
+
+    def messages(self):
+        return [line.split(" cli: ", 1)[1] for line in self.log.splitlines()
+                if " cli: " in line]
+
+    def test_new_table_takes_the_pair(self):
+        other = dict(AI_VIM, cve="CVE-2026-99999")
+        self.assertEqual(self.run_cli("--ai", self.write_ai(AI_VIM, other)), EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER, EXPECTED_AI])
+        messages = self.messages()
+        self.assertIn("AI: %s (plugin 4.0.0, 2026-10-21T12:31:00+03:00), результатов 2"
+                      % self.path("ai.json"), messages)
+        self.assertIn("  - AI, колонки ai_*:", messages)
+        self.assertIn("    - заполнено строк 1", messages)
+        self.assertIn("    - результатов без строки в таблице 1", messages)
+
+    def test_without_ai_the_header_and_footer_say_so(self):
+        self.run_cli()
+        messages = self.messages()
+        self.assertIn("AI: файл не подан — колонки ai_* не обновляются", messages)
+        self.assertIn("  - AI: файл не подан — колонки ai_* не обновлялись", messages)
+
+    def test_refresh_without_ai_keeps_old_values(self):
+        row = EXPECTED_AI
+        code = self.run_main("--table", self.write_table(row), "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER, row])
+
+    def test_table_of_vulnsheet_2_is_read_and_gets_the_columns(self):
+        table = self.write_table(EXPECTED_2, header=HEADER_2)
+        code = self.run_main("--table", table, "--ai", self.write_ai(AI_VIM),
+                             "-o", self.path("report.csv"))
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER, EXPECTED_AI])
+
+    def test_bad_results_are_warned_and_make_the_run_partial(self):
+        code = self.run_cli("--ai", self.write_ai(AI_VIM, {"package": "vim"}, AI_VIM))
+        self.assertEqual(code, EXIT_PARTIAL)
+        self.assertEqual(self.report_lines()[1], EXPECTED_AI)
+        messages = self.messages()
+        self.assertIn("AI: результат 2 пропущен: нет cve", messages)
+        self.assertIn("AI: повторов пар 1 — действует самый свежий по run", messages)
+        self.assertIn("    - результатов AI без cve или package 1", messages)
+
+    def test_broken_file_is_fatal_before_network(self):
+        path = self.write_ai(body={"format": 2, "results": []})
+        self.assertEqual(self.run_cli("--ai", path), EXIT_FATAL)
+        self.assertIn("ai.json: format 2", self.log)
+        self.connect.assert_not_called()
+        self.assertFalse(os.path.exists(self.path("report.csv")))

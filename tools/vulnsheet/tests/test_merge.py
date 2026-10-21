@@ -16,11 +16,12 @@ RHSA = "https://access.redhat.com/errata/RHSA-2026:1234"
 OLD = ["Иванов", "В работе", "01.09.2026", "-", "обновить",
        "TASKID-1", "CVE-2026-0001", "В работу", "01.09.2026", "КМ", "vim", "+", "+",
        "vim-1-1.sl9", "-", "-", "Affected", "Low", "3.1", "-",
-       LINK + "CVE-2026-0001", "ждём апстрим"]
+       LINK + "CVE-2026-0001",
+       "vim-1-1.el9", "affected", "low", "-", "01.10.2026", "ждём апстрим"]
 BASH = ["Петров", "Готово", "02.09.2026", "03.09.2026", "обновлено",
         "TASKID-2", "CVE-2026-0002", "Выполнена", "02.09.2026", "КМ", "bash", "-", "-",
         "bash-4-1.sl9", "-", "-", "Affected", "Moderate", "5.5", "-",
-        LINK + "CVE-2026-0002", "-"]
+        LINK + "CVE-2026-0002", "-"] + ["-"] * 5
 
 FRESH = Fresh(
     nvrs={"vim": "vim-2-1.sl9", "bash": "bash-5-1.sl9", "openssl": NOT_FOUND},
@@ -59,7 +60,7 @@ BASH_MISSING = (BASH[:7] + [report.MISSING] + BASH[8:13]
 # новая строка из OPENSSL
 NEW = (["-"] * 5 + ["TASKID-3", "CVE-2026-0003", "В работу", "23.09.2026", "КМ", "openssl",
                     "-", "-", NOT_FOUND, "-", "-", "not listed", "-", "-", "-",
-                    LINK + "CVE-2026-0003", "-"])
+                    LINK + "CVE-2026-0003", "-"] + ["-"] * 5)
 
 
 class PairsTest(unittest.TestCase):
@@ -246,6 +247,53 @@ class CommentTest(unittest.TestCase):
         out = refresh([Record(2, cells)], PATCHED._replace(ranges={}))
         self.assertEqual(out.rows, [cells])
         self.assertEqual((dict(out.patch_marks), out.kept_range), ({}, ()))
+
+
+VIM_AI = ("vim-2-1.el9", "not affected", "high", "backport prepared", "2026-10-21T12:04")
+SSL_AI = ("openssl-3-1.el9", "affected", "medium", "-", "2026-10-21T12:04")
+
+
+class AiTest(unittest.TestCase):
+    def test_new_rows_take_their_pair_or_dashes(self):
+        fresh = FRESH._replace(ai={VIM: VIM_AI})
+        out = build([task(), OPENSSL, task()], fresh)
+        self.assertEqual([r[report.AI] for r in out.rows],
+                         [list(VIM_AI), ["-"] * 5, list(VIM_AI)])
+        self.assertEqual(out.ai_rows, 2)
+
+    def test_without_ai_file_new_rows_get_dashes_and_old_rows_keep_theirs(self):
+        self.assertEqual(build([task()], FRESH).rows[0][report.AI], ["-"] * 5)
+        out = refresh([Record(2, OLD)], FRESH)
+        self.assertEqual((out.rows[0][report.AI], out.ai_rows), (OLD[report.AI], 0))
+
+    def test_refresh_overwrites_matched_rows_and_keeps_the_rest(self):
+        old_bash = changed(BASH, {report.AI.start: "bash-1-1.el9"})
+        out = refresh([Record(2, OLD), Record(3, old_bash)], FRESH._replace(ai={VIM: VIM_AI}))
+        self.assertEqual([r[report.AI] for r in out.rows],
+                         [list(VIM_AI), old_bash[report.AI]])
+        self.assertEqual(out.ai_rows, 1)
+
+    def test_pair_is_matched_like_the_row(self):
+        cells = changed(OLD, {report.CVE_ID: " cve-2026-0001", report.COMPONENT: "vim "})
+        row = refresh([Record(2, cells)], FRESH._replace(ai={VIM: VIM_AI})).rows[0]
+        self.assertEqual(row[report.AI], list(VIM_AI))
+
+    def test_failures_of_other_sources_do_not_touch_ai(self):
+        fresh = Fresh(nvrs={"vim": ERROR}, verdicts={VIM: Verdict(state=FETCH_ERROR)},
+                      ai={VIM: VIM_AI})
+        self.assertEqual(refresh([Record(2, OLD)], fresh).rows[0][report.AI], list(VIM_AI))
+
+    def test_sync_fills_matched_missing_and_new_rows(self):
+        fresh = FRESH._replace(ai={VIM: VIM_AI, OPENSSL_PAIR: SSL_AI})
+        out = sync([Record(2, OLD), Record(3, BASH)], [OPENSSL, task()], fresh)
+        self.assertEqual([r[report.AI] for r in out.rows],
+                         [list(VIM_AI), BASH[report.AI], list(SSL_AI)])
+        self.assertEqual(out.ai_rows, 2)
+
+    def test_row_with_nothing_to_ask_is_left_as_is(self):
+        cells = changed(OLD, {report.CVE_ID: "-"})
+        out = refresh([Record(2, cells)], FRESH._replace(ai={VIM: VIM_AI}))
+        self.assertEqual((out.rows, out.ai_rows), ([cells], 0))
 
 
 class SyncTest(unittest.TestCase):
