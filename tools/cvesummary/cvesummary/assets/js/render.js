@@ -3,7 +3,7 @@
    hours, pace, timeline, nav, strips; здесь только DOM. */
 (function () {
   'use strict';
-  const { dates, roles, hours: Hm, pace, timeline, nav, strips } = window.CS;
+  const { dates, roles, hours: Hm, pace, timeline, nav, strips, ai } = window.CS;
   const DATA = JSON.parse(document.getElementById('data').textContent);
   const AS_OF = dates.dayOf(DATA.meta.as_of);
   const NS = 'http://www.w3.org/2000/svg';
@@ -1007,6 +1007,85 @@
     }
   }
 
+  /* AI и Remediation: что AI сказал по парам CVE + компонент и что по ним
+     делать; серым — сколько ещё не прогнано (модуль ai) */
+  const AI_NOTRUN = 'color-mix(in srgb, var(--muted) 30%, var(--panel))';
+  const AI_OTHER = '--st-idle';  // незнакомое значение
+  const AI_VERDICT_COLOR = { 'affected': '--sev-imp', 'not affected': '--st-done', 'unclear': '--sev-mod',
+    'invalid CVE': '--rs-patch', 'rejected CVE': '--rs-range', [ai.NOT_PROCESSED]: '--sev-none' };
+  const AI_REM_COLOR = { 'backport prepared': '--st-done', 'vendor update available': '--rs-fixed', 'rebuild required': '--rs-patch',
+    'manual integration required': '--sev-mod', 'manual remediation required': '--sev-imp', 'upstream fix unavailable': '--sev-crit',
+    'pending': '--st-review', 'not determined': '--st-pause', 'not required': '--rs-range' };
+  const CONF_OPACITY = [['high', 1], ['medium', 0.6], ['low', 0.3], ['other', 0.15]];
+  const aiSum = () => ai.summary(recs);
+  /* Нет колонки — блок говорит об этом и прячет полосу и строки */
+  function aiMissing(col, ids, sub) {
+    const none = DATA.meta.missing.includes(col);
+    for (const id of ids) $(id).hidden = none;
+    if (none) $(sub).textContent = `В таблице нет данных AI: нет колонки ${col}.`;
+    return none;
+  }
+  /* сегмент полосы состава; c — токен или готовый цвет */
+  function aiPart(strip, n, c, tip) {
+    if (!n) return;
+    const sp = el('span'); sp.style.flexGrow = n; sp.style.background = c.startsWith('--') ? css(c) : c; sp.dataset.tip = tip; strip.append(sp);
+  }
+  function aiRow(box, mob, name, c, n, mx, segs, cells, tip) {
+    const k = el('div', 'k'); const i = el('i'); i.style.background = c.startsWith('--') ? css(c) : c; k.append(i, name); k.title = name;
+    const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
+    for (const [g, op] of segs) { const sp = el('span'); sp.style.flexGrow = g; sp.style.background = c.startsWith('--') ? css(c) : c; if (op < 1) sp.style.opacity = String(op); w.append(sp); }
+    b.append(w); b.dataset.tip = tip;
+    if (mob) box.append(k, ...cells, b); else box.append(k, b, ...cells);
+  }
+
+  function renderAi() {
+    const box = $('ai-rows'), strip = $('aistrip'), total = $('ai-total');
+    box.replaceChildren(); strip.replaceChildren(); total.replaceChildren();
+    if (aiMissing('ai_verdict', ['ai-rows', 'aistrip', 'ai-total'], 'ai-sub')) return;
+    const S = aiSum(), pc = n => (S.total ? Math.round(n / S.total * 100) : 0);
+    $('ai-sub').textContent = 'пары CVE + компонент: что сказал AI и сколько ещё не прогнано' + (S.last ? ` · последний прогон ${fmt(dates.dayOf(S.last))}` : '');
+    const s = el('span', 's', `осталось прогнать из ${S.total} · прогнано `);
+    s.append(el('b', null, String(S.run)), ` (${pc(S.run)}%)`);
+    total.append(el('span', 'n', String(S.left)), s);
+    const color = v => AI_VERDICT_COLOR[v.k] || AI_OTHER;
+    for (const v of S.verdicts) aiPart(strip, v.n, color(v), `${v.k}: ${v.n} из ${S.total}`);
+    aiPart(strip, S.notRun, AI_NOTRUN, `не прогнано: ${S.notRun} из ${S.total}`);
+
+    const mob = matchMedia('(max-width:560px)').matches;
+    [['Вердикт AI', 'h l'], ['', 'h bar'], ['Пар', 'h'], ['High', 'h'], ['Medium', 'h'], ['Low', 'h'], ['% от всех', 'h']].forEach(([x, c]) => {
+      const h = el('div', c, x);
+      if (c === 'h bar') { const lg = el('div', 'cve-leg'); for (const [k, op] of CONF_OPACITY.slice(0, 3)) { const a = el('span'); const i = el('i'); i.style.background = css('--muted'); i.style.opacity = String(op); a.append(i, k); lg.append(a); } h.append(lg); }
+      box.append(h);
+    });
+    if (!S.total) { const e = el('div', 'p', 'Нет данных'); e.style.gridColumn = '1/-1'; e.style.textAlign = 'left'; box.append(e); return; }
+    const mx = maxOf([...S.verdicts.map(v => v.n), S.notRun], 1), dash = () => el('div', 'p', '—');
+    for (const v of S.verdicts) {
+      const np = v.k === ai.NOT_PROCESSED;
+      const cf = v.conf, segs = np ? [[v.n, 1]] : CONF_OPACITY.map(([k, op]) => [cf[k], op]);
+      const cells = [el('div', 'n', String(v.n)), ...(np ? [dash(), dash(), dash()] : ['high', 'medium', 'low'].map(k => el('div', 'n', String(cf[k])))), el('div', 'p', pc(v.n) + '%')];
+      const tip = np ? `${v.k}: ${v.n} — пара была в прогоне, но AI её не разобрал` : `${v.k}: ${v.n} · high ${cf.high}, medium ${cf.medium}, low ${cf.low}` + (cf.other ? `, без уверенности ${cf.other}` : '');
+      aiRow(box, mob, v.k, color(v), v.n, mx, segs, cells, tip);
+    }
+    if (S.notRun) aiRow(box, mob, 'не прогнано', AI_NOTRUN, S.notRun, mx, [[1, 1]], [el('div', 'n', String(S.notRun)), dash(), dash(), dash(), el('div', 'p', pc(S.notRun) + '%')], `не прогнано: ${S.notRun} из ${S.total}`);
+  }
+
+  function renderRemediation() {
+    const box = $('rem-rows'), strip = $('remstrip');
+    box.replaceChildren(); strip.replaceChildren();
+    if (aiMissing('ai_verdict', ['rem-rows', 'remstrip'], 'rem-sub') || aiMissing('ai_remediation', ['rem-rows', 'remstrip'], 'rem-sub')) return;
+    const S = aiSum(), pc = n => (S.total ? Math.round(n / S.total * 100) : 0);
+    const rows = [...S.remediations.map(r => [r.k, AI_REM_COLOR[r.k] || AI_OTHER, r.n, `${r.k}: ${r.n} из ${S.total}`]),
+      ['не указана', AI_OTHER, S.noRemediation, `remediation не указана: ${S.noRemediation} из ${S.total}`],
+      [`нет (${ai.NOT_PROCESSED})`, AI_VERDICT_COLOR[ai.NOT_PROCESSED], S.notProcessed, `${ai.NOT_PROCESSED}: ${S.notProcessed} — remediation нет`],
+      ['не прогнано', AI_NOTRUN, S.notRun, `не прогнано: ${S.notRun} из ${S.total}`]].filter(r => r[2]);
+    for (const [, c, n, tip] of rows) aiPart(strip, n, c, tip);
+    const mob = matchMedia('(max-width:560px)').matches;
+    [['Remediation', 'h l'], ['', 'h bar'], ['Пар', 'h c3'], ['% от всех', 'h c7']].forEach(([x, c]) => box.append(el('div', c, x)));
+    if (!rows.length) { const e = el('div', 'p', 'Нет данных'); e.style.gridColumn = '1/-1'; e.style.textAlign = 'left'; box.append(e); return; }
+    const mx = maxOf(rows.map(r => r[2]), 1);
+    for (const [k, c, n, tip] of rows) aiRow(box, mob, k, c, n, mx, [[1, 1]], [el('div', 'n c3', String(n)), el('div', 'p c7', pc(n) + '%')], tip);
+  }
+
   /* подписи на полосах состава в блоках (доли) и у разработчиков (числа);
      влезут ли — решает fitLabels. Цвет подписи зависит от темы — при её
      смене пересчитывается */
@@ -1023,7 +1102,7 @@
   function render() {
     renderHead(); renderCuts(); renderTables(); renderBars();
     const W = renderPace();
-    renderPeople(W); renderAnomalies();
+    renderPeople(W); renderAnomalies(); renderAi(); renderRemediation();
     labelStrips(); fitLabels(); navSync();
   }
 

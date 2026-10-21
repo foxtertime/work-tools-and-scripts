@@ -6,7 +6,9 @@ python3 -m tests.example пример.csv     # то же самое в CSV че
 Данные вымышленные, детерминированные (seed). Над шапкой — строка
 группировки, даты — текстом дд.мм.гггг, как в живой выгрузке; две строки
 — намеренные аномалии («Готов» без End date, End раньше Start); несколько
-строк повторяют пару CVE + компонент более ранних — дубликаты задач.
+строк повторяют пару CVE + компонент более ранних — дубликаты задач. Колонки
+ai_* — как их пишет vulnsheet --ai из results.json плагина rhel-security:
+примерно половина пар прогнана через AI, вердикты и remediation — его токены.
 """
 import csv
 import datetime
@@ -19,7 +21,8 @@ AS_OF = datetime.date(2026, 10, 19)
 HEADER = ["Разработчик", "Статус", "Start date", "End date", "Принятая мера", "Task ID",
           "CVE ID", "Task state", "Task date", "Исполнитель", "Компонент", "P", "D",
           "SL NVR (latest build)", "RHEL NVR (if fixed)", "Fix date", "RHEL state",
-          "RHEL severity", "RHEL CVSS", "Advisory (RHSA)", "CVE link", "Комментарий"]
+          "RHEL severity", "RHEL CVSS", "Advisory (RHSA)", "CVE link",
+          "ai_nvr", "ai_verdict", "ai_confidence", "ai_remediation", "ai_run", "Комментарий"]
 GROUPS = ["AG21", "", "", "", "", "SberLinux"] + [""] * 10 + ["RedHat"] + [""] * 5
 DEVS = ["Иванов И.И.", "Петров П.П.", "Сидорова А.А.", "Кузнецов Д.В.", "Смирнова Е.Н."]
 STATUSES = ["В работе"] * 4 + ["Готов"] * 8 + ["На паузе", "Есть проблема",
@@ -35,6 +38,13 @@ SEVERITY = [("Low", "3.3"), ("Moderate", "5.5"), ("Moderate", "6.5"), ("Importan
 # дубликаты задач: строка n повторяет пару CVE + компонент строки DUPLICATES[n]
 DUPLICATES = {40: 3, 41: 3, 55: 12, 70: 25, 71: 30, 90: 31}
 STATES = ["Affected"] * 4 + ["Fixed"] * 3 + ["Under investigation", "Will not fix", "not listed"]
+# вердикт AI → remediation, которые при нём бывают
+AI_RESULTS = [("affected", ["backport prepared", "vendor update available", "rebuild required",
+                            "manual remediation required", "upstream fix unavailable"])] * 4 + [
+    ("not affected", ["not required"])] * 2 + [
+    ("unclear", ["not determined"]), ("invalid CVE", ["not required"]),
+    ("rejected CVE", ["not required"]), ("not processed", ["-"])]
+AI_CONFIDENCE = ["high", "high", "medium", "low"]
 
 
 def _d(day):
@@ -43,6 +53,7 @@ def _d(day):
 
 def rows():
     rnd = random.Random(20261019)
+    ai_rnd = random.Random(2026)  # свой генератор: остальные данные не сдвигаются
     out = [GROUPS, HEADER]
     for n in range(100):
         pkg = rnd.choice(PACKAGES)
@@ -65,8 +76,18 @@ def rows():
             dev, status, start, end = DEVS[0], "Готов", _d(AS_OF), "-"
         if n == 8:
             dev, status, start, end = DEVS[1], "В работе", _d(AS_OF), _d(AS_OF - datetime.timedelta(days=3))
+        ai = ["-"] * 5
+        if ai_rnd.random() < 0.55:
+            run = AS_OF + datetime.timedelta(days=ai_rnd.randrange(3))
+            verdict, remediations = ai_rnd.choice(AI_RESULTS)
+            confidence = ai_rnd.choice(AI_CONFIDENCE)
+            if verdict in ("not processed", "rejected CVE"):  # так пишет плагин
+                confidence = "-" if verdict == "not processed" else "high"
+            ai = ["%s-1.0-2.el9" % pkg, verdict, confidence, ai_rnd.choice(remediations),
+                  run.isoformat() if n % 2 else _d(run)]
         if n in DUPLICATES:  # та же пара CVE + компонент, что у строки DUPLICATES[n]
-            pkg, cve = out[2 + DUPLICATES[n]][10], out[2 + DUPLICATES[n]][6]
+            first = out[2 + DUPLICATES[n]]
+            pkg, cve, ai = first[10], first[6], first[21:26]
         out.append([dev, status, start, end, measure, "TASKID-%d" % (182000 + n), cve,
                     rnd.choice(["В работу", "В работе", "Выполнена"]), _d(tdate),
                     rnd.choice(["КМ", "ПП", "АС", "ДВ"]), pkg,
@@ -75,7 +96,7 @@ def rows():
                     _d(tdate - datetime.timedelta(days=20)) if fixed else "-", state,
                     sev or "-", cvss or "-",
                     "https://access.redhat.com/errata/RHSA-2026:%d" % (1000 + n) if fixed else "-",
-                    "https://access.redhat.com/security/cve/" + cve,
+                    "https://access.redhat.com/security/cve/" + cve] + ai + [
                     rnd.choice(["-", "-", "-", "ждём апстрим", "согласовано с ИБ"])])
     return out
 
