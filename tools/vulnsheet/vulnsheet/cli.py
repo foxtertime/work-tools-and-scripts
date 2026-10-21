@@ -1,4 +1,5 @@
-"""Точка входа: блоки задач и/или прежняя таблица → koji, VEX и GitLab → CSV."""
+"""Точка входа: блоки задач и/или прежняя таблица → koji, VEX и GitLab, плюс
+файл AI → CSV."""
 import argparse
 import logging
 import os
@@ -9,7 +10,7 @@ import time
 from collections import Counter
 from typing import List, NamedTuple, Optional
 
-from . import (__version__, config, gitlabclient, httpclient, kojiclient, logs, merge,
+from . import (__version__, ai, config, gitlabclient, httpclient, kojiclient, logs, merge,
                patches, ranges, report, table, vex)
 from .tasks import parse
 
@@ -19,7 +20,8 @@ EXIT_OK = 0
 # CSV записан, но есть отбраковка, ERROR koji, fetch error (в том числе там,
 # где из-за сбоя оставлены прежние koji или VEX), компоненты, чьи патчи в
 # GitLab проверить не удалось, CVE без диапазонов из-за сбоя, строки
-# таблицы, по которым нечего спрашивать, либо читатель оборвал stdout
+# таблицы, по которым нечего спрашивать, результаты AI без cve или package,
+# либо читатель оборвал stdout
 # (broken pipe) — таблица дописана не до конца
 EXIT_PARTIAL = 1
 EXIT_FATAL = 2
@@ -57,6 +59,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--table", metavar="FILE",
                         help="прежняя таблица vulnsheet: без --blocks — обновить в ней "
                              "koji, VEX, P и D, с --blocks — сверить с блоками")
+    parser.add_argument("--ai", metavar="FILE",
+                        help="JSON с AI-вердиктами: колонки ai_* по паре CVE + компонент")
     parser.add_argument("--config",
                         help="YAML-конфиг (по умолчанию — из $%s, иначе без конфига)"
                              % config.ENV_VAR)
@@ -109,6 +113,15 @@ def _read_table(path: str):
         return table.read(path)
     except table.TableError as exc:
         raise _Fatal("таблица %s" % exc)
+
+
+def _read_ai(path: Optional[str]) -> Optional[ai.Found]:
+    if path is None:
+        return None
+    try:
+        return ai.read(path)
+    except ai.AiError as exc:
+        raise _Fatal("файл AI %s" % exc)
 
 
 def _open_output(path: str):
@@ -176,14 +189,16 @@ def _write_rejects(path: str, rejects) -> None:
             logger.info("удалён %s от прошлого прогона: битых блоков нет", path)
 
 
-def _reasons(rejects, nvrs, failures, found, range_failed, outcome) -> List[str]:
+def _reasons(rejects, nvrs, failures, found, range_failed, outcome, verdicts) -> List[str]:
     """Почему код возврата 1; пусто — код 0."""
     counts = (("битых блоков", len(rejects)),
               ("пакетов с ERROR от koji", sum(1 for nvr in nvrs.values() if nvr == kojiclient.ERROR)),
               ("CVE без документа VEX", len(failures)),
               ("компонентов с ошибкой проверки патчей", len(found.failed)),
               ("CVE без диапазонов из-за сбоя", len(range_failed)),
-              ("строк без CVE-ID или компонента", len(outcome.skipped)))
+              ("строк без CVE-ID или компонента", len(outcome.skipped)),
+              ("результатов AI без cve или package",
+               len(verdicts.skipped) if verdicts is not None else 0))
     return ["%s %d" % item for item in counts if item[1]]
 
 
@@ -192,7 +207,7 @@ def _item(depth: int, text: str) -> None:
     logger.info("%s- %s", "  " * depth, text)
 
 
-def _footer(args, cfg, rejects, found, outcome, reasons) -> None:
+def _footer(args, cfg, rejects, found, outcome, reasons, verdicts, wanted) -> None:
     """Итог прогона — последним блоком, списком, с теми же метками, что у
     шапки: что сделано и сколько чего найдено. Прочерки в колонках — строки,
     где спрашивать было нечего, они не считаются."""
@@ -245,6 +260,12 @@ def _footer(args, cfg, rejects, found, outcome, reasons) -> None:
         _item(2, "неизвестен %d" % kinds.get(None, 0))
         _item(2, "источник: %s" % ", ".join("%s %d" % (source, sources.get(source, 0))
                                              for source in (ranges.NVD, ranges.CVEORG)))
+    if verdicts is None:
+        _item(1, "AI: файл не подан — колонки ai_* не обновлялись")
+    else:
+        _item(1, "AI, колонки ai_*:")
+        _item(2, "заполнено строк %d" % outcome.ai_rows)
+        _item(2, "результатов без строки в таблице %d" % len(set(verdicts.cells) - set(wanted)))
     if rejects:
         _item(1, "отбраковано блоков %d → %s" % (len(rejects),
                                                  rejects_path(args.output, args.rejects)))
@@ -362,6 +383,13 @@ def _header(args, cfg, run) -> None:
                "NVD без ключа ($%s пуст, запрос раз в %g с)" % (env, ranges.PAUSE))
         logger.info("диапазоны: %s, CVE.org, кэш %s (живёт %d с), потоков %d", key,
                     _ranges_cache(cfg), cfg.ranges.cache_ttl, cfg.ranges.jobs)
+    if run.ai is None:
+        logger.info("AI: файл не подан — колонки ai_* не обновляются")
+    else:
+        meta = ", ".join(part for part in (
+            run.ai.plugin and "plugin %s" % run.ai.plugin, run.ai.generated) if part)
+        logger.info("AI: %s%s, результатов %d", args.ai, " (%s)" % meta if meta else "",
+                    run.ai.total)
     if not run.packages:
         logger.info("план: спрашивать нечего — в сеть не идём")
         return
@@ -411,6 +439,15 @@ def _warn_rejects(rejects) -> None:
                        reject.text.split("\n", 1)[0].strip(), reject.reason)
 
 
+def _warn_ai(verdicts: Optional[ai.Found]) -> None:
+    if verdicts is None:
+        return
+    for skipped in verdicts.skipped:
+        logger.warning("AI: результат %d пропущен: %s", skipped.number, skipped.reason)
+    if verdicts.repeated:
+        logger.warning("AI: повторов пар %d — действует самый свежий по run", verdicts.repeated)
+
+
 class _Run(NamedTuple):
     """Что прочитано и что будет спрошено: общее для шапки и самой работы."""
     rhel: str
@@ -426,6 +463,7 @@ class _Run(NamedTuple):
     aliases: dict
     token: Optional[str]
     nvd_key: Optional[str]
+    ai: Optional[ai.Found]
 
 
 def _merge(records, tasks, fresh):
@@ -473,6 +511,7 @@ def _run(args) -> int:
             raise _Fatal("в блоках нет ни одного годного блока — синхронизация "
                         "пометила бы все строки Missing")
 
+    verdicts_ai = _read_ai(args.ai)
     wanted = merge.pairs(records, tasks)  # пара на строку выхода, с повторами
     unique = list(dict.fromkeys(wanted))
     cves = list(dict.fromkeys(cve for cve, _ in unique))
@@ -484,8 +523,9 @@ def _run(args) -> int:
     nvd_key = ((os.environ.get(cfg.ranges.nvd_key_env) or "").strip() or None
                if cfg.ranges is not None else None)
     _header(args, cfg, _Run(rhel, hub, tag, records, tasks, rejects, wanted, cves, packages,
-                            streams, aliases, token, nvd_key))
+                            streams, aliases, token, nvd_key, verdicts_ai))
     _warn_rejects(rejects)
+    _warn_ai(verdicts_ai)
 
     # выход открываем до сети: неверный путь должен падать сразу, и не
     # затирать прежний отчёт — пишем во временник рядом, подменяем в конце;
@@ -510,7 +550,8 @@ def _run(args) -> int:
                     for cve, name in unique}
         outcome = _merge(records, tasks, merge.Fresh(
             nvrs, verdicts, found.patched if cfg.gitlab is not None else None,
-            range_notes if cfg.ranges is not None else None))
+            range_notes if cfg.ranges is not None else None,
+            verdicts_ai.cells if verdicts_ai is not None else None))
         report.write(outcome.rows, out)
     except BaseException:
         if tmp_path is not None:
@@ -529,8 +570,8 @@ def _run(args) -> int:
     if args.blocks is not None:
         _write_rejects(rejects_path(args.output, args.rejects), rejects)
     _warn_outcome(outcome)
-    reasons = _reasons(rejects, nvrs, failures, found, range_failed, outcome)
-    _footer(args, cfg, rejects, found, outcome, reasons)
+    reasons = _reasons(rejects, nvrs, failures, found, range_failed, outcome, verdicts_ai)
+    _footer(args, cfg, rejects, found, outcome, reasons, verdicts_ai, wanted)
     return EXIT_PARTIAL if reasons else EXIT_OK
 
 

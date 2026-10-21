@@ -9,10 +9,13 @@ from vulnsheet.report import COLUMNS
 from vulnsheet.table import Record, TableError, read
 
 HEADER = ";".join(COLUMNS)
+HEADER_2 = ";".join(c for c in COLUMNS if not c.startswith("ai_"))  # vulnsheet 2.x
 ROW = ["Иванов", "В работе", "01.09.2026", "-", "-",
        "TASKID-1", "CVE-2026-0001", "В работу", "01.09.2026", "КМ", "vim", "+", "-",
        "vim-1-1.sl9", "-", "-", "Affected", "Low", "3.1", "-",
-       "https://access.redhat.com/security/cve/CVE-2026-0001", "-"]
+       "https://access.redhat.com/security/cve/CVE-2026-0001",
+       "vim-1-1.el9", "affected", "high", "-", "21.10.2026", "ждём апстрим"]
+ROW_2 = ROW[:21] + ROW[26:]  # та же строка в таблице vulnsheet 2.x
 LINE = ";".join(ROW)
 
 
@@ -59,16 +62,21 @@ class ReadTest(unittest.TestCase):
             ("", "нет заголовка"),
             ("\n \n", "нет заголовка"),
             (HEADER.replace("Task ID", "Task") + "\n", "заголовок"),
-            (HEADER + "\n" + ";".join(ROW[:21]) + "\n", "запись 2: ячеек 21"),
-            (HEADER + "\n" + LINE + ";x\n", "запись 2: ячеек 23"),
+            (HEADER + "\n" + ";".join(ROW[:26]) + "\n", "запись 2: ячеек 26, ожидается 27"),
+            (HEADER + "\n" + LINE + ";x\n", "запись 2: ячеек 28"),
+            (HEADER_2 + "\n" + LINE + "\n", "запись 2: ячеек 27, ожидается 22"),
         ]
         for text, needle in cases:
             with self.subTest(text=text):
                 self.assertRejected(needle, text)
 
+    def test_table_of_vulnsheet_2_gets_empty_ai_columns(self):
+        rows = read(self.write(HEADER_2 + "\n" + ";".join(ROW_2) + "\n"))
+        self.assertEqual(rows, [Record(2, ROW_2[:21] + ["-"] * 5 + ROW_2[21:])])
+
     def test_table_of_vulnsheet_1_is_rejected_with_a_hint(self):
-        old = [c for c in COLUMNS if c not in ("P", "D")]
-        line = ";".join(ROW[:11] + ROW[13:])
+        old = [c for c in HEADER_2.split(";") if c not in ("P", "D")]
+        line = ";".join(ROW_2[:11] + ROW_2[13:])
         error = self.assertRejected("vulnsheet 1.x", ";".join(old) + "\n" + line + "\n")
         self.assertIn("P и D", str(error))
 
@@ -80,7 +88,7 @@ class ReadTest(unittest.TestCase):
 
     def test_unclosed_quote_swallows_following_rows(self):
         second = ";".join(ROW).replace("TASKID-1", "TASKID-2")
-        broken = LINE[:-1] + '"' + "неполная кавычка"
+        broken = LINE.rsplit(";", 1)[0] + ';"неполная кавычка'
         self.assertRejected("ошибка CSV", HEADER + "\n" + broken + "\n" + second + "\n")
 
     def test_missing_file(self):

@@ -2,7 +2,8 @@
 
 Чистые функции — ни файлов, ни сети. cli сначала спрашивает pairs(), какие
 пары (CVE, компонент) нужны строкам выхода, получает по ним ответы koji,
-VEX, GitLab и диапазонов и отдаёт их сюда записью Fresh. Что в каком режиме
+VEX, GitLab и диапазонов, берёт результаты из файла AI и отдаёт всё это
+сюда записью Fresh. Что в каком режиме
 откуда берётся — таблица колонок в README, «Режимы».
 """
 import types
@@ -28,11 +29,15 @@ class Fresh(NamedTuple):
     компонента нет — его патчи не проверены (GitLab не ответил, koji ERROR).
     ranges: (CVE, компонент) → где версия билда относительно уязвимых
     диапазонов; пары нет — диапазоны не получены из-за сбоя. None у обоих —
-    секции в конфиге нет: колонка не проверялась вовсе."""
+    секции в конфиге нет: колонка не проверялась вовсе.
+
+    ai: (CVE, компонент) → значения колонок ai_*; пары нет — AI о ней не
+    писал. None — файла AI не подали."""
     nvrs: Mapping[str, str]
     verdicts: Mapping[Pair, Verdict]
     patched: Optional[Mapping[str, AbstractSet[str]]] = None
     ranges: Optional[Mapping[Pair, RangeNote]] = None
+    ai: Optional[Mapping[Pair, Sequence[str]]] = None
 
 
 class Note(NamedTuple):
@@ -63,6 +68,7 @@ class Outcome(NamedTuple):
     # строк по диапазону: True — в нём, False — вне, None — неизвестен; и по источнику
     range_kinds: Mapping[Optional[bool], int] = types.MappingProxyType({})
     range_sources: Mapping[str, int] = types.MappingProxyType({})
+    ai_rows: int = 0                  # строк, заполненных из файла AI
 
 
 class _Notes:
@@ -72,6 +78,7 @@ class _Notes:
         self.patch_unchecked = self.range_unchecked = 0
         self.kept_patch, self.kept_range = [], []
         self.range_kinds, self.range_sources = Counter(), Counter()
+        self.ai_rows = 0
 
     def ranged(self, note: Optional[RangeNote]) -> None:
         if note is not None:
@@ -85,7 +92,7 @@ class _Notes:
                 "patch_unchecked": self.patch_unchecked, "kept_patch": tuple(self.kept_patch),
                 "range_marks": self.range_marks, "range_unchecked": self.range_unchecked,
                 "kept_range": tuple(self.kept_range), "range_kinds": self.range_kinds,
-                "range_sources": self.range_sources}
+                "range_sources": self.range_sources, "ai_rows": self.ai_rows}
 
 
 def pairs(records: Optional[Sequence[Record]],
@@ -201,11 +208,14 @@ def _as_task(record: Record, pair: Pair) -> Task:
 
 
 def _fresh_row(task: Task, fresh: Fresh, notes: Optional["_Notes"] = None) -> List[str]:
-    """Строка с нуля; где P или D проверить не удалось — «-». notes=None —
-    строку собирают поверх прежней (_updated), и признаки считает уже он."""
+    """Строка с нуля; где P или D проверить не удалось — «-», где нет
+    результата AI — прочерки. notes=None — строку собирают поверх прежней
+    (_updated), и признаки считает уже он."""
     pair = _task_pair(task)
     patch, ranged = _patch_mark(pair, fresh), _range_mark(pair, fresh)
+    ai = _ai_cells(pair, fresh)
     if notes is not None:
+        notes.ai_rows += ai is not None
         if fresh.patched is not None:
             notes.patch_marks[patch or report.NO] += 1
             notes.patch_unchecked += patch is None
@@ -214,7 +224,12 @@ def _fresh_row(task: Task, fresh: Fresh, notes: Optional["_Notes"] = None) -> Li
             notes.range_unchecked += ranged is None
             notes.ranged(fresh.ranges.get(pair))
     return report.row(task, fresh.nvrs[pair[1]], fresh.verdicts[pair],
-                      patch or report.NO, ranged or report.NO)
+                      patch or report.NO, ranged or report.NO, ai or report.AI_EMPTY)
+
+
+def _ai_cells(pair: Pair, fresh: Fresh) -> Optional[Sequence[str]]:
+    """Значения ai_* пары из файла AI; None — файла нет или пары в нём нет."""
+    return None if fresh.ai is None else fresh.ai.get(pair)
 
 
 def _kept_mark(cell: str) -> str:
@@ -256,11 +271,15 @@ def _note(record: Record) -> Note:
 def _updated(record: Record, task: Task, pair: Pair, fresh: Fresh, notes: _Notes) -> List[str]:
     """Свежая строка по задаче поверх прежней: ручные колонки — из прежней,
     при сбое источника — его прежние колонки; P и D, которые проверить не
-    удалось или не проверялись, — прежние."""
+    удалось или не проверялись, — прежние; ai_* без результата AI — прежние."""
     old = record.cells
     cells = _fresh_row(task, fresh)
     cells[report.DEVELOPER] = old[report.DEVELOPER]
     cells[report.COMMENT] = old[report.COMMENT]
+    if _ai_cells(pair, fresh) is None:
+        cells[report.AI] = old[report.AI]
+    else:
+        notes.ai_rows += 1
     for index, mark, checked, marks, kept in (
             (report.PATCH, _patch_mark(pair, fresh), fresh.patched is not None,
              notes.patch_marks, notes.kept_patch),
