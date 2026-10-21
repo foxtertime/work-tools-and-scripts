@@ -7,18 +7,20 @@ from cvesummary.xlsx import Cell, Row, Sheet
 HEADER = ["Разработчик", "Статус", "Start date", "End date", "Принятая мера", "Task ID",
           "CVE ID", "Task state", "Task date", "Исполнитель", "Компонент", "P", "D",
           "SL NVR (latest build)", "RHEL NVR (if fixed)", "Fix date", "RHEL state",
-          "RHEL severity", "RHEL CVSS", "Advisory (RHSA)", "CVE link", "Комментарий"]
+          "RHEL severity", "RHEL CVSS", "Advisory (RHSA)", "CVE link",
+          "ai_nvr", "ai_verdict", "ai_confidence", "ai_remediation", "ai_run", "Комментарий"]
 ROW = ["Иванов И.И.", "Готов", "01.10.2026", "03.10.2026", "Патч из апстрима", "TASKID-1",
        "CVE-2026-1", "Выполнена", "28.09.2026", "КМ", "openssl", "+", "-",
        "openssl-3.2.2-6.sl9", "-", "-", "Affected", "Important", "7.5", "-",
-       "https://access.redhat.com/security/cve/CVE-2026-1", "-"]
+       "https://access.redhat.com/security/cve/CVE-2026-1",
+       "openssl-3.2.2-7.el9", "affected", "high", "backport prepared", "21.10.2026", "-"]
 EXPECTED = {"row": 2, "dev": "Иванов И.И.", "status": "Готов", "start": "2026-10-01",
             "end": "2026-10-03", "measure": "Патч из апстрима", "task": "TASKID-1",
             "cve": "CVE-2026-1", "tdate": "2026-09-28", "exec": "КМ", "comp": "openssl",
             "p": "+", "d": "", "slnvr": "openssl-3.2.2-6.sl9", "rhnvr": "", "fixdate": "",
             "rstate": "Affected", "sev": "Important", "cvss": "7.5", "rhsa": "",
             "link": "https://access.redhat.com/security/cve/CVE-2026-1", "comment": "",
-            "bad": []}
+            "ai_verdict": "affected", "ai_run": "2026-10-21", "bad": []}
 REQUIRED = ["CVE ID", "Компонент", "RHEL state", "RHEL severity"]
 
 
@@ -121,6 +123,13 @@ class DatesTest(unittest.TestCase):
                 self.assertEqual(result.rows[0]["start"], text)
                 self.assertEqual(result.rows[0]["bad"], ["start"])
                 self.assertEqual(result.bad_dates, 1)
+
+    def test_ai_run_is_a_date(self):
+        head = REQUIRED + ["ai_verdict", "ai_run"]
+        for text in ("21.10.2026", "2026-10-21T12:04"):
+            with self.subTest(text=text):
+                got = one(head, ["CVE-1", "bash", "Affected", "Low", "affected", text])
+                self.assertEqual((got["ai_verdict"], got["ai_run"]), ("affected", "2026-10-21"))
 
     def test_time_after_text_date_is_dropped(self):
         self.assertEqual(self.start("19.10.2026 14:30")["start"], "2026-10-19")

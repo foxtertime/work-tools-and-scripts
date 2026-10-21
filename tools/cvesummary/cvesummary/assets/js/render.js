@@ -3,7 +3,7 @@
    hours, pace, timeline, nav, strips; здесь только DOM. */
 (function () {
   'use strict';
-  const { dates, roles, hours: Hm, pace, timeline, nav, strips } = window.CS;
+  const { dates, roles, hours: Hm, pace, timeline, nav, strips, ai } = window.CS;
   const DATA = JSON.parse(document.getElementById('data').textContent);
   const AS_OF = dates.dayOf(DATA.meta.as_of);
   const NS = 'http://www.w3.org/2000/svg';
@@ -1007,6 +1007,49 @@
     }
   }
 
+  /* AI-покрытие: сколько пар CVE + компонент прогнано через AI и сколько
+     осталось, всего и по группам шапки (модуль ai) */
+  function renderAi() {
+    const box = $('ai-rows'), strip = $('aistrip'), total = $('ai-total');
+    box.replaceChildren(); strip.replaceChildren(); total.replaceChildren();
+    const none = DATA.meta.missing.includes('ai_verdict');
+    strip.hidden = box.hidden = total.hidden = none;
+    if (none) { $('ai-sub').textContent = 'В таблице нет данных AI: нет колонки ai_verdict.'; return; }
+    const C = ai.coverage(recs, r => (r.done ? 'done' : r.reasons.length ? 'ready' : 'none'));
+    const last = ai.lastRun(recs), left = C.total - C.covered, pc = (k, n) => (n ? Math.round(k / n * 100) : 0);
+    $('ai-sub').textContent = 'пары CVE + компонент, по которым есть отчёт AI' + (last ? ` · последний прогон ${fmt(dates.dayOf(last))}` : '');
+    const s = el('span', 's', `осталось прогнать из ${C.total} · прогнано `);
+    s.append(el('b', null, String(C.covered)), ` (${pc(C.covered, C.total)}%)`);
+    total.append(el('span', 'n', String(left)), s);
+    const LITE = 'color-mix(in srgb, var(--accent) 30%, var(--panel))';
+    const part = (n, lite, tip) => { const sp = el('span'); sp.style.flexGrow = n; sp.style.background = lite ? LITE : css('--accent'); sp.dataset.tip = tip; return sp; };
+    if (C.covered) strip.append(part(C.covered, false, `Прогнано: ${C.covered} из ${C.total}`));
+    if (left) strip.append(part(left, true, `Осталось: ${left} из ${C.total}`));
+
+    const mob = matchMedia('(max-width:560px)').matches;
+    /* седьмая колонка сетки пустая; на телефоне её нет — четырём числам
+       нужно место под подписи */
+    [['Состояние', 'h l'], ['', 'h bar'], ['Всего', 'h'], ['Прогнано', 'h'], ['Осталось', 'h'], ['% прогнано', 'h'], ...(mob ? [] : [['', 'h']])].forEach(([x, c]) => {
+      const h = el('div', c, x);
+      if (c === 'h bar') { const lg = el('div', 'cve-leg'); const a = el('span'); const i1 = el('i'); i1.style.background = css('--accent'); a.append(i1, 'прогнано'); const b = el('span'); const i2 = el('i', 'lite'); i2.style.background = css('--accent'); b.append(i2, 'осталось'); lg.append(a, b); h.append(lg); }
+      box.append(h);
+    });
+    const G = [['done', 'Готово', '--st-done'], ['none', 'Без решения', '--rs-none'], ['ready', 'Можно закрыть', '--rs-fixed']]
+      .map(([g, k, c]) => Object.assign({ k, c }, C.groups[g])).filter(g => g.total);
+    if (!G.length) { const e = el('div', 'p', 'Нет данных'); e.style.gridColumn = '1/-1'; e.style.textAlign = 'left'; box.append(e); return; }
+    const mx = maxOf(G.map(g => g.total), 1);
+    for (const g of G) {
+      const rest = g.total - g.covered;
+      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.k); k.title = g.k;
+      const b = el('div', 'b'); const w = el('span'); w.style.width = (g.total / mx * 100) + '%';
+      const c1 = el('span'); c1.style.flexGrow = g.covered; c1.style.background = css('--accent');
+      const c2 = el('span'); c2.style.flexGrow = rest; c2.style.background = css('--accent'); c2.style.opacity = '.3';
+      w.append(c1, c2); b.append(w); b.dataset.tip = `${g.k}: прогнано ${g.covered}, осталось ${rest}`;
+      const cells = [k, b, el('div', 'n', String(g.total)), el('div', 'n', String(g.covered)), el('div', 'n', String(rest)), el('div', 'p', pc(g.covered, g.total) + '%')];
+      if (mob) box.append(cells[0], ...cells.slice(2), cells[1]); else box.append(...cells, el('div', 'p'));
+    }
+  }
+
   /* подписи на полосах состава в блоках (доли) и у разработчиков (числа);
      влезут ли — решает fitLabels. Цвет подписи зависит от темы — при её
      смене пересчитывается */
@@ -1023,7 +1066,7 @@
   function render() {
     renderHead(); renderCuts(); renderTables(); renderBars();
     const W = renderPace();
-    renderPeople(W); renderAnomalies();
+    renderPeople(W); renderAnomalies(); renderAi();
     labelStrips(); fitLabels(); navSync();
   }
 
