@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-21
+
+### Добавлено
+
+- `vulnsheet` (3.0.0): вход `--ai` — JSON с AI-вердиктами. Его результаты
+  по паре CVE + компонент ложатся в пять новых колонок перед
+  `Комментарий`: `ai_nvr`, `ai_verdict`, `ai_confidence`, `ai_remediation`,
+  `ai_run`; без данных — `-`. Несовместимо: в таблице теперь 27 колонок,
+  vulnsheet 2.x её не прочитает; таблицы 2.x новая версия читает и
+  вставляет в них колонки `ai_*`.
+
+### Исправлено
+
+- `cvesummary` (1.12.1): на Burn-up и Burn-down закрашено окно расчёта
+  темпа, как на «Потоке».
+
 ## [0.17.0] - 2026-10-20
 
 ### Изменено
@@ -322,7 +338,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.14.0...v0.15.0
