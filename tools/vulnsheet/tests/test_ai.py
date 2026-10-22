@@ -15,7 +15,7 @@ POLKIT = {"cve": "CVE-2025-7519", "package": "polkit", "nvr": "polkit-0.117-14.e
 
 
 def doc(*results, **top):
-    body = {"format": 1, "plugin": "4.0.0", "generated": "2026-10-21T12:31:00+03:00",
+    body = {"format": 1, "plugin": "4.0.0", "run": "2026-10-22T07:45",
             "results": list(results)}
     body.update(top)
     return body
@@ -47,9 +47,22 @@ class ReadTest(unittest.TestCase):
             ("CVE-2025-7519", "polkit"): ("polkit-0.117-14.el9", "affected", "high",
                                           "backport prepared", "21.10.2026"),
         })
-        self.assertEqual((found.plugin, found.generated, found.total),
-                         ("4.0.0", "2026-10-21T12:31:00+03:00", 2))
+        self.assertEqual((found.plugin, found.run, found.total),
+                         ("4.0.0", "2026-10-22T07:45", 2))
         self.assertEqual((found.skipped, found.repeated), ((), 0))
+
+    def test_file_time_falls_back_to_generated(self):
+        body = doc(GLIBC)
+        del body["run"]
+        body["generated"] = "2026-10-21T12:31:00+03:00"
+        self.assertEqual(read(self.write(body)).run, "2026-10-21T12:31:00+03:00")
+        del body["generated"]
+        self.assertIsNone(read(self.write(body)).run)
+
+    def test_em_dash_is_an_empty_value(self):
+        entry = dict(GLIBC, remediation="—", confidence=" — ")
+        cells = read(self.write(doc(entry))).cells[("CVE-2026-6368", "glibc")]
+        self.assertEqual((cells[2], cells[3]), ("-", "-"))
 
     def test_cve_and_package_are_matched_like_table_rows(self):
         entry = dict(GLIBC, cve=" cve-2026-6368 ", package=" glibc ")

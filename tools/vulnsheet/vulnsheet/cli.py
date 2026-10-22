@@ -387,7 +387,8 @@ def _header(args, cfg, run) -> None:
         logger.info("AI: файл не подан — колонки ai_* не обновляются")
     else:
         meta = ", ".join(part for part in (
-            run.ai.plugin and "plugin %s" % run.ai.plugin, run.ai.generated) if part)
+            run.ai.plugin and "plugin %s" % run.ai.plugin,
+            run.ai.run and "прогон %s" % run.ai.run) if part)
         logger.info("AI: %s%s, результатов %d", args.ai, " (%s)" % meta if meta else "",
                     run.ai.total)
     if not run.packages:
