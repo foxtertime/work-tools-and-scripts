@@ -493,6 +493,12 @@
     row(rk, 'Есть проблема / нужна доработка', `${problem} + ${rework}`, recs.filter(r => r.attention).length);
     const s = Hm.summary(closedWithHours(recs));
     row(rk, 'Часов на задачу', s.n ? `медиана ${f1(s.median)}` : 'закрытых с датами нет', s.n ? f1(s.mean) : '—', null, s.n ? `по\u00a0${s.n} ${plural(s.n, 'закрытой задаче', 'закрытым задачам', 'закрытым задачам')} за всё время` : '');
+    /* темп закрытия команды, как в «Темпе и прогнозе»: закрытые «Готов» по
+       End date на рабочий день — за всё время с начала работы и за период
+       темпа (он уже посчитан: renderPace идёт раньше) */
+    const all = pace.rates(recs, AS_OF, Infinity, START), win = paceCtx.R, closedAll = Math.round(all.outR * all.work);
+    row(rk, 'Задач в день', `за период темпа ${f1(win.outR)}`, closedAll ? f1(all.outR) : '—', null,
+      `Закрыто в рабочий день: за всё время ${f1(all.outR)} (${closedAll} ${plural(closedAll, 'задача', 'задачи', 'задач')} за ${all.work} ${plural(all.work, 'рабочий день', 'рабочих дня', 'рабочих дней')}), за период темпа ${fmt(paceCtx.WINDOW.from)} — ${fmt(paceCtx.WINDOW.to)} — ${f1(win.outR)}`);
 
     const P = recs.filter(r => String(r.p).trim() === '+').length, D = recs.filter(r => String(r.d).trim() === '+').length;
     $('pd').textContent = `P отмечен у ${P}, D у ${D} из ${N} задач`;
@@ -1116,8 +1122,9 @@
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { labelStrips(); fitLabels(); });
 
   function render() {
-    renderHead(); renderCuts(); renderTables(); renderBars();
+    /* темп — первым: строка «Задач в день» в шапке берёт его период */
     const W = renderPace();
+    renderHead(); renderCuts(); renderTables(); renderBars();
     renderPeople(W); renderAnomalies(); stripCaps = []; renderAi(); renderRemediation();
     labelStrips(); fitLabels(); navSync();
   }
