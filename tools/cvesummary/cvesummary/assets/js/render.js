@@ -518,7 +518,7 @@
     for (const g of groups) {
       const n = g.recs.length, closed = g.recs.filter(r => r.done).length, opn = g.recs.filter(r => r.open).length;
       const s = Hm.summary(closedWithHours(g.recs));
-      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.k); k.title = g.k;
+      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.k); k.title = g.k; k.dataset.key = g.k;
       const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
       const c1 = el('span'); c1.style.flexGrow = closed; c1.style.background = css(g.c);
       const c2 = el('span'); c2.style.flexGrow = n - closed; c2.style.background = css(g.c); c2.style.opacity = '.3';
@@ -540,7 +540,7 @@
     for (const g of groups) {
       const n = g.recs.length, devs = new Set(g.recs.map(r => r.devKey).filter(Boolean)).size;
       const hrs = g.recs.map(r => r.hours).filter(h => h !== null), sum = hrs.reduce((a, h) => a + h, 0);
-      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.k); k.title = g.k;
+      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.k); k.title = g.k; k.dataset.key = g.k;
       const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
       const c1 = el('span'); c1.style.flexGrow = 1; c1.style.background = css(g.c); w.append(c1); b.append(w);
       b.dataset.tip = `${g.k}: ${n} из ${N}`;
@@ -555,12 +555,12 @@
     const N = recs.length;
     const sevC = SEV.map(s => Object.assign({}, s, { recs: recs.filter(r => r.sevN === s.k) }));
     const strip = $('sevstrip'); strip.replaceChildren();
-    for (const s of sevC) { if (!s.recs.length) continue; const sp = el('span'); sp.style.flexGrow = s.recs.length; sp.style.background = css(s.c); sp.dataset.tip = `${s.k}: ${s.recs.length} (${Math.round(s.recs.length / N * 100)}%)`; strip.append(sp); }
+    for (const s of sevC) { if (!s.recs.length) continue; const sp = el('span'); sp.style.flexGrow = s.recs.length; sp.style.background = css(s.c); sp.dataset.tip = `${s.k}: ${s.recs.length} (${Math.round(s.recs.length / N * 100)}%)`; sp.dataset.key = s.k; strip.append(sp); }
     statTable('sevrows', 'Критичность', sevC);
     const mg = MEAS_KEYS.filter(k => k !== roles.NO_MEASURE).map(k => ({ k, c: measColor(k), recs: recs.filter(r => r.measureN === k) }));
     statTable('measrows', 'Мера', mg, true);
     const st = $('measstrip'); st.replaceChildren(); const tot = mg.reduce((a, g) => a + g.recs.length, 0);
-    for (const g of mg) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${tot ? Math.round(g.recs.length / tot * 100) : 0}%)`; st.append(sp); }
+    for (const g of mg) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${tot ? Math.round(g.recs.length / tot * 100) : 0}%)`; sp.dataset.key = g.k; st.append(sp); }
   }
 
   function pill(r) { const p = el('span', 'pill'); const i = el('i'); i.style.background = css(sevColor(r.sevN)); p.append(i, r.sevN); const td = el('td'); td.append(p); return td; }
@@ -585,7 +585,7 @@
     for (const g of rows) {
       const n = g.recs.length, taken = g.recs.filter(r => r.taken).length;
       const hours = g.recs.reduce((a, r) => a + (r.hours || 0), 0);
-      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.label); k.dataset.tip = `${g.label}: ${g.rule}`;
+      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.label); k.dataset.tip = `${g.label}: ${g.rule}`; k.dataset.key = g.label;
       const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
       const c1 = el('span'); c1.style.flexGrow = taken; c1.style.background = css(g.c);
       const c2 = el('span'); c2.style.flexGrow = n - taken; c2.style.background = css(g.c); c2.style.opacity = '.3';
@@ -673,7 +673,7 @@
        с готово/открыто и часами; у RHEL ещё полоса состава */
     const strip = (id, groups) => {
       const st = $(id); st.replaceChildren(); const N = recs.length;
-      for (const g of groups) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${N ? Math.round(g.recs.length / N * 100) : 0}%)`; st.append(sp); }
+      for (const g of groups) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${N ? Math.round(g.recs.length / N * 100) : 0}%)`; sp.dataset.key = g.k; st.append(sp); }
     };
     const rg = count(recs, verdictOf).map(([k]) => ({ k, c: verdictColor(k), recs: recs.filter(r => verdictOf(r) === k) }))
       .sort((a, b) => (a.k === NO_VERDICT) - (b.k === NO_VERDICT));
@@ -1049,10 +1049,10 @@
       const li = el('span'); li.hidden = true; li.append(`${AI_GROUP_LABEL[g]} `, el('b', null, String(n))); lg.append(li);
       stripCaps.push([cap, li]);
     }
-    for (const x of shown) { const sp = el('span'); sp.style.flexGrow = x.n; sp.style.background = x.c.startsWith('--') ? css(x.c) : x.c; sp.dataset.tip = x.tip; strip.append(sp); }
+    for (const x of shown) { const sp = el('span'); sp.style.flexGrow = x.n; sp.style.background = x.c.startsWith('--') ? css(x.c) : x.c; sp.dataset.tip = x.tip; sp.dataset.key = x.k; strip.append(sp); }
   }
   function aiRow(box, mob, name, c, n, mx, segs, cells, tip) {
-    const k = el('div', 'k'); const i = el('i'); i.style.background = c.startsWith('--') ? css(c) : c; k.append(i, name); k.title = name;
+    const k = el('div', 'k'); const i = el('i'); i.style.background = c.startsWith('--') ? css(c) : c; k.append(i, name); k.title = name; k.dataset.key = name;
     const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
     for (const [g, op] of segs) { const sp = el('span'); sp.style.flexGrow = g; sp.style.background = c.startsWith('--') ? css(c) : c; if (op < 1) sp.style.opacity = String(op); w.append(sp); }
     b.append(w); b.dataset.tip = tip;
@@ -1107,6 +1107,29 @@
     const mx = maxOf(rows.map(r => r[2]), 1);
     for (const [k, c, n, , tip] of rows) aiRow(box, mob, k, c, n, mx, [[1, 1]], [el('div', 'n c3', String(n)), el('div', 'p c7', pc(n) + '%')], tip);
   }
+
+  /* Подсветка в разрезах: курсор на строке (на любой её ячейке) или на
+     сегменте полосы над строками — строка целиком и её сегмент остаются
+     яркими, остальные строки и сегменты бледнеют. Строка — ячейки .cve-rows
+     от названия до следующего (strips.rows); сегмент и строка связаны
+     ключом data-key; полоса — в той же .cve-grid, что строки */
+  let dimmed = [];
+  function undim() { for (const e of dimmed) e.classList.remove('dim'); dimmed = []; }
+  function dim(els) { for (const e of els) { e.classList.add('dim'); dimmed.push(e); } }
+  document.addEventListener('mouseover', ev => {
+    undim();
+    const t = ev.target, seg = t.closest('main .sevstrip > span');
+    const box = t.closest('.cve-rows') || (seg && seg.closest('.cve-grid') && seg.closest('.cve-grid').querySelector('.cve-rows'));
+    const strip = seg ? seg.parentNode : box && box.closest('.cve-grid') && box.closest('.cve-grid').querySelector('.sevstrip');
+    const cells = box ? [...box.children] : [];
+    const rows = strips.rows(cells, c => c.classList.contains('k'), c => c.classList.contains('h')).map(ix => ix.map(i => cells[i]));
+    let row = null, key = null;
+    if (seg) { key = seg.dataset.key; row = rows.find(r => r[0].dataset.key === key) || null; }
+    else { row = rows.find(r => r.some(c => c.contains(t))) || null; if (!row) return; key = row[0].dataset.key; }
+    dim(rows.filter(r => r !== row).flat());
+    if (strip) dim([...strip.children].filter(s => seg ? s !== seg : s.dataset.key !== key));
+  });
+  document.addEventListener('mouseout', ev => { if (!ev.relatedTarget) undim(); });
 
   /* подписи на полосах состава в блоках (доли) и у разработчиков (числа);
      влезут ли — решает fitLabels. Цвет подписи зависит от темы — при её

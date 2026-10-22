@@ -396,11 +396,12 @@ img{max-width:100%}
 .hl,.mixbar span,.sevstrip span,.pbar span,.hbars .track span span,.cve-rows .b,.kv .b{transition:opacity .1s}
 .hlg:has(.hl:hover) .hl:not(:hover),
 .mixbar:has(span:hover) span:not(:hover),
-.sevstrip:has(span:hover) span:not(:hover),
 .pbar:has(span:hover) span:not(:hover),
 .hbars:has(.track span span:hover) .track span span:not(:hover),
-.cve-rows:has(.b:hover) .b:not(:hover),
 .kv:has(.b:hover) .b:not(:hover){opacity:.45}
+/* строки и сегменты разрезов бледнит render.js (подсветка строки целиком) */
+.cve-rows > *,.sevstrip > span{transition:opacity .1s}
+.cve-rows > .dim,main .sevstrip > .dim{opacity:.3}
 .tl .mark{pointer-events:none;visibility:hidden}
 .tl .mark.on{visibility:visible}
 .tl .mark .guide{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
