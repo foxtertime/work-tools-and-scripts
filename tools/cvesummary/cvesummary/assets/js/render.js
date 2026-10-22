@@ -402,7 +402,7 @@
   const clipped = e => [e, ...e.children].some(x => x.scrollWidth > x.clientWidth + 0.5);
   let heroCaps = [];
   function fitLabels() {
-    for (const [cap, li] of heroCaps) {
+    for (const [cap, li] of [...heroCaps, ...stripCaps]) {
       cap.classList.remove('off');
       const off = clipped(cap);
       cap.classList.toggle('off', off); li.hidden = !off;
@@ -491,10 +491,14 @@
     const rk = $('hero-risk'); rk.replaceChildren();
     const problem = recs.filter(r => roles.norm(r.status) === 'есть проблема').length, rework = recs.filter(r => roles.norm(r.status) === 'нужна доработка').length;
     row(rk, 'Есть проблема / нужна доработка', `${problem} + ${rework}`, recs.filter(r => r.attention).length);
-    const crit = open.filter(r => r.sevN === 'Critical').length, imp = open.filter(r => r.sevN === 'Important').length;
-    row(rk, 'Critical и Important открыты', `${crit} + ${imp}`, crit + imp);
     const s = Hm.summary(closedWithHours(recs));
     row(rk, 'Часов на задачу', s.n ? `медиана ${f1(s.median)}` : 'закрытых с датами нет', s.n ? f1(s.mean) : '—', null, s.n ? `по\u00a0${s.n} ${plural(s.n, 'закрытой задаче', 'закрытым задачам', 'закрытым задачам')} за всё время` : '');
+    /* темп закрытия команды, как в «Темпе и прогнозе»: закрытые «Готов» по
+       End date на рабочий день — за всё время с начала работы и за период
+       темпа (он уже посчитан: renderPace идёт раньше) */
+    const all = pace.rates(recs, AS_OF, Infinity, START), win = paceCtx.R, closedAll = Math.round(all.outR * all.work);
+    row(rk, 'Задач в день', `за период темпа ${f1(win.outR)}`, closedAll ? f1(all.outR) : '—', null,
+      `Закрыто в рабочий день: за всё время ${f1(all.outR)} (${closedAll} ${plural(closedAll, 'задача', 'задачи', 'задач')} за ${all.work} ${plural(all.work, 'рабочий день', 'рабочих дня', 'рабочих дней')}), за период темпа ${fmt(paceCtx.WINDOW.from)} — ${fmt(paceCtx.WINDOW.to)} — ${f1(win.outR)}`);
 
     const P = recs.filter(r => String(r.p).trim() === '+').length, D = recs.filter(r => String(r.d).trim() === '+').length;
     $('pd').textContent = `P отмечен у ${P}, D у ${D} из ${N} задач`;
@@ -514,7 +518,7 @@
     for (const g of groups) {
       const n = g.recs.length, closed = g.recs.filter(r => r.done).length, opn = g.recs.filter(r => r.open).length;
       const s = Hm.summary(closedWithHours(g.recs));
-      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.k); k.title = g.k;
+      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.k); k.title = g.k; k.dataset.key = g.k;
       const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
       const c1 = el('span'); c1.style.flexGrow = closed; c1.style.background = css(g.c);
       const c2 = el('span'); c2.style.flexGrow = n - closed; c2.style.background = css(g.c); c2.style.opacity = '.3';
@@ -536,7 +540,7 @@
     for (const g of groups) {
       const n = g.recs.length, devs = new Set(g.recs.map(r => r.devKey).filter(Boolean)).size;
       const hrs = g.recs.map(r => r.hours).filter(h => h !== null), sum = hrs.reduce((a, h) => a + h, 0);
-      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.k); k.title = g.k;
+      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.k); k.title = g.k; k.dataset.key = g.k;
       const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
       const c1 = el('span'); c1.style.flexGrow = 1; c1.style.background = css(g.c); w.append(c1); b.append(w);
       b.dataset.tip = `${g.k}: ${n} из ${N}`;
@@ -551,12 +555,12 @@
     const N = recs.length;
     const sevC = SEV.map(s => Object.assign({}, s, { recs: recs.filter(r => r.sevN === s.k) }));
     const strip = $('sevstrip'); strip.replaceChildren();
-    for (const s of sevC) { if (!s.recs.length) continue; const sp = el('span'); sp.style.flexGrow = s.recs.length; sp.style.background = css(s.c); sp.dataset.tip = `${s.k}: ${s.recs.length} (${Math.round(s.recs.length / N * 100)}%)`; strip.append(sp); }
+    for (const s of sevC) { if (!s.recs.length) continue; const sp = el('span'); sp.style.flexGrow = s.recs.length; sp.style.background = css(s.c); sp.dataset.tip = `${s.k}: ${s.recs.length} (${Math.round(s.recs.length / N * 100)}%)`; sp.dataset.key = s.k; strip.append(sp); }
     statTable('sevrows', 'Критичность', sevC);
     const mg = MEAS_KEYS.filter(k => k !== roles.NO_MEASURE).map(k => ({ k, c: measColor(k), recs: recs.filter(r => r.measureN === k) }));
     statTable('measrows', 'Мера', mg, true);
     const st = $('measstrip'); st.replaceChildren(); const tot = mg.reduce((a, g) => a + g.recs.length, 0);
-    for (const g of mg) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${tot ? Math.round(g.recs.length / tot * 100) : 0}%)`; st.append(sp); }
+    for (const g of mg) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${tot ? Math.round(g.recs.length / tot * 100) : 0}%)`; sp.dataset.key = g.k; st.append(sp); }
   }
 
   function pill(r) { const p = el('span', 'pill'); const i = el('i'); i.style.background = css(sevColor(r.sevN)); p.append(i, r.sevN); const td = el('td'); td.append(p); return td; }
@@ -581,7 +585,7 @@
     for (const g of rows) {
       const n = g.recs.length, taken = g.recs.filter(r => r.taken).length;
       const hours = g.recs.reduce((a, r) => a + (r.hours || 0), 0);
-      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.label); k.dataset.tip = `${g.label}: ${g.rule}`;
+      const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.label); k.dataset.tip = `${g.label}: ${g.rule}`; k.dataset.key = g.label;
       const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
       const c1 = el('span'); c1.style.flexGrow = taken; c1.style.background = css(g.c);
       const c2 = el('span'); c2.style.flexGrow = n - taken; c2.style.background = css(g.c); c2.style.opacity = '.3';
@@ -669,7 +673,7 @@
        с готово/открыто и часами; у RHEL ещё полоса состава */
     const strip = (id, groups) => {
       const st = $(id); st.replaceChildren(); const N = recs.length;
-      for (const g of groups) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${N ? Math.round(g.recs.length / N * 100) : 0}%)`; st.append(sp); }
+      for (const g of groups) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${N ? Math.round(g.recs.length / N * 100) : 0}%)`; sp.dataset.key = g.k; st.append(sp); }
     };
     const rg = count(recs, verdictOf).map(([k]) => ({ k, c: verdictColor(k), recs: recs.filter(r => verdictOf(r) === k) }))
       .sort((a, b) => (a.k === NO_VERDICT) - (b.k === NO_VERDICT));
@@ -1025,13 +1029,30 @@
     if (none) $(sub).textContent = `В таблице нет данных AI: нет колонки ${col}.`;
     return none;
   }
-  /* сегмент полосы состава; c — токен или готовый цвет */
-  function aiPart(strip, n, c, tip) {
-    if (!n) return;
-    const sp = el('span'); sp.style.flexGrow = n; sp.style.background = c.startsWith('--') ? css(c) : c; sp.dataset.tip = tip; strip.append(sp);
+  /* Полоса по группам: сегменты {k, c, n, g, tip} в порядке групп; над
+     ними — скобки групп на той же сетке, что полоса (колонка на сегмент),
+     как в шапке. Подпись скобки — если влезает целиком, иначе — в легенде
+     под полосой (fitLabels); скобка — всегда. c — токен или готовый цвет */
+  const AI_GROUP_LABEL = { maybe: 'возможно затронуто', no: 'не затронуто', none: 'не прогнано' };
+  let stripCaps = [];
+  function groupedStrip(groupsId, stripId, legId, segs, total) {
+    const gb = $(groupsId), strip = $(stripId), lg = $(legId);
+    const shown = segs.filter(x => x.n), pc = n => (total ? Math.round(n / total * 100) : 0);
+    gb.style.gridTemplateColumns = strip.style.gridTemplateColumns = shown.map(x => `minmax(3px,${x.n}fr)`).join(' ');
+    for (const g of ai.GROUPS) {
+      const mine = shown.filter(x => x.g === g), n = mine.reduce((a, x) => a + x.n, 0);
+      if (!n) continue;
+      const d = el('div'); d.style.gridColumn = `span ${mine.length}`;
+      const cap = el('div', 'cap'); cap.append(el('b', null, String(n)), el('span', null, `${AI_GROUP_LABEL[g]} · ${pc(n)}%`));
+      cap.dataset.tip = `${AI_GROUP_LABEL[g]}: ${n} из ${total} (${pc(n)}%)`;
+      d.append(cap, el('div', 'br')); gb.append(d);
+      const li = el('span'); li.hidden = true; li.append(`${AI_GROUP_LABEL[g]} `, el('b', null, String(n))); lg.append(li);
+      stripCaps.push([cap, li]);
+    }
+    for (const x of shown) { const sp = el('span'); sp.style.flexGrow = x.n; sp.style.background = x.c.startsWith('--') ? css(x.c) : x.c; sp.dataset.tip = x.tip; sp.dataset.key = x.k; strip.append(sp); }
   }
   function aiRow(box, mob, name, c, n, mx, segs, cells, tip) {
-    const k = el('div', 'k'); const i = el('i'); i.style.background = c.startsWith('--') ? css(c) : c; k.append(i, name); k.title = name;
+    const k = el('div', 'k'); const i = el('i'); i.style.background = c.startsWith('--') ? css(c) : c; k.append(i, name); k.title = name; k.dataset.key = name;
     const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
     for (const [g, op] of segs) { const sp = el('span'); sp.style.flexGrow = g; sp.style.background = c.startsWith('--') ? css(c) : c; if (op < 1) sp.style.opacity = String(op); w.append(sp); }
     b.append(w); b.dataset.tip = tip;
@@ -1039,17 +1060,17 @@
   }
 
   function renderAi() {
-    const box = $('ai-rows'), strip = $('aistrip'), total = $('ai-total');
-    box.replaceChildren(); strip.replaceChildren(); total.replaceChildren();
-    if (aiMissing('ai_verdict', ['ai-rows', 'aistrip', 'ai-total'], 'ai-sub')) return;
+    const box = $('ai-rows'), total = $('ai-total');
+    for (const x of [box, total, $('aistrip'), $('ai-groups'), $('ai-leg')]) x.replaceChildren();
+    if (aiMissing('ai_verdict', ['ai-rows', 'ai-total', 'aistrip', 'ai-groups', 'ai-leg'], 'ai-sub')) return;
     const S = aiSum(), pc = n => (S.total ? Math.round(n / S.total * 100) : 0);
     $('ai-sub').textContent = 'пары CVE + компонент: что сказал AI и сколько ещё не прогнано' + (S.last ? ` · последний прогон ${fmt(dates.dayOf(S.last))}` : '');
     const s = el('span', 's', `осталось прогнать из ${S.total} · прогнано `);
     s.append(el('b', null, String(S.run)), ` (${pc(S.run)}%)`);
     total.append(el('span', 'n', String(S.left)), s);
     const color = v => AI_VERDICT_COLOR[v.k] || AI_OTHER;
-    for (const v of S.verdicts) aiPart(strip, v.n, color(v), `${v.k}: ${v.n} из ${S.total}`);
-    aiPart(strip, S.notRun, AI_NOTRUN, `не прогнано: ${S.notRun} из ${S.total}`);
+    groupedStrip('ai-groups', 'aistrip', 'ai-leg', [...S.verdicts.map(v => ({ k: v.k, c: color(v), n: v.n, g: v.g, tip: `${v.k}: ${v.n} из ${S.total}` })),
+      { k: 'не прогнано', c: AI_NOTRUN, n: S.notRun, g: 'none', tip: `не прогнано: ${S.notRun} из ${S.total}` }], S.total);
 
     const mob = matchMedia('(max-width:560px)').matches;
     [['Вердикт AI', 'h l'], ['', 'h bar'], ['Пар', 'h'], ['High', 'h'], ['Medium', 'h'], ['Low', 'h'], ['% от всех', 'h']].forEach(([x, c]) => {
@@ -1070,21 +1091,45 @@
   }
 
   function renderRemediation() {
-    const box = $('rem-rows'), strip = $('remstrip');
-    box.replaceChildren(); strip.replaceChildren();
-    if (aiMissing('ai_verdict', ['rem-rows', 'remstrip'], 'rem-sub') || aiMissing('ai_remediation', ['rem-rows', 'remstrip'], 'rem-sub')) return;
+    const box = $('rem-rows'), ids = ['rem-rows', 'remstrip', 'rem-groups', 'rem-leg'];
+    for (const id of ids) $(id).replaceChildren();
+    if (aiMissing('ai_verdict', ids, 'rem-sub') || aiMissing('ai_remediation', ids, 'rem-sub')) return;
     const S = aiSum(), pc = n => (S.total ? Math.round(n / S.total * 100) : 0);
-    const rows = [...S.remediations.map(r => [r.k, AI_REM_COLOR[r.k] || AI_OTHER, r.n, `${r.k}: ${r.n} из ${S.total}`]),
-      ['не указана', AI_OTHER, S.noRemediation, `remediation не указана: ${S.noRemediation} из ${S.total}`],
-      [`нет (${ai.NOT_PROCESSED})`, AI_VERDICT_COLOR[ai.NOT_PROCESSED], S.notProcessed, `${ai.NOT_PROCESSED}: ${S.notProcessed} — remediation нет`],
-      ['не прогнано', AI_NOTRUN, S.notRun, `не прогнано: ${S.notRun} из ${S.total}`]].filter(r => r[2]);
-    for (const [, c, n, tip] of rows) aiPart(strip, n, c, tip);
+    /* пустая remediation — «не указана», в группе вердикта пары */
+    const rows = [...S.remediations.map(r => r.k ? [r.k, AI_REM_COLOR[r.k] || AI_OTHER, r.n, r.g, `${r.k}: ${r.n} из ${S.total}`]
+      : ['не указана', AI_OTHER, r.n, r.g, `remediation не указана (${AI_GROUP_LABEL[r.g]}): ${r.n} из ${S.total}`]),
+      [`нет (${ai.NOT_PROCESSED})`, AI_VERDICT_COLOR[ai.NOT_PROCESSED], S.notProcessed, 'none', `${ai.NOT_PROCESSED}: ${S.notProcessed} — remediation нет`],
+      ['не прогнано', AI_NOTRUN, S.notRun, 'none', `не прогнано: ${S.notRun} из ${S.total}`]].filter(r => r[2]);
+    groupedStrip('rem-groups', 'remstrip', 'rem-leg', rows.map(([k, c, n, g, tip]) => ({ k, c, n, g, tip })), S.total);
     const mob = matchMedia('(max-width:560px)').matches;
     [['Remediation', 'h l'], ['', 'h bar'], ['Пар', 'h c3'], ['% от всех', 'h c7']].forEach(([x, c]) => box.append(el('div', c, x)));
     if (!rows.length) { const e = el('div', 'p', 'Нет данных'); e.style.gridColumn = '1/-1'; e.style.textAlign = 'left'; box.append(e); return; }
     const mx = maxOf(rows.map(r => r[2]), 1);
-    for (const [k, c, n, tip] of rows) aiRow(box, mob, k, c, n, mx, [[1, 1]], [el('div', 'n c3', String(n)), el('div', 'p c7', pc(n) + '%')], tip);
+    for (const [k, c, n, , tip] of rows) aiRow(box, mob, k, c, n, mx, [[1, 1]], [el('div', 'n c3', String(n)), el('div', 'p c7', pc(n) + '%')], tip);
   }
+
+  /* Подсветка в разрезах: курсор на строке (на любой её ячейке) или на
+     сегменте полосы над строками — строка целиком и её сегмент остаются
+     яркими, остальные строки и сегменты бледнеют. Строка — ячейки .cve-rows
+     от названия до следующего (strips.rows); сегмент и строка связаны
+     ключом data-key; полоса — в той же .cve-grid, что строки */
+  let dimmed = [];
+  function undim() { for (const e of dimmed) e.classList.remove('dim'); dimmed = []; }
+  function dim(els) { for (const e of els) { e.classList.add('dim'); dimmed.push(e); } }
+  document.addEventListener('mouseover', ev => {
+    undim();
+    const t = ev.target, seg = t.closest('main .sevstrip > span');
+    const box = t.closest('.cve-rows') || (seg && seg.closest('.cve-grid') && seg.closest('.cve-grid').querySelector('.cve-rows'));
+    const strip = seg ? seg.parentNode : box && box.closest('.cve-grid') && box.closest('.cve-grid').querySelector('.sevstrip');
+    const cells = box ? [...box.children] : [];
+    const rows = strips.rows(cells, c => c.classList.contains('k'), c => c.classList.contains('h')).map(ix => ix.map(i => cells[i]));
+    let row = null, key = null;
+    if (seg) { key = seg.dataset.key; row = rows.find(r => r[0].dataset.key === key) || null; }
+    else { row = rows.find(r => r.some(c => c.contains(t))) || null; if (!row) return; key = row[0].dataset.key; }
+    dim(rows.filter(r => r !== row).flat());
+    if (strip) dim([...strip.children].filter(s => seg ? s !== seg : s.dataset.key !== key));
+  });
+  document.addEventListener('mouseout', ev => { if (!ev.relatedTarget) undim(); });
 
   /* подписи на полосах состава в блоках (доли) и у разработчиков (числа);
      влезут ли — решает fitLabels. Цвет подписи зависит от темы — при её
@@ -1100,9 +1145,10 @@
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { labelStrips(); fitLabels(); });
 
   function render() {
-    renderHead(); renderCuts(); renderTables(); renderBars();
+    /* темп — первым: строка «Задач в день» в шапке берёт его период */
     const W = renderPace();
-    renderPeople(W); renderAnomalies(); renderAi(); renderRemediation();
+    renderHead(); renderCuts(); renderTables(); renderBars();
+    renderPeople(W); renderAnomalies(); stripCaps = []; renderAi(); renderRemediation();
     labelStrips(); fitLabels(); navSync();
   }
 

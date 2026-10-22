@@ -6,7 +6,11 @@
    Прогнана — пара с настоящим вердиктом; not processed (пара была в
    прогоне, но не разобрана) и пара без вердикта — ещё осталось прогнать.
    Значения сравниваются без учёта регистра; знакомые пишутся по
-   справочнику, незнакомые — как пришли. */
+   справочнику, незнакомые — как пришли.
+   Группы — по вердикту пары: «возможно затронуто» (affected, unclear и
+   незнакомые вердикты), «не затронуто» (not affected, invalid CVE,
+   rejected CVE), «не прогнано» (not processed и пары без вердикта).
+   Remediation пары — в группе её вердикта. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(require('./roles.js'));
@@ -18,7 +22,11 @@
   'use strict';
 
   const NOT_PROCESSED = 'not processed';
-  const VERDICTS = ['affected', 'not affected', 'unclear', 'invalid CVE', 'rejected CVE', NOT_PROCESSED];
+  const GROUPS = ['maybe', 'no', 'none'];
+  /* справочник в порядке групп; группа незнакомого вердикта — maybe */
+  const VERDICTS = ['affected', 'unclear', 'not affected', 'invalid CVE', 'rejected CVE', NOT_PROCESSED];
+  const VERDICT_GROUP = { 'affected': 'maybe', 'unclear': 'maybe', 'not affected': 'no', 'invalid CVE': 'no',
+    'rejected CVE': 'no', [NOT_PROCESSED]: 'none' };
   const CONFIDENCE = ['high', 'medium', 'low'];
   /* сначала фикс есть или готов, потом ручная работа, блокеры, в конце —
      решения без работы */
@@ -41,35 +49,44 @@
     return [...out.values()];
   }
 
-  /* Счётчик значений: знакомые — в порядке справочника и его написанием,
-     незнакомые — следом, по убыванию числа, затем по алфавиту */
+  /* Счётчик значений по группам: внутри группы знакомые — в порядке
+     справочника и его написанием, незнакомые — следом, по убыванию числа,
+     затем по алфавиту; пустое значение (k: '') — последним */
   function tally(known) {
     const by = new Map();
     return {
-      add(raw, extra) {
-        const k = roles.norm(raw), i = known.findIndex(v => roles.norm(v) === k);
-        if (!by.has(k)) by.set(k, Object.assign({ k: i >= 0 ? known[i] : String(raw).trim(), known: i >= 0, n: 0, rank: i }, extra && extra()));
-        const x = by.get(k); x.n++; return x;
+      add(g, raw, extra) {
+        const k = roles.norm(raw), i = k ? known.findIndex(v => roles.norm(v) === k) : -1, key = g + '\u0000' + k;
+        if (!by.has(key)) by.set(key, Object.assign({ k: i >= 0 ? known[i] : String(raw || '').trim(), known: i >= 0, n: 0, g, rank: i }, extra && extra()));
+        const x = by.get(key); x.n++; return x;
       },
       list() {
-        return [...by.values()].sort((a, b) => (a.known === b.known ? (a.known ? a.rank - b.rank : b.n - a.n || a.k.localeCompare(b.k)) : a.known ? -1 : 1))
+        const tier = x => (x.known ? 0 : x.k ? 1 : 2);
+        return [...by.values()].sort((a, b) => GROUPS.indexOf(a.g) - GROUPS.indexOf(b.g) || tier(a) - tier(b)
+          || (tier(a) === 0 ? a.rank - b.rank : b.n - a.n || a.k.localeCompare(b.k)))
           .map(({ rank, ...x }) => x);
       },
     };
   }
 
+  const groupOf = verdict => VERDICT_GROUP[VERDICTS.find(v => roles.norm(v) === roles.norm(verdict))] || 'maybe';
+
   function summary(rows) {
     const verdicts = tally(VERDICTS), remediations = tally(REMEDIATIONS);
-    const s = { total: 0, run: 0, notProcessed: 0, notRun: 0, noRemediation: 0, last: null };
+    const s = { total: 0, run: 0, notProcessed: 0, notRun: 0, noRemediation: 0, last: null,
+      groups: Object.fromEntries(GROUPS.map(g => [g, 0])) };
     for (const r of pairs(rows)) {
       s.total++;
-      if (r === null) { s.notRun++; continue; }
-      const v = verdicts.add(r.ai_verdict, () => ({ conf: { high: 0, medium: 0, low: 0, other: 0 } }));
+      if (r === null) { s.notRun++; s.groups.none++; continue; }
+      const g = groupOf(r.ai_verdict);
+      s.groups[g]++;
+      const v = verdicts.add(g, r.ai_verdict, () => ({ conf: { high: 0, medium: 0, low: 0, other: 0 } }));
       const c = roles.norm(r.ai_conf);
       v.conf[CONFIDENCE.includes(c) ? c : 'other']++;
-      if (roles.norm(r.ai_verdict) === NOT_PROCESSED) { s.notProcessed++; continue; }
+      if (g === 'none') { s.notProcessed++; continue; }
       s.run++;
-      if (r.ai_rem) remediations.add(r.ai_rem); else s.noRemediation++;
+      remediations.add(g, r.ai_rem);
+      if (!r.ai_rem) s.noRemediation++;
     }
     for (const r of rows) { const run = runOf(r); if (run !== null && (s.last === null || run > s.last)) s.last = run; }
     s.left = s.notRun + s.notProcessed;
@@ -78,5 +95,5 @@
     return s;
   }
 
-  return { VERDICTS, CONFIDENCE, REMEDIATIONS, NOT_PROCESSED, summary };
+  return { GROUPS, VERDICTS, CONFIDENCE, REMEDIATIONS, NOT_PROCESSED, summary };
 }));

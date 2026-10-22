@@ -33,3 +33,15 @@ test('ink: незнакомый формат — белый, как на тём�
   assert.strictEqual(strips.ink(''), strips.LIGHT);
   assert.strictEqual(strips.ink('oklch(0.7 0.1 200)'), strips.LIGHT);
 });
+
+test('rows: строка разреза — от ячейки-ключа до следующей, шапка не входит', function () {
+  var cells = [{ h: 1 }, { h: 1 }, { k: 'a' }, {}, {}, { k: 'b' }, {}, { h: 1 }, {}];
+  var isKey = function (c) { return !!c.k; }, isHead = function (c) { return !!c.h; };
+  assert.deepStrictEqual(strips.rows(cells, isKey, isHead), [[2, 3, 4], [5, 6, 8]]);
+});
+
+test('rows: без строк — пусто', function () {
+  var isKey = function (c) { return !!c.k; }, isHead = function (c) { return !!c.h; };
+  assert.deepStrictEqual(strips.rows([{ h: 1 }, {}], isKey, isHead), []);
+  assert.deepStrictEqual(strips.rows([], isKey, isHead), []);
+});
