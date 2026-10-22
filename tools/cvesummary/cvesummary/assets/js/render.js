@@ -491,8 +491,6 @@
     const rk = $('hero-risk'); rk.replaceChildren();
     const problem = recs.filter(r => roles.norm(r.status) === 'есть проблема').length, rework = recs.filter(r => roles.norm(r.status) === 'нужна доработка').length;
     row(rk, 'Есть проблема / нужна доработка', `${problem} + ${rework}`, recs.filter(r => r.attention).length);
-    const crit = open.filter(r => r.sevN === 'Critical').length, imp = open.filter(r => r.sevN === 'Important').length;
-    row(rk, 'Critical и Important открыты', `${crit} + ${imp}`, crit + imp);
     const s = Hm.summary(closedWithHours(recs));
     row(rk, 'Часов на задачу', s.n ? `медиана ${f1(s.median)}` : 'закрытых с датами нет', s.n ? f1(s.mean) : '—', null, s.n ? `по\u00a0${s.n} ${plural(s.n, 'закрытой задаче', 'закрытым задачам', 'закрытым задачам')} за всё время` : '');
 
