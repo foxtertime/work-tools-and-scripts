@@ -118,6 +118,18 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .ai-total .n{font:700 44px/1 var(--f-display);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .ai-total .s{font-size:14px;color:var(--muted)}
 .ai-total .s b{color:var(--fg);font-weight:600}
+/* скобки групп над полосой блока — как в шапке, в цветах страницы */
+.strip-groups{display:grid;column-gap:2px;margin-top:14px}
+.strip-groups > div{min-width:0;display:flex;flex-direction:column;gap:4px}
+.strip-groups .cap{display:flex;align-items:baseline;gap:6px;white-space:nowrap;overflow:hidden}
+.strip-groups .cap b{font:600 15px/1 var(--f-body);font-variant-numeric:tabular-nums}
+.strip-groups .cap span{font-size:12px;color:var(--muted);overflow:hidden}
+.strip-groups .cap.off{visibility:hidden}
+.strip-groups .br{height:6px;border:1px solid var(--muted);border-bottom:0;border-radius:4px 4px 0 0;opacity:.55}
+.cve-sum .sevstrip.grouped{display:grid;margin-top:4px}
+.strip-leg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--muted)}
+.strip-leg:empty,.strip-leg:not(:has(span:not([hidden]))){display:none}
+.strip-leg b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
 
 .cve-leg span{white-space:nowrap}
 @media (max-width:560px){.cve-rows{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px 10px}.cve-rows .k{grid-column:1/-1;margin-top:8px}.cve-rows .b{grid-column:1/-1}.cve-rows .h.l,.cve-rows .h.bar{display:none}.cve-rows .h{white-space:normal;font-size:10px;letter-spacing:.02em}}

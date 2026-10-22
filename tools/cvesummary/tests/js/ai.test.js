@@ -31,15 +31,20 @@ test('summary: пара — по тому же правилу, что счётч
   assert.deepStrictEqual([s.total, s.run, s.notRun], [3, 2, 1]);
 });
 
-test('summary: вердикты в порядке справочника, незнакомые — следом по числу, написание из справочника', function () {
+test('summary: вердикты по группам — возможно затронуто, не затронуто, не прогнано', function () {
   var s = ai.summary([
     row('CVE-1', 'a', 'maybe'), row('CVE-2', 'a', 'Not Affected'), row('CVE-3', 'a', 'AFFECTED'),
     row('CVE-4', 'a', 'not processed'), row('CVE-5', 'a', 'odd'), row('CVE-6', 'a', 'odd'),
-    row('CVE-7', 'a', 'invalid cve'),
+    row('CVE-7', 'a', 'invalid cve'), row('CVE-8', 'a', 'unclear'), row('CVE-9', 'a'),
   ]);
-  assert.deepStrictEqual(counts(s.verdicts), [['affected', 1], ['not affected', 1], ['invalid CVE', 1],
-    ['not processed', 1], ['odd', 2], ['maybe', 1]]);
-  assert.deepStrictEqual(s.verdicts.map(function (v) { return v.known; }), [true, true, true, true, false, false]);
+  // незнакомый вердикт — среди возможно затронутых, после знакомых, по числу
+  assert.deepStrictEqual(counts(s.verdicts), [['affected', 1], ['unclear', 1], ['odd', 2], ['maybe', 1],
+    ['not affected', 1], ['invalid CVE', 1], ['not processed', 1]]);
+  assert.deepStrictEqual(s.verdicts.map(function (v) { return v.g; }),
+    ['maybe', 'maybe', 'maybe', 'maybe', 'no', 'no', 'none']);
+  assert.deepStrictEqual(s.verdicts.map(function (v) { return v.known; }), [true, true, false, false, true, true, true]);
+  assert.deepStrictEqual(s.groups, { maybe: 5, no: 2, none: 2 });
+  assert.deepStrictEqual(ai.GROUPS, ['maybe', 'no', 'none']);
 });
 
 test('summary: уверенность по вердикту; незнакомая и пустая — только в общем числе', function () {
@@ -47,21 +52,25 @@ test('summary: уверенность по вердикту; незнакома�
     row('CVE-1', 'a', 'affected', 'High'), row('CVE-2', 'a', 'affected', 'low'),
     row('CVE-3', 'a', 'affected', 'certain'), row('CVE-4', 'a', 'affected'),
   ]);
-  assert.deepStrictEqual(s.verdicts[0], { k: 'affected', known: true, n: 4,
+  assert.deepStrictEqual(s.verdicts[0], { k: 'affected', known: true, n: 4, g: 'maybe',
     conf: { high: 1, medium: 0, low: 1, other: 2 } });
 });
 
-test('summary: remediation в порядке справочника; not processed и пустая — отдельно', function () {
+test('summary: remediation — в группе вердикта пары, по справочнику; незнакомая и пустая — в конце группы', function () {
   var s = ai.summary([
     row('CVE-1', 'a', 'not affected', 'high', 'not required'),
     row('CVE-2', 'a', 'affected', 'high', 'Backport Prepared'),
     row('CVE-3', 'a', 'affected', 'high', 'magic'),
     row('CVE-4', 'a', 'affected', 'high'),
+    row('CVE-7', 'a', 'unclear', 'low', 'not determined'),
+    row('CVE-8', 'a', 'not affected', 'medium'),
     row('CVE-5', 'a', 'not processed'),
     row('CVE-6', 'a'),
   ]);
-  assert.deepStrictEqual(counts(s.remediations), [['backport prepared', 1], ['not required', 1], ['magic', 1]]);
-  assert.deepStrictEqual([s.noRemediation, s.notProcessed, s.notRun], [1, 1, 1]);
+  assert.deepStrictEqual(s.remediations.map(function (r) { return [r.g, r.k, r.n]; }), [
+    ['maybe', 'backport prepared', 1], ['maybe', 'not determined', 1], ['maybe', 'magic', 1], ['maybe', '', 1],
+    ['no', 'not required', 1], ['no', '', 1]]);
+  assert.deepStrictEqual([s.noRemediation, s.notProcessed, s.notRun], [2, 1, 1]);
 });
 
 test('summary: у пары с разными данными AI берётся строка с самым поздним прогоном', function () {
@@ -84,6 +93,7 @@ test('summary: при равном или неразобранном прого�
 test('summary: пустая таблица и последний прогон', function () {
   var s = ai.summary([]);
   assert.deepStrictEqual([s.total, s.run, s.left, s.verdicts, s.remediations, s.last], [0, 0, 0, [], [], null]);
+  assert.deepStrictEqual(s.groups, { maybe: 0, no: 0, none: 0 });
   var bad = row('CVE-4', 'a', 'affected', '', '', 'вчера');
   bad.bad = ['ai_run'];
   assert.strictEqual(ai.summary([row('CVE-1', 'a', 'affected', '', '', '2026-10-20'),
