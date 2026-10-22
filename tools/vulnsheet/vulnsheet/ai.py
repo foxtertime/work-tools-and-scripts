@@ -5,7 +5,8 @@ package — ключ, по которому он ложится на строк�
 по краям и в верхнем регистре, компонент без пробелов по краям, как пары в
 merge), и пять полей для колонок: nvr, verdict, confidence, remediation,
 run. Поля пишутся как есть, только run — датой dd.mm.yyyy, как остальные
-даты таблицы; нет поля, null или пустая строка — '-'.
+даты таблицы; нет поля, null, пустая строка или «—» (так плагин пишет «нет
+значения») — '-'. Время файла — его "run" (запасной вариант — "generated").
 Результат без годных cve или package пропускается с причиной; если пара
 повторяется, действует самый свежий по run (время с поясом — в UTC), при
 равном или неразобранном run — первый. Файл, который не читается, не
@@ -38,7 +39,7 @@ class Skipped(NamedTuple):
 class Found(NamedTuple):
     cells: Dict[Pair, Tuple[str, ...]]  # пара → значения колонок ai_*
     plugin: Optional[str]
-    generated: Optional[str]
+    run: Optional[str]                  # когда записан файл: его "run"
     total: int                          # результатов в файле
     skipped: Tuple[Skipped, ...] = ()
     repeated: int = 0                   # повторы пар — действует самый свежий
@@ -77,7 +78,7 @@ def read(path: str) -> Found:
                 continue
         values[RUN] = format_date(values[RUN])
         cells[pair], runs[pair] = tuple(values), run
-    return Found(cells, _meta(body.get("plugin")), _meta(body.get("generated")),
+    return Found(cells, _meta(body.get("plugin")), _meta(body.get("run", body.get("generated"))),
                  len(results), tuple(skipped), repeated)
 
 
@@ -108,12 +109,13 @@ def _pair(result) -> Tuple[Optional[Pair], str]:
 
 def _text(value) -> str:
     """Значение для ячейки: строка — без пробелов по краям, прочее — как в
-    JSON (true, 0.9, ["a"]); пустое — '-'."""
+    JSON (true, 0.9, ["a"]); пустое и «—» — '-'."""
     if value is None:
         return EMPTY
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False)
-    return value.strip() or EMPTY
+    value = value.strip()
+    return EMPTY if value in ("", "—") else value
 
 
 def _meta(value) -> Optional[str]:
