@@ -118,6 +118,18 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .ai-total .n{font:700 44px/1 var(--f-display);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .ai-total .s{font-size:14px;color:var(--muted)}
 .ai-total .s b{color:var(--fg);font-weight:600}
+/* скобки групп над полосой блока — как в шапке, в цветах страницы */
+.strip-groups{display:grid;column-gap:2px;margin-top:14px}
+.strip-groups > div{min-width:0;display:flex;flex-direction:column;gap:4px}
+.strip-groups .cap{display:flex;align-items:baseline;gap:6px;white-space:nowrap;overflow:hidden}
+.strip-groups .cap b{font:600 15px/1 var(--f-body);font-variant-numeric:tabular-nums}
+.strip-groups .cap span{font-size:12px;color:var(--muted);overflow:hidden}
+.strip-groups .cap.off{visibility:hidden}
+.strip-groups .br{height:6px;border:1px solid var(--muted);border-bottom:0;border-radius:4px 4px 0 0;opacity:.55}
+.cve-sum .sevstrip.grouped{display:grid;margin-top:4px}
+.strip-leg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--muted)}
+.strip-leg:empty,.strip-leg:not(:has(span:not([hidden]))){display:none}
+.strip-leg b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
 
 .cve-leg span{white-space:nowrap}
 @media (max-width:560px){.cve-rows{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px 10px}.cve-rows .k{grid-column:1/-1;margin-top:8px}.cve-rows .b{grid-column:1/-1}.cve-rows .h.l,.cve-rows .h.bar{display:none}.cve-rows .h{white-space:normal;font-size:10px;letter-spacing:.02em}}
@@ -147,7 +159,9 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
    листается вбок, без полосы прокрутки; margin-inline:auto, а не
    justify-content, — иначе при переполнении обрезается левый край */
 .secnav{position:sticky;top:env(safe-area-inset-top,0px);z-index:15;background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:saturate(1.4) blur(8px);-webkit-backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
-.secnav .wrap{display:flex;align-items:center;min-height:48px;overflow-x:auto;scrollbar-width:none}
+/* строка разделов — на всю ширину окна, а не содержимого: пунктов много, и
+   в 1180px они не влезают; не влезли и в окно — строка листается */
+.secnav .wrap{max-width:none;display:flex;align-items:center;min-height:48px;overflow-x:auto;scrollbar-width:none}
 .secnav .wrap::-webkit-scrollbar{display:none}
 .secnav .links{display:flex;align-items:center;gap:2px;margin-inline:auto;flex:none}
 .secnav a{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font:500 13px var(--f-body);color:var(--muted);text-decoration:none;padding:6px 9px;border-radius:999px;transition:background .15s,color .15s}
@@ -379,14 +393,14 @@ img{max-width:100%}
 /* подсветка того, на что указывает курсор: в составной полосе или графике
    блок под курсором остаётся ярким, соседи приглушаются; одиночная полоса
    светлеет; на линейном графике — направляющая и точки дня */
-.hl,.mixbar span,.sevstrip span,.pbar span,.hbars .track span span,.cve-rows .b,.kv .b{transition:opacity .1s}
+.hl,.mixbar span,.sevstrip span,.pbar span,.hbars .track span span,.cve-rows > *,.kv .b{transition:opacity .3s ease}
 .hlg:has(.hl:hover) .hl:not(:hover),
 .mixbar:has(span:hover) span:not(:hover),
-.sevstrip:has(span:hover) span:not(:hover),
 .pbar:has(span:hover) span:not(:hover),
 .hbars:has(.track span span:hover) .track span span:not(:hover),
-.cve-rows:has(.b:hover) .b:not(:hover),
 .kv:has(.b:hover) .b:not(:hover){opacity:.45}
+/* строки и сегменты разрезов бледнит render.js (подсветка строки целиком) */
+.cve-rows > .dim,main .sevstrip > .dim{opacity:.3}
 .tl .mark{pointer-events:none;visibility:hidden}
 .tl .mark.on{visibility:visible}
 .tl .mark .guide{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}

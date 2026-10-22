@@ -30,5 +30,17 @@
     return y > BRIGHT ? DARK : LIGHT;
   }
 
-  return { labels, ink, DARK, LIGHT };
+  /* Строки сетки разреза (.cve-rows) — для подсветки строки целиком:
+     строка начинается с ячейки-ключа (название) и идёт до следующей,
+     ячейки шапки в строки не входят. -> индексы ячеек по строкам */
+  function rows(cells, isKey, isHead) {
+    const out = [];
+    cells.forEach((c, i) => {
+      if (isKey(c)) out.push([i]);
+      else if (out.length && !isHead(c)) out[out.length - 1].push(i);
+    });
+    return out;
+  }
+
+  return { labels, ink, rows, DARK, LIGHT };
 }));

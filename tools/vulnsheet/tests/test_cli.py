@@ -1056,7 +1056,7 @@ class AiTest(CliCase):
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(body if body is not None else
                       {"format": 1, "plugin": "4.0.0",
-                       "generated": "2026-10-21T12:31:00+03:00", "results": list(results)},
+                       "run": "2026-10-22T07:45", "results": list(results)},
                       handle)
         return path
 
@@ -1075,7 +1075,7 @@ class AiTest(CliCase):
         self.assertEqual(self.run_cli("--ai", self.write_ai(AI_VIM, other)), EXIT_OK)
         self.assertEqual(self.report_lines(), [HEADER, EXPECTED_AI])
         messages = self.messages()
-        self.assertIn("AI: %s (plugin 4.0.0, 2026-10-21T12:31:00+03:00), результатов 2"
+        self.assertIn("AI: %s (plugin 4.0.0, прогон 2026-10-22T07:45), результатов 2"
                       % self.path("ai.json"), messages)
         self.assertIn("  - AI, колонки ai_*:", messages)
         self.assertIn("    - заполнено строк 1", messages)

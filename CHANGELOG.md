@@ -7,6 +7,31 @@
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-22
+
+### Добавлено
+
+- `cvesummary` (1.17.0): в разрезах подсвечивается строка целиком, а
+  сегмент полосы и его строка подсвечиваются вместе.
+- `cvesummary` (1.16.0): в шапке, в «Рисках и темпе», — «Задач в день»:
+  темп закрытия за всё время и за выбранный период темпа.
+
+### Изменено
+
+- `cvesummary` (1.15.0): из шапки убрана строка «Critical и Important
+  открыты».
+- `cvesummary` (1.14.0): полосы блоков «AI» и «Remediation» разбиты
+  скобками на группы «возможно затронуто», «не затронуто» и «не
+  прогнано».
+
+### Исправлено
+
+- `cvesummary` (1.14.1): строка разделов на всю ширину окна — на широком
+  мониторе крайние пункты больше не обрезаются.
+- `vulnsheet` (3.0.1): файл `--ai` читается как настоящий `results.json`
+  плагина — время прогона берётся из его `run` и выводится в шапку
+  журнала, а `—` вместо значения пишется в колонку как `-`.
+
 ## [0.19.0] - 2026-10-21
 
 ### Добавлено
@@ -346,7 +371,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.16.0...v0.17.0
