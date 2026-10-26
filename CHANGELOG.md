@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-10-26
+
+### Изменено
+
+- `cvesummary` (1.22.1): основной счётчик AI показывает прогнанные пары
+  из общего числа, процент и остаток; списки по нажатию соответствуют
+  счётчикам. Версия тулзы отображается отдельной строкой футера.
+
+### Исправлено
+
+- `cvesummary` (1.22.1): три колонки итогов имеют одинаковую ширину
+  в режимах «Прогноз» и «Когда начать».
+
 ## [0.24.0] - 2026-10-26
 
 ### Добавлено
@@ -433,7 +446,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.1...HEAD
+[0.24.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.21.1...v0.22.0

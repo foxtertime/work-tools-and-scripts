@@ -284,8 +284,8 @@
           bind($(id === 'ai-groups' ? 'ai-leg' : 'rem-leg').children[i], title, members, pairNote);
         });
       }
-      bind($('ai-total').querySelector('.n'), 'AI: осталось прогнать', pairs.filter(r=>groupOf(r)==='none'),pairNote);
-      bind($('ai-total').querySelector('.s b'), 'AI: прогнано', pairs.filter(r=>groupOf(r)!=='none'),pairNote);
+      bind($('ai-total').querySelector('.n'), 'AI: прогнано', pairs.filter(r=>groupOf(r)!=='none'),pairNote);
+      bind($('ai-total').querySelector('.s b'), 'AI: осталось прогнать', pairs.filter(r=>groupOf(r)==='none'),pairNote);
       // Remediation labels may repeat between verdict groups: keep each group's own membership.
       const remGroups = [
         ...S.remediations.map(item => ({ key: item.k || 'не указана', g: item.g,

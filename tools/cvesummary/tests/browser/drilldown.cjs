@@ -113,14 +113,16 @@ let checks=0;
    await load(name); await page.locator('#k-total').click(); assert.equal(await count(),name==='empty'?0:100); await close(); checks++;
   }
   await load('edge');
-  assert.equal(await page.locator('#ai-total .n').innerText(),'2');
+  assert.equal(await page.locator('#ai-total .n').innerText(),'5');
+  assert.equal(await page.locator('#ai-total .s').innerText(),'прогнано из 7 (71%) · осталось 2');
   await page.locator('#ai-rows .k[data-key="not affected"]').click();
   assert.deepEqual(await rownums(),[4,6]); await close(); checks++;
   const remNodes=page.locator('#rem-rows .k[data-key="pending"]');
   assert.equal(await remNodes.count(),2);
   await remNodes.nth(0).click(); assert.deepEqual(await rownums(),[5]); await close();
   await remNodes.nth(1).click(); assert.deepEqual(await rownums(),[6]); await close(); checks++;
-  await page.locator('#ai-total .n').click(); assert.deepEqual(await rownums(),[7,8]); await close(); checks++;
+  await page.locator('#ai-total .n').click(); assert.deepEqual(await rownums(),[4,5,6,9,10]); await close(); checks++;
+  await page.locator('#ai-total .s b').click(); assert.deepEqual(await rownums(),[7,8]); await close(); checks++;
   await page.locator('#k-cve').click(); assert.equal(await count(),7); await close(); checks++;
   await page.locator('#k-total').click();
   assert.equal(await page.locator('#drill-body a[href^="javascript:"]').count(),0);
