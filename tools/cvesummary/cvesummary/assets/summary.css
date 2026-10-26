@@ -394,6 +394,8 @@ img{max-width:100%}
 .tl-scroll::-webkit-scrollbar{display:none}
 .tl-scroll.dragging{cursor:grabbing;user-select:none}
 .tl-plot{display:block}
+.tl .drill-target{touch-action:auto}
+.tl-scroll.dragging .drill-target{cursor:grabbing}
 .tl text{fill:var(--muted);font:11.5px var(--f-body);pointer-events:none}
 .tl .gl{stroke:var(--grid)}
 .tl::before,.tl::after{content:"";position:absolute;top:0;bottom:0;width:28px;pointer-events:none;opacity:0;transition:opacity .15s}

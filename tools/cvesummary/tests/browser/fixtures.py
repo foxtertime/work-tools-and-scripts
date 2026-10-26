@@ -59,3 +59,40 @@ for i, (verdict, remediation) in enumerate([
         ai_run="2026-10-18", bad=[],
     ))
 (out / "placeholders.html").write_text(page.render(placeholders), encoding="utf-8")
+
+# Hand-checked dates across Sunday/Monday and the partial report week.
+charts = {"meta": dict(data["meta"], as_of="2026-10-21", missing=[]), "rows": []}
+events = [
+    ("Алиса", "Готов", "2026-10-11", "2026-09-21", "2026-10-12"),
+    ("Алиса", "Готов", "2026-10-12", "2026-10-12", "2026-10-18"),
+    ("Алиса", "Готов", "2026-10-18", "2026-10-17", "2026-10-19"),
+    ("Алиса", "Готов", "2026-10-19", "2026-10-19", "2026-10-21"),
+    ("Борис", "Готов", "2026-10-19", "2026-10-18", "2026-10-19"),
+    ("Вера", "Готов", "2026-10-20", "2026-10-19", "2026-10-20"),
+    ("Алиса", "В работе", "2026-10-21", "2026-10-19", "2026-10-20"),
+    ("", "Готов", "2026-10-21", "2026-10-19", "2026-10-19"),
+    ("Алиса", "Готов", "2026-10-22", "2026-10-21", "2026-10-22"),
+    ("Борис", "Готов", "ошибка", "2026-10-19", "ошибка"),
+    ("Борис", "Готов", "", "2026-10-19", ""),
+    ("Алиса", "Готов", "2026-10-18", "2026-10-17", "2026-10-18"),
+] + [("Разработчик %d" % i, "Готов", "2026-10-20", "2026-10-19", "2026-10-20")
+     for i in range(9)]
+for i, (dev, status, tdate, start, end) in enumerate(events):
+    charts["rows"].append(dict(
+        data["rows"][0], row=i + 3, cve="CVE-2026-%d" % (3000 + i),
+        comp="openssl", dev=dev, status=status, tdate=tdate, start=start, end=end,
+        sev="Critical" if i % 2 else "Low",
+        measure="Патч из апстрима" if i % 2 else "Импорт новой версии",
+        bad=["tdate", "end"] if tdate == "ошибка" else [],
+    ))
+charts["rows"][11]["cve"] = charts["rows"][1]["cve"]
+(out / "charts.html").write_text(page.render(charts), encoding="utf-8")
+
+task_links = {"meta": dict(data["meta"]), "rows": [
+    dict(data["rows"][0], row=3, cve="CVE-2026-9001", comp="openssl", dev="Dev",
+         status="Готов", start="2026-10-10", end="2026-10-18", bad=[],
+         task="HTTPS://portal.works.prod.sbt/swtr/units/current/unit/TASKID-9001"),
+    dict(data["rows"][0], row=4, cve="CVE-2026-9001", comp="openssl", dev="Dev",
+         status="В работе", start="2026-10-10", end="", bad=[], task="TASKID-9002"),
+]}
+(out / "task-links.html").write_text(page.render(task_links), encoding="utf-8")

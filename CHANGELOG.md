@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-27
+
+### Добавлено
+
+- `cvesummary` (1.23.0): клик по столбикам поступления и закрытий открывает
+  задачи за день или неделю; в личных графиках — закрытия разработчика за
+  день. Поддерживаются клавиатура и касание, перетаскивание листает график.
+- `cvesummary` (1.23.0): Task ID в таблицах и ссылках на основную задачу
+  дубликата стал ссылкой на портал; отображается сам идентификатор.
+
 ## [0.24.2] - 2026-10-27
 
 ### Изменено
@@ -455,7 +465,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.2...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.2...v0.25.0
 [0.24.2]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.1...v0.24.2
 [0.24.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.23.0...v0.24.0
