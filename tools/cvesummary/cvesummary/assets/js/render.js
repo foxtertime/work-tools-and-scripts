@@ -433,7 +433,8 @@
     $('asof').textContent = (release ? `${release} ` : '') + `на ${fmt(AS_OF)}`;
     if (release) document.title = `Сводка по CVE — ${release}`;
     const where = DATA.meta.sheet == null ? 'CSV' : `лист «${DATA.meta.sheet}»`;
-    $('src').textContent = `${DATA.meta.source}, ${where}, шапка в строке ${DATA.meta.header_row}; cvesummary ${DATA.meta.version}`;
+    $('src').textContent = `${DATA.meta.source}, ${where}, шапка в строке ${DATA.meta.header_row}`;
+    $('version').textContent = `cvesummary ${DATA.meta.version}`;
     const open = recs.filter(r => r.open), working = recs.filter(r => r.working);
     const ready = open.filter(r => r.reasons.length);
     $('k-total').textContent = N;
@@ -1104,10 +1105,10 @@
     for (const x of [box, total, $('aistrip'), $('ai-groups'), $('ai-leg')]) x.replaceChildren();
     if (aiMissing('ai_verdict', ['ai-rows', 'ai-total', 'aistrip', 'ai-groups', 'ai-leg'], 'ai-sub')) return;
     const S = aiSum(), pc = n => (S.total ? Math.round(n / S.total * 100) : 0);
-    $('ai-sub').textContent = 'пары CVE + компонент: что сказал AI и сколько ещё не прогнано' + (S.last ? ` · последний прогон ${fmt(dates.dayOf(S.last))}` : '');
-    const s = el('span', 's', `осталось прогнать из ${S.total} · прогнано `);
-    s.append(el('b', null, String(S.run)), ` (${pc(S.run)}%)`);
-    total.append(el('span', 'n', String(S.left)), s);
+    $('ai-sub').textContent = 'пары CVE + компонент: что сказал AI и сколько прогнано' + (S.last ? ` · последний прогон ${fmt(dates.dayOf(S.last))}` : '');
+    const s = el('span', 's', `прогнано из ${S.total} (${pc(S.run)}%) · осталось `);
+    s.append(el('b', null, String(S.left)));
+    total.append(el('span', 'n', String(S.run)), s);
     const color = v => AI_VERDICT_COLOR[v.k] || AI_OTHER;
     groupedStrip('ai-groups', 'aistrip', 'ai-leg', [...S.verdicts.map(v => ({ k: v.k, c: color(v), n: v.n, g: v.g, tip: `${v.k}: ${v.n} из ${S.total}` })),
       { k: 'не прогнано', c: AI_NOTRUN, n: S.notRun, g: 'none', tip: `не прогнано: ${S.notRun} из ${S.total}` }], S.total);
