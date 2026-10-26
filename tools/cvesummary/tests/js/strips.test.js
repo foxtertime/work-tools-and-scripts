@@ -3,6 +3,24 @@ var test = require('node:test');
 var assert = require('node:assert');
 var strips = require('../../cvesummary/assets/js/strips.js');
 
+test('caption: сокращает подпись до самого длинного префикса с многоточием', function () {
+  const fits = width => text => 2 + (text ? 1 + text.length : 0) <= width;
+  assert.strictEqual(strips.caption('готово', fits(9)), 'готово');
+  assert.strictEqual(strips.caption('готово', fits(8)), 'гото…');
+  assert.strictEqual(strips.caption('готово', fits(5)), 'г…');
+});
+
+test('caption: сохраняет только число, а в легенду уходит лишь когда не помещается число', function () {
+  const fits = width => text => 2 + (text ? 1 + text.length : 0) <= width;
+  assert.strictEqual(strips.caption('готово', fits(4)), '');
+  assert.strictEqual(strips.caption('готово', fits(2)), '');
+  assert.strictEqual(strips.caption('готово', fits(1)), null);
+});
+
+test('caption: не разрывает Unicode-символ при сокращении', function () {
+  assert.strictEqual(strips.caption('😀абв', text => Array.from(text).length <= 3), '😀а…');
+});
+
 test('labels: доля — у каждой непустой части, влезет ли — решает страница', function () {
   assert.deepStrictEqual(strips.labels([50, 30, 15, 5], 'pct'), ['50%', '30%', '15%', '5%']);
   assert.deepStrictEqual(strips.labels([1, 2], 'pct'), ['33%', '67%']);

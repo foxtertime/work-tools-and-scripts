@@ -66,10 +66,10 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .hero-groups{display:grid;column-gap:2px}
 .hero-groups > div{min-width:0;display:flex;flex-direction:column;gap:4px}
 .hero-groups .cap{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}
-.hero-groups .cap b{font:500 18px/1 var(--f-display);font-variant-numeric:tabular-nums}
+.hero-groups .cap b{font:500 18px/1 var(--f-display);font-variant-numeric:tabular-nums;flex:none}
 .hero-groups .cap span{font-size:13px;color:var(--hero-muted);overflow:hidden}
 .hero-groups .cap.off{visibility:hidden}
-.hero-groups .br{height:6px;border:1px solid var(--hero-muted);border-bottom:0;border-radius:4px 4px 0 0;opacity:.55}
+.hero-groups .br{height:6px;border:1px solid var(--hero-muted);border-bottom:0;border-radius:4px 4px 0 0;opacity:.55;margin-top:auto}
 .hero-leg{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--hero-muted);margin-top:4px}
 .hero-leg b{color:var(--hero-fg);font-weight:600;font-variant-numeric:tabular-nums}
 /* «Состояние» и «Риски и темп» — списками через тонкую линию */

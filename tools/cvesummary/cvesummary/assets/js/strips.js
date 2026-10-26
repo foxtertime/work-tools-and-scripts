@@ -15,6 +15,21 @@
   const DARK = '#0F1D29', LIGHT = '#FFFFFF';
   const BRIGHT = 150;  // яркость 0–255, выше — фон светлый
 
+  /* fits проверяет всю подпись вместе с числом в реальной раскладке.
+     '' — оставить число, null — даже число не влезает, нужна легенда. */
+  function caption(text, fits) {
+    if (!fits('')) return null;
+    if (fits(text)) return text;
+    const chars = Array.from(text);
+    let lo = 1, hi = chars.length - 1, best = '';
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2), candidate = chars.slice(0, mid).join('') + '…';
+      if (fits(candidate)) { best = candidate; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    return best;
+  }
+
   /* counts — размеры частей; how: 'pct' — доля в процентах, 'n' — само число */
   function labels(counts, how) {
     const tot = counts.reduce((a, n) => a + n, 0);
@@ -42,5 +57,5 @@
     return out;
   }
 
-  return { labels, ink, rows, DARK, LIGHT };
+  return { caption, labels, ink, rows, DARK, LIGHT };
 }));
