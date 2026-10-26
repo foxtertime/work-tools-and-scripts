@@ -3,7 +3,7 @@
    hours, pace, timeline, nav, strips; здесь только DOM. */
 (function () {
   'use strict';
-  const { dates, roles, hours: Hm, pace, timeline, nav, strips, ai } = window.CS;
+  const { dates, roles, hours: Hm, pace, timeline, nav, strips, ai, links } = window.CS;
   const DATA = JSON.parse(document.getElementById('data').textContent);
   const AS_OF = dates.dayOf(DATA.meta.as_of);
   const NS = 'http://www.w3.org/2000/svg';
@@ -29,7 +29,7 @@
   const LS = { get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* без хранилища поля просто не запоминаются */ } } };
   const SEV_COLOR = { Critical: '--sev-crit', Important: '--sev-imp', Moderate: '--sev-mod', Low: '--sev-low' };
   const sevColor = k => SEV_COLOR[k] || '--sev-none';
-  const link = (href, text, cls) => { if (!/^https?:\/\//.test(href || '')) return null; const a = el('a', cls || null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a; };
+  const link = (href, text, cls) => { if (!/^https?:\/\//i.test(href || '')) return null; const a = el('a', cls || null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a; };
 
   /* тултип — из образца, дословно */
   const tip = $('tip');
@@ -351,6 +351,8 @@
      opts.height и opts.key — для маленьких графиков в карточках; opts.window
      ({ from, to } — дни) — подсветка окна темпа, как на графике темпа */
   function stackChart(host, weeks, cats, what, byDay, opts = {}) {
+    host.dataset.chartDays = byDay ? '1' : '7';
+    host.setAttribute('role', 'group');
     if (!weeks.length) { host.replaceChildren(el('div', 'empty', 'Нет данных с датами')); return; }
     const H2 = opts.height || 230;
     const { yMax, yStep } = scale(maxOf(weeks.map(w => w.all), 0));
@@ -365,7 +367,7 @@
     F.plot.classList.add('hlg');
     weeks.forEach((w, i) => {
       /* неделя — одна группа: под курсором она яркая, остальные приглушены */
-      const col = mk('g', { class: 'hl' }); F.plot.append(col);
+      const col = mk('g', { class: 'hl', 'data-chart-day': w.t }); F.plot.append(col);
       const x = i * F.step + (F.step - barW) / 2;
       const segs = cats.filter(s => w[s.k] > 0);
       let acc = 0;
@@ -644,7 +646,8 @@
       if (r.reasons.includes('range')) why('range', el('span', 'pill', 'вне диапазона'));
       if (r.reasons.includes('dup')) {
         const main = recs[r.dupOf];
-        why('dup', el('span', 'pill', 'дубликат')).dataset.tip = `основная — строка ${main.row}` + (main.task ? `, ${main.task}` : '') + (main.done ? ', готова' : '');
+        why('dup', el('span', 'pill', 'дубликат')).dataset.tip = `основная — строка ${main.row}` + (main.done ? ', готова' : '');
+        if (main.task) c5.append(' ', link(links.taskUrl(main.task), main.task, 'mono') || el('span', 'mono', main.task));
       }
       const tr = el('tr');
       tr.append(cveCell(r), el('td', null, r.comp), pill(r), el('td', 'num', r.cvss || '—'), c5, el('td', null, r.status || '—'), el('td', null, r.dev || 'не назначен'), el('td', 'num', hoursText(r)));
@@ -993,7 +996,7 @@
       if (starts.length) {
         /* закрытия по дням, столбики разбиты по принятой мере в её цветах —
            как график поступления, только меньше */
-        const sh = el('div', 'tl dev-tl'); c4.append(sh);
+        const sh = el('div', 'tl dev-tl'); sh.setAttribute('aria-label', `Закрытые задачи: ${d}, по дням`); c4.append(sh);
         card.append(c4); ppl.append(card);
         /* ось у всех личных графиков общая — от начала работы, чтобы один
            день стоял на одной вертикали; прокрутка связана (см. ниже) */
