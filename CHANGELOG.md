@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-26
+
 ### Добавлено
 
 - `cvesummary` (1.19.0): растриаженная доля каждого сегмента бара шапки
@@ -384,7 +386,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.17.0...v0.18.0
