@@ -392,17 +392,27 @@
   }
 
   /* ---------- блоки ---------- */
-  /* Любая подпись на полосе или над ней рисуется, только если влезает
-     целиком; не влезшая не рисуется, её значение — в легенде или таблице
-     рядом. Ширина зависит от окна и шрифтов, поэтому всё пересчитывается при
-     каждой отрисовке и когда шрифты догрузятся.
-     Подписи групп над полосой шапки — [подпись, её строка в легенде]: не
-     влезла — прячется (место держит), и появляется строка в легенде.
+  /* Подписи групп шапки сокращаются по буквам с многоточием, затем
+     остаётся число; в легенду уходят, только если не помещается и оно.
+     Остальные подписи показываются целиком, если влезают, иначе — в
+     легенде или таблице рядом. Пересчёт при отрисовке и загрузке шрифтов.
+     Подписи групп шапки — [подпись, строка легенды, исходный текст].
      Подписи на сегментах — полный текст в data-label */
   const clipped = e => [e, ...e.children].some(x => x.scrollWidth > x.clientWidth + 0.5);
   let heroCaps = [];
   function fitLabels() {
-    for (const [cap, li] of [...heroCaps, ...stripCaps]) {
+    for (const [cap, li, full] of heroCaps) {
+      cap.classList.remove('off');
+      const label = cap.querySelector('span');
+      const short = strips.caption(full, candidate => {
+        label.hidden = !candidate; label.textContent = candidate;
+        return !clipped(cap);
+      });
+      label.hidden = !short; label.textContent = short || '';
+      const off = short === null;
+      cap.classList.toggle('off', off); li.hidden = !off;
+    }
+    for (const [cap, li] of stripCaps) {
       cap.classList.remove('off');
       const off = clipped(cap);
       cap.classList.toggle('off', off); li.hidden = !off;
@@ -460,7 +470,7 @@
     const gb = $('hero-groups'), mb = $('hero-bar'), lg = $('hero-leg');
     gb.replaceChildren(); mb.replaceChildren(); lg.replaceChildren();
     gb.style.gridTemplateColumns = mb.style.gridTemplateColumns = shown.map(x => `minmax(3px,${x.n}fr)`).join(' ');
-    /* подпись группы — над скобкой, если влезает целиком, иначе — в легенде
+    /* подпись группы сокращается до числа, затем уходит в легенду
        (см. fitLabels); скобка — всегда */
     heroCaps = [];
     for (const x of G) {
@@ -473,7 +483,7 @@
       const li = el('span'); li.hidden = true;
       if (span === 1) { const sw = el('i', 'sw'); sw.style.background = mine[0].c; li.append(sw); }
       li.append(`${x.l} `, el('b', null, String(x.n))); lg.append(li);
-      heroCaps.push([cap, li]);
+      heroCaps.push([cap, li, x.l]);
     }
     for (const x of shown) {
       const lab = x.g === 'ready' ? String(x.n) : pct(x.n) + '%';
