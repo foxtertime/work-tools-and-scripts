@@ -34,9 +34,13 @@ class RenderTest(unittest.TestCase):
 
     def test_scripts_in_dependency_order(self):
         positions = [self.html.index("root.CS.%s =" % name[:-3]) for name in page.SCRIPTS
-                     if name != "render.js"]
+                     if name not in ("render.js", "drilldown.js")]
         self.assertEqual(positions, sorted(positions))
-        self.assertGreater(self.html.index("JSON.parse(document.getElementById('data')"), positions[-1])
+        render_position = self.html.index("JSON.parse(document.getElementById('data')")
+        self.assertGreater(render_position, positions[-1])
+        # Списки задач подключаются к уже отрисованной сводке.
+        self.assertGreater(self.html.index("root.CS.drilldown.mount(root.CS)"),
+                           render_position)
 
     def test_css_is_inlined(self):
         self.assertIn(".tl-scroll{", self.html)
