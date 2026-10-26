@@ -28,7 +28,7 @@
   const isReview = r => norm(r.status) === REVIEW;
   const isPaused = r => norm(r.status) === PAUSED;
   const needsAttention = r => ATTENTION.includes(norm(r.status));
-  const isTriaged = r => (norm(r.dev) === 'secops' && norm(r.measure) === 'закрыто secops') || norm(r.exec) === 'уа';
+  const isTriaged = r => isTaken(r) || norm(r.exec) === 'уа';
 
   /* dup — строка открытый дубликат (см. duplicates); основание последнее */
   function closeReasons(r, dup) {

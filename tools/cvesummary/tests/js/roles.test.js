@@ -7,23 +7,22 @@ function row(dev, status, extra) {
   return Object.assign({ dev: dev, status: status, sev: '', measure: '', rstate: '', p: '', d: '' }, extra || {});
 }
 
-test('триаж: SecOps с мерой «Закрыто SecOps» или исполнитель УА, независимо от статуса', function () {
+test('триаж: любой назначенный разработчик или исполнитель УА, независимо от меры и статуса', function () {
   [
-    { dev: 'SecOps', measure: 'Закрыто SecOps' },
-    { dev: '  SECOPS ', measure: ' закрыто   secops ' },
+    { dev: 'Иванов' },
+    { dev: '  Петров  П.П. ', measure: 'Патч из апстрима', status: 'В работе' },
+    { dev: 'SecOps' },
+    { dev: 'Сидорова', status: 'Готов' },
+    { dev: 'Иванов', measure: 'Закрыто SecOps', status: 'На паузе' },
     { exec: 'УА' },
-    { dev: 'Иванов', measure: 'Патч из апстрима', exec: ' уа ', status: 'В работе' },
-    { dev: 'SecOps', measure: 'Закрыто SecOps', exec: 'УА', status: 'Готов' },
-    { dev: 'SecOps', measure: 'Закрыто SecOps', status: 'На паузе' },
+    { dev: ' ', exec: ' уа ', status: 'В работе' },
+    { dev: 'Иванов', exec: 'УА', status: 'Готов' },
   ].forEach(function (r) { assert.strictEqual(roles.isTriaged(r), true, JSON.stringify(r)); });
 });
 
-test('триаж: одного поля SecOps недостаточно, чужие и пустые значения не подходят', function () {
+test('триаж: без разработчика и исполнителя УА мера и статус сами по себе не подходят', function () {
   [
-    {}, { dev: 'SecOps' }, { measure: 'Закрыто SecOps' },
-    { dev: 'SecOps', measure: 'Патч из апстрима' },
-    { dev: 'Иванов', measure: 'Закрыто SecOps' },
-    { dev: 'SecOps team', measure: 'Закрыто SecOps' },
+    {}, { dev: '' }, { dev: '  \t ' }, { measure: 'Закрыто SecOps' },
     { exec: 'УАА' }, { exec: 'UA' }, { status: 'Готов' },
     { dev: null, measure: null, exec: null },
   ].forEach(function (r) { assert.strictEqual(roles.isTriaged(r), false, JSON.stringify(r)); });
