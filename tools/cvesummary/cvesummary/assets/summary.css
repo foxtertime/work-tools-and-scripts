@@ -66,7 +66,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .hero-groups{display:grid;column-gap:2px}
 .hero-groups > div{min-width:0;display:flex;flex-direction:column;gap:4px}
 .hero-groups .cap{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}
-.hero-groups .cap b{font:500 26px/1 var(--f-display);font-variant-numeric:tabular-nums}
+.hero-groups .cap b{font:500 18px/1 var(--f-display);font-variant-numeric:tabular-nums}
 .hero-groups .cap span{font-size:13px;color:var(--hero-muted);overflow:hidden}
 .hero-groups .cap.off{visibility:hidden}
 .hero-groups .br{height:6px;border:1px solid var(--hero-muted);border-bottom:0;border-radius:4px 4px 0 0;opacity:.55}
@@ -81,7 +81,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .hero-list .k i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:-1px}
 .hero-list .k small{color:var(--hero-muted);font-size:13px}
 .hero-list b{font:500 18px var(--f-display);font-variant-numeric:tabular-nums;white-space:nowrap}
-@media (max-width:720px){.hero-total{text-align:left}.hero-cols{grid-template-columns:minmax(0,1fr)}.hero-groups .cap{flex-direction:column;gap:2px}.hero-groups .cap span{font-size:11px}.hero-groups .cap b{font-size:20px}}
+@media (max-width:720px){.hero-total{text-align:left}.hero-cols{grid-template-columns:minmax(0,1fr)}.hero-groups .cap{flex-direction:column;gap:2px}.hero-groups .cap span{font-size:11px}}
 
 /* severity strip in hero */
 .sevstrip{display:flex;height:12px;gap:2px;border-radius:4px;overflow:hidden}
@@ -153,6 +153,10 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .mixbar{display:grid;height:34px;gap:2px;border-radius:6px;overflow:hidden}
 .mixbar span{display:flex;align-items:center;justify-content:center;height:100%;min-width:0;padding:0 3px;box-sizing:border-box;font:500 12.5px var(--f-mono);color:#0F1D29;overflow:hidden;white-space:nowrap}
 .mixbar span.lt{color:#E8F0F6}
+/* Тёмные диагональные полосы только на растриаженной доле сегмента шапки.
+   Псевдоэлемент сохраняется при fitLabels и рисуется под подписью. */
+#hero-bar > span{position:relative;isolation:isolate}
+#hero-bar > span::before{content:"";position:absolute;inset:0 auto 0 0;width:var(--triaged,0%);background:repeating-linear-gradient(135deg,transparent 0 4px,rgba(0,0,0,.22) 4px 8px);pointer-events:none;z-index:-1}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 
 /* липкая строка разделов: якоря по центру колонки; не помещаются — строка
