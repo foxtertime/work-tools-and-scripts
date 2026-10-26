@@ -52,32 +52,55 @@
     return { inR, outR, net: outR * 5 - inR * 7, open: rows.filter(roles.isOpen).length, days, work };
   }
 
-  /* start — день, с которого закрываем (по умолчанию завтра): до него
-     задачи только поступают */
-  function simulate(n, inR, outR, asOf, inflowUntil, start) {
-    if (n <= 0) return 0;
-    if (outR <= 0) return null;
-    let left = n;
-    /* горизонт — от старта: дальний старт не съедает время на закрытие */
-    const lim = (start === undefined ? 0 : Math.max(0, start - asOf - 1)) + HORIZON;
-    for (let d = 1; d <= lim; d++) {
-      const day = asOf + d;
-      if (inflowUntil === undefined || (inflowUntil !== null && day < inflowUntil)) left += inR;
-      if (dates.isWeekend(day) || (start !== undefined && day < start)) continue;
-      left -= outR;
-      if (left <= EPS) return d;
+  // null и undefined одинаково означают отсутствие сканфриза.
+  const incomingOn = (inR, stop, day) => (stop == null || day < stop ? inR : 0);
+  const futureInflow = (inR, stop, day) => inR > 0 && (stop == null || day + 1 < stop);
+  const finished = (left, inR, stop, day) => left <= EPS && !futureInflow(inR, stop, day);
+
+  /* Один дневной шаг для графиков, даты завершения и остатка к цели.
+     Сначала поступление, затем закрытие; свободная мощность сгорает.
+     Нулевая очередь до последних поступлений не завершает ряд. */
+  function* projection(n, inR, outR, asOf, stop, horizon, start) {
+    let left = Math.max(0, n), inc = 0, out = 0;
+    if (finished(left, inR, stop, asOf)) return;
+    for (let d = 1; d <= horizon; d++) {
+      const day = asOf + d, fresh = incomingOn(inR, stop, day);
+      left += fresh; inc += fresh;
+      if (!dates.isWeekend(day) && (start == null || day >= start)) {
+        const closed = Math.min(Math.max(0, outR), left);
+        left -= closed; out += closed;
+      }
+      if (left <= EPS) left = 0;
+      yield { day, inc, out, open: left };
+      if (finished(left, inR, stop, day)) return;
+    }
+  }
+
+  /* start — день начала закрытия; до него задачи только поступают.
+     Без сканфриза при положительном поступлении конечной даты нет. */
+  function simulate(n, inR, outR, asOf, stop, start) {
+    if (finished(n, inR, stop, asOf)) return 0;
+    if ((inR > 0 && stop == null) || outR <= 0) return null;
+    const lim = (start == null ? 0 : Math.max(0, start - asOf - 1)) + HORIZON;
+    for (const p of projection(n, inR, outR, asOf, stop, lim, start)) {
+      if (finished(p.open, inR, stop, p.day)) return p.day - asOf;
     }
     return null;
   }
 
-  /* left — рабочих дней после даты отчёта до цели включительно; нет ни
-     одного — perDay бесконечен. Новые — по календарным дням до сканфриза */
+  /* Минимальный постоянный темп для нулевой очереди к target. Проверяем
+     каждый суффикс периода: будущие поступления нельзя закрыть заранее.
+     Если после последнего рабочего дня приходят задачи — темп бесконечен. */
   function need(n, inR, asOf, stop, target) {
-    if (target <= asOf) return null;
-    const left = dates.workdays(asOf + 1, target);
-    const inflowDays = stop === null ? target - asOf : Math.max(0, Math.min(target, stop - 1) - asOf);
-    const incoming = inR * inflowDays;
-    return { perDay: left ? (n + incoming) / left : Infinity, left, incoming };
+    if (target <= asOf || target > asOf + HORIZON) return null;
+    let incoming = 0, left = 0, perDay = 0;
+    for (let day = target; day > asOf; day--) {
+      incoming += incomingOn(inR, stop, day);
+      if (!dates.isWeekend(day)) left++;
+      const backlog = incoming + (day === asOf + 1 ? n : 0);
+      perDay = Math.max(perDay, left ? backlog / left : backlog > EPS ? Infinity : 0);
+    }
+    return { perDay, left, incoming };
   }
 
   function daily(rows, from, to) {
@@ -116,22 +139,38 @@
     return s;
   }
 
-  /* Прогноз по дням после asOf тем же шагом, что simulate: поступление
-     каждый день до inflowUntil, закрытие по рабочим дням. inc и out —
-     прибавка к накопленному на asOf; ряд кончается, когда открытых не
-     осталось, или на горизонте. */
-  function project(n, inR, outR, asOf, inflowUntil, horizon, start) {
-    const s = [];
-    if (n <= 0) return s;
-    let left = n, inc = 0, out = 0;
-    for (let d = 1; d <= horizon; d++) {
-      const day = asOf + d;
-      if (inflowUntil === undefined || (inflowUntil !== null && day < inflowUntil)) { left += inR; inc += inR; }
-      if (!dates.isWeekend(day) && (start === undefined || day >= start)) { const c = Math.min(outR, left); left -= c; out += c; }
-      if (left <= EPS) { s.push({ day, inc, out: out + left, open: 0 }); return s; }
-      s.push({ day, inc, out, open: left });
+  /* Ряд до завершения всего объёма или горизонта, включая временные нули. */
+  function project(n, inR, outR, asOf, stop, horizon, start) {
+    return [...projection(n, inR, outR, asOf, stop, horizon, start)];
+  }
+
+  /* Чистые результаты для интерфейса. Остаток на дату цели известен даже
+     при бессрочном поступлении; запас — только при известном завершении. */
+  function forecast(n, inR, outR, asOf, stop, target, start) {
+    const days = simulate(n, inR, outR, asOf, stop, start);
+    const state = days !== null ? 'dated' : inR > 0 && stop == null ? 'open-ended' : outR <= 0 ? 'stalled' : 'horizon';
+    const valid = target != null && target >= asOf && target <= asOf + HORIZON;
+    let remaining = null, margin = null;
+    if (valid) {
+      const series = project(n, inR, outR, asOf, stop, target - asOf, start);
+      remaining = series.length ? series[series.length - 1].open : Math.max(0, n);
+      if (days !== null) {
+        const end = asOf + days;
+        margin = end <= target ? dates.workdays(end + 1, target) : -dates.workdays(target + 1, end);
+      }
     }
-    return s;
+    return { days, remaining, margin, state };
+  }
+
+  function scenarios(rows, asOf, since, stop, target, end) {
+    const to = end == null ? asOf : Math.min(end, asOf);
+    return [7, 14, 30].map(window => {
+      const R = rates(rows, asOf, window, since, to);
+      const from = to - R.days + 1;
+      const closed = rows.filter(r => { const d = outDay(r); return d !== null && d >= from && d <= to; }).length;
+      return { window, from, to, closed, rates: R,
+        forecast: forecast(R.open, R.inR, R.outR, asOf, stop, target) };
+    });
   }
 
   /* Режим «Когда начать». latestStart — самый поздний день старта (от
@@ -141,7 +180,7 @@
      ищем делением пополам: успеваем со старта lo, не успеваем после hi. */
   function fits(n, inR, rate, asOf, stop, target, start) {
     // сканфриза нет — новые приходят всё время, как в need()
-    const d = simulate(n, inR, rate, asOf, stop === null ? undefined : stop, start);
+    const d = simulate(n, inR, rate, asOf, stop, start);
     return d !== null && asOf + d <= target;
   }
   function latestStart(n, inR, rate, asOf, stop, target) {
@@ -155,12 +194,12 @@
      старта завтра закончить к target; рабочих дней до цели нет или темп
      нулевой — null. Верхняя граница — из need() (удваивается, пока не
      хватает), дальше делением пополам до наименьшего числа: need() считает
-     поступление до самой цели, и при цели в выходной она с запасом. */
+     ограничения поступлений и рабочих дней, в том числе у цели в выходной. */
   function devsNeeded(n, inR, perDev, asOf, stop, target) {
-    if (n <= 0) return 0;
-    if (perDev <= 0 || target <= asOf) return null;
+    if (finished(n, inR, stop, asOf)) return 0;
+    if (perDev <= 0 || target <= asOf || futureInflow(inR, stop, target)) return null;
     const nd = need(n, inR, asOf, stop, target);
-    if (!nd.left) return null;
+    if (nd === null || !nd.left || !isFinite(nd.perDay)) return null;
     const ok = k => fits(n, inR, k * perDev, asOf, stop, target, asOf + 1);
     if (ok(1)) return 1;
     let lo = 1, hi = Math.max(2, Math.ceil(nd.perDay / perDev - EPS));
@@ -169,5 +208,5 @@
     return hi;
   }
 
-  return { HORIZON, workStart, rates, simulate, need, daily, cumulative, project, latestStart, devsNeeded };
+  return { HORIZON, workStart, rates, simulate, need, daily, cumulative, project, latestStart, devsNeeded, forecast, scenarios };
 }));

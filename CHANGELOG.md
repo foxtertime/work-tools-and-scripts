@@ -7,6 +7,23 @@
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-26
+
+### Добавлено
+
+- `cvesummary` (1.21.0): остаток к релизу, запас или опоздание в рабочих
+  днях, сравнение сценариев темпа за 7/14/30 дней.
+
+### Исправлено
+
+- `cvesummary` (1.21.0): прогноз завершения всего объёма учитывает все
+  поступления до сканфриза, временно пустую очередь и потерю свободной
+  мощности. Без сканфриза при положительном поступлении конечный срок
+  неизвестен; графики и планирование используют ту же модель.
+- `cvesummary` (1.20.2): отсутствие End date у закрытой задачи SecOps
+  допускается и больше не показывается в аномалиях; часы остаются
+  неизвестными. Для остальных разработчиков проверка сохранена.
+
 ## [0.22.0] - 2026-10-26
 
 ### Добавлено
@@ -407,7 +424,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.20.0...v0.21.0
