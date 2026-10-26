@@ -49,7 +49,7 @@
     return [...groups.values()];
   }
   function mount(CS) {
-    const { roles, hours, dates, ai, strips } = CS;
+    const { roles, hours, dates, ai, strips, links } = CS;
     const $ = id => document.getElementById(id);
     const data = JSON.parse($('data').textContent), asOf = dates.dayOf(data.meta.as_of);
     const H = hours.compute(data.rows, asOf), dup = roles.duplicates(data.rows);
@@ -58,7 +58,8 @@
       return { ...r, i, hours: H.hours[i], sevN: roles.sevOf(r), measureN: roles.measureOf(r),
         devKey: roles.devOf(r), done: roles.isDone(r), open: roles.isOpen(r), taken: roles.isTaken(r),
         reasons, reasonsText: reasons.map(k => reasonNames[k]).join(', '),
-        duplicateRow: dup[i] === null ? '' : data.rows[dup[i]].row };
+        duplicateRow: dup[i] === null ? '' : data.rows[dup[i]].row,
+        duplicateTask: dup[i] === null ? '' : data.rows[dup[i]].task };
     });
     const pairs = aiRows(rows, roles), groupOf = r => !r.ai_verdict || norm(r.ai_verdict) === ai.NOT_PROCESSED ? 'none'
       : ['not affected', 'invalid cve', 'rejected cve'].includes(norm(r.ai_verdict)) ? 'no' : 'maybe';
@@ -116,10 +117,14 @@
         for (const c of columns.filter(c => visible.includes(c[0]))) {
           const td = make('td');
           if (c[0] === 'cve') { td.append(cveLink(r.link, r.cve)); td.className = 'mono'; }
-          else if (c[0] === 'task') { td.append(cveLink(r.task, r.task)); td.className = 'mono'; }
+          else if (c[0] === 'task') { td.append(cveLink(links.taskUrl(r.task), r.task)); td.className = 'mono'; }
           else if (c[0] === 'sevN') { const badge = make('span', 'drill-sev', r.sevN); badge.dataset.severity = r.sevN; td.append(badge); }
           else { td.textContent = r[c[0]] == null || r[c[0]] === '' ? '—' : String(r[c[0]]); }
-          if (c[0] === 'reasonsText' && r.duplicateRow) td.append(make('small', 'drill-dup', `Основная строка: ${r.duplicateRow}`));
+          if (c[0] === 'reasonsText' && r.duplicateRow) {
+            const primary = make('small', 'drill-dup', `Основная строка: ${r.duplicateRow}`);
+            if (r.duplicateTask) primary.append(' · ', cveLink(links.taskUrl(r.duplicateTask), r.duplicateTask));
+            td.append(primary);
+          }
           tr.append(td);
         }
         tbody.append(tr);
@@ -203,6 +208,37 @@
         }
       }
     }
+    /* Calendar buckets use the same source dates and period boundaries as
+       the chart. Cache once per field/step/developer across redraws. */
+    const chartCache = new Map();
+    function chart(host, field, dev = null) {
+      if (!host) return;
+      const span = Number(host.dataset.chartDays);
+      if (span !== 1 && span !== 7) return;
+      const key = JSON.stringify([field, span, dev]);
+      if (!chartCache.has(key)) {
+        const groups = new Map();
+        for (const r of rows) {
+          if (field === 'end' && (!r.done || !r.taken)) continue;
+          if (dev !== null && r.devKey !== dev) continue;
+          const day = dates.dayOf(r[field]);
+          if (day === null || day > asOf) continue;
+          const period = span === 1 ? day : dates.mondayOf(day);
+          if (!groups.has(period)) groups.set(period, []);
+          groups.get(period).push(r);
+        }
+        chartCache.set(key, groups);
+      }
+      const groups = chartCache.get(key);
+      for (const col of host.querySelectorAll('[data-chart-day]')) {
+        const from = Number(col.dataset.chartDay), to = Math.min(from + span - 1, asOf);
+        const when = span === 1 ? dates.ruOf(from) : 'неделя с ' + dates.ruOf(from);
+        const event = field === 'tdate' ? 'Поступление задач' : dev === null ? 'Закрыто командой' : 'Закрыто · ' + dev;
+        const note = field === 'tdate' ? 'Поступившие задачи по Task date.' : 'Задачи со статусом «Готов» и назначенным разработчиком, по End date.';
+        bind(col, `${event} · ${when}`, groups.get(from) || [],
+          `${note} Период: ${dates.ruOf(from)} — ${dates.ruOf(to)}, включительно.`);
+      }
+    }
     function connect() {
       bind($('k-total'), 'Все задачи', rows);
       bind($('k-comp'), 'Все компоненты', rows, `${roles.uniques(rows).comps} компонентов. В списке — все строки этих компонентов, включая строки без компонента.`);
@@ -248,8 +284,11 @@
           bind(span,`${comp} · ${key}`,subset);
         }
       }
+      chart($('weeks'), 'tdate');
+      chart($('burn'), 'end');
       for (const card of $('people').querySelectorAll('.dev')) {
         const dev=card.querySelector('h3').textContent.trim(), mine=rows.filter(r=>r.devKey===dev);
+        chart(card.querySelector('.dev-tl'), 'end', dev);
         bind(card.querySelector('.big'), 'Разработчик: '+dev, mine);
         const predicates=[r=>r.done,r=>roles.isWorking(r)&&!roles.isReview(r)&&!roles.isPaused(r)&&!roles.needsAttention(r),
           r=>roles.isWorking(r)&&roles.isReview(r),r=>roles.isWorking(r)&&roles.isPaused(r),r=>roles.isWorking(r)&&roles.needsAttention(r)];
@@ -298,7 +337,7 @@
       remGrid.forEach((indexes,i)=>indexes.forEach(j=>bind(remCells[j],`Remediation: ${remGroups[i].key} · ${groups[remGroups[i].g]}`,remGroups[i].rows,pairNote)));
       [...$('remstrip').children].forEach((node,i)=>bind(node,`Remediation: ${remGroups[i].key} · ${groups[remGroups[i].g]}`,remGroups[i].rows,pairNote));
     }
-    const hint=make('p','drill-hint','Нажмите на число или сегмент, чтобы открыть список задач.');
+    const hint=make('p','drill-hint','Нажмите на число, сегмент или столбик графика, чтобы открыть список задач.');
     document.querySelector('.hero .wrap').append(hint);
     connect();
     let queued=false;

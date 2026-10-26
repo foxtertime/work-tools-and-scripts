@@ -11,7 +11,7 @@ import re
 
 ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 # порядок важен: модуль ниже пользуется теми, что выше
-SCRIPTS = ("dates.js", "roles.js", "hours.js", "pace.js", "timeline.js", "nav.js", "strips.js", "ai.js", "render.js", "drilldown.js")
+SCRIPTS = ("dates.js", "roles.js", "hours.js", "pace.js", "timeline.js", "nav.js", "strips.js", "ai.js", "links.js", "render.js", "drilldown.js")
 _CSS, _DATA, _JS = "/*@css*/", "@data@", "/*@js*/"
 
 
