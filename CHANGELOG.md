@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.24.2] - 2026-10-27
+
+### Изменено
+
+- `cvesummary` (1.22.2): из футера страницы убраны длинные пояснения;
+  остаются только источник и версия.
+- `cvesummary` (1.22.2): актуализирован TODO — удалены устаревшие части
+  замечаний и старые замеры, уточнены сохраняющиеся задачи.
+
 ## [0.24.1] - 2026-10-26
 
 ### Изменено
@@ -446,7 +455,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.1...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.2...HEAD
+[0.24.2]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.1...v0.24.2
 [0.24.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.22.0...v0.23.0
