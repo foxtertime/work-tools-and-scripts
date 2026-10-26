@@ -101,6 +101,30 @@ test('отсутствие Start date у других разработчиков
   assert.deepStrictEqual(got.hours, [null, null, null]);
 });
 
+test('SecOps: «Готов» без End date разрешён, неизвестные часы не делят день открытой задачи', function () {
+  var got = hours.compute([
+    t('SecOps', MON, null, 'Готов'),
+    t(' secops ', null, null, 'Готов'),
+    t('SECOPS', MON + 5, null, 'Готов'),
+    t('SecOps', MON, null),
+    t('SecOps', MON + 5, MON + 6, 'Готов'),
+  ], MON + 1);
+  assert.deepStrictEqual(got.anomalies, []);
+  assert.deepStrictEqual(got.hours, [null, null, null, 16, 0]);
+  assert.strictEqual(got.load.get('SecOps').get(MON), 1);
+});
+
+test('другие разработчики: «Готов» без End date остаётся аномалией', function () {
+  var got = hours.compute([
+    t('Иванов', MON, null, 'Готов'),
+    t('SecOps team', MON, null, 'Готов'),
+  ], MON + 1);
+  assert.deepStrictEqual(got.anomalies, [
+    { index: 0, reason: 'done-no-end' }, { index: 1, reason: 'done-no-end' },
+  ]);
+  assert.deepStrictEqual(got.hours, [null, null]);
+});
+
 test('SecOps: остальные аномалии и расчёт часов с датой старта сохраняются', function () {
   var got = hours.compute([
     t('SecOps', MON + 2, MON),
@@ -112,8 +136,7 @@ test('SecOps: остальные аномалии и расчёт часов с 
     t('SecOps', MON + 5, null),
   ], MON + 3);
   assert.deepStrictEqual(got.anomalies, [
-    { index: 0, reason: 'end-before-start' }, { index: 1, reason: 'done-no-end' },
-    { index: 2, reason: 'done-no-end' }, { index: 3, reason: 'bad-date' },
+    { index: 0, reason: 'end-before-start' }, { index: 3, reason: 'bad-date' },
     { index: 4, reason: 'bad-date' },
   ]);
   assert.deepStrictEqual(got.hours, [null, null, null, null, null, 8, 0]);
