@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-26
+
 ### Добавлено
 
 - `cvesummary` (1.20.0): подписи счётчиков над баром шапки сначала
@@ -405,7 +407,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.21.1...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.19.0...v0.20.0
