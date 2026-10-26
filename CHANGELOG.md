@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-10-26
+
 ### Исправлено
 
 - `cvesummary` (1.19.1): триаж для штриховки в шапке определяется по любому
@@ -391,7 +393,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.21.1...HEAD
+[0.21.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.18.0...v0.19.0
