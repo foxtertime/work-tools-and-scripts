@@ -123,6 +123,17 @@
           <div class="fc fc-stack"><div class="fc-set" id="forecast"></div><div class="fc-set off" id="forecast-plan" aria-hidden="true"></div></div>
         </div>
       </div>
+      <div class="forecast-target" id="forecast-target" aria-live="polite"></div>
+      <div class="pace-scenarios" id="pace-scenarios">
+        <h3 class="cve-h3">Сценарии по фактическому темпу</h3>
+        <p class="sub">Окна 7 / 14 / 30 дней до выбранной даты «по», ограниченные началом работы. Это сравнение темпов, не доверительный интервал.</p>
+        <div class="tablewrap">
+          <table class="tight">
+            <thead><tr><th>Окно темпа</th><th>Поступает / день</th><th>Закрывается / раб. день</th><th>Завершение</th><th>Остаток к цели</th><th>Запас / опоздание</th></tr></thead>
+            <tbody id="scenario-body"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="stack"><p class="pace-note" id="pace-note"></p><p class="pace-note off" id="pace-note-plan" aria-hidden="true"></p></div>
     </section>
 

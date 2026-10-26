@@ -272,7 +272,7 @@
     const { R, stop, target } = paceCtx;
     const hist = pace.cumulative(recs, FIRST, AS_OF), last = hist[hist.length - 1];
     const proj = plan ? plan.proj : pace.project(last.open, R.inR, R.outR, AS_OF, stop !== null ? stop : undefined, BURN_HORIZON);
-    if (proj.length && proj[proj.length - 1].open > 0) legendFor(`${word} — не сходится, показан год`);
+    if (proj.length && proj[proj.length - 1].day >= AS_OF + BURN_HORIZON) legendFor(`${word} — показан год`);
     /* цель и сканфриз — в пределах двух лет, чтобы идеальная линия дошла до нуля */
     const end = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, nearDay(stop), nearDay(target), plan ? plan.end : AS_OF);
     const n = end - FIRST + 1, ai = AS_OF - FIRST;
@@ -704,31 +704,73 @@
     renderInflow();
   }
 
-  /* «Закончить к …»: сколько закрывать в рабочий день и хватает ли
-     текущего темпа; возвращает [дата-колонка, пояснение] */
+  function forecastText(F) {
+    if (F.days === 0) return 'завершено';
+    if (F.days !== null) return fmt(AS_OF + F.days);
+    return F.state === 'open-ended' ? 'срок не определён' : F.state === 'stalled' ? 'нет закрытий' : 'за горизонтом';
+  }
+  function forecastNote(F) {
+    return F.state === 'open-ended' ? 'Новые задачи продолжают поступать. Задайте сканфриз для даты завершения всего объёма.'
+      : F.state === 'stalled' ? 'При текущем темпе задачи не закрываются.'
+        : F.state === 'horizon' ? 'Завершение не найдено в пределах 10 лет.'
+          : 'Учтены все ожидаемые поступления до сканфриза; временный ноль не означает завершение.';
+  }
+  function marginText(F, target) {
+    if (F.margin === null) return '—';
+    if (AS_OF + F.days > target) return `опоздание ${wdays(-F.margin)}`;
+    return F.margin ? `запас ${wdays(F.margin)}` : 'к цели';
+  }
+
+  /* Требуемый темп относится к очереди на дату цели; если после неё ещё
+     будут поступления, это не обещание завершить весь объём релиза. */
   function needText(nd, R, stop, target) {
     const out = (cls, d, s) => [el('div', cls, d), el('div', 's', s)];
-    if (nd === null) return out('d bad', 'дата прошла', `Выберите дату позже ${fmt(AS_OF)}.`);
+    if (nd === null) return out('d bad', target > AS_OF + pace.HORIZON ? 'слишком далеко' : 'дата прошла',
+      target > AS_OF + pace.HORIZON ? 'Выберите цель в пределах 10 лет.' : `Выберите дату позже ${fmt(AS_OF)}.`);
     const coming = Math.round(nd.incoming);
-    const untilStop = stop !== null && stop <= target ? ` до сканфриза ${fmt(stop)}` : '';
-    if (R.open === 0 && coming === 0) return out('d ok', 'не нужно', 'Открытых задач нет, новых до этой даты не ожидается.');
-    if (!nd.left) return out('d bad', 'нет рабочих дней', `До ${fmt(target)} не осталось рабочих дней. Выберите дату позже.`);
-    const fresh = `≈ ${coming} ${plural(coming, 'новую', 'новые', 'новых')}${untilStop}`;
-    const what = R.open === 0 ? fresh : `${tasks(R.open)}` + (coming ? ` и ${fresh}` : '');
-    const head = `Столько нужно закрывать в рабочий день, чтобы за ${wdays(nd.left)} закрыть ${what}.`;
+    if (R.open === 0 && nd.incoming === 0) return out('d ok', 'не нужно', 'Открытых задач нет, новых до этой даты не ожидается.');
+    if (!nd.left) return out('d bad', 'нет рабочих дней', `До ${fmt(target)} не осталось рабочих дней.`);
+    if (!isFinite(nd.perDay)) return out('d bad', 'недостижимо', 'После последнего рабочего дня ещё поступят задачи. Сдвиньте сканфриз или целевую дату.');
     const ratio = R.outR ? nd.perDay / R.outR : Infinity;
     const now = !R.outR ? ' Сейчас задачи не закрываются.'
-      : ratio <= 1 ? ` Сейчас закрываем ${f1(R.outR)} в рабочий день — темпа хватает.`
-        : ratio < 2 ? ` Сейчас закрываем ${f1(R.outR)} в рабочий день — нужно на ${Math.ceil((ratio - 1) * 100)}% быстрее.`
-          : ` Сейчас закрываем ${f1(R.outR)} в рабочий день — нужно в ${f1(ratio)} раза быстрее.`;
-    const per = nd.perDay < 0.05 ? '< 0,1' : f1(nd.perDay);
-    return out('d', `${per}/день`, (R.open === 0 ? 'Открытых задач нет. ' : '') + head + now);
+      : ratio <= 1 ? ` Сейчас закрываем ${f1(R.outR)} — темпа хватает.`
+        : ` Сейчас закрываем ${f1(R.outR)} — нужно на ${Math.ceil((ratio - 1) * 100)}% быстрее.`;
+    return out('d', `${nd.perDay < 0.05 ? '< 0,1' : f1(nd.perDay)}/день`,
+      `Для нулевого остатка к цели: ${R.open} текущих и ≈ ${coming} новых задач за ${wdays(nd.left)}. Свободная мощность не переносится на будущие дни.` + now);
+  }
+
+  function renderTarget(F, target, plan) {
+    const box = $('forecast-target'); box.replaceChildren();
+    const valid = F.remaining !== null;
+    const why = target === null ? 'Укажите целевую дату.' : target > AS_OF + pace.HORIZON ? 'Цель дальше чем через 10 лет.' : 'Целевая дата раньше даты отчёта.';
+    const cell = (title, value, note, cls) => {
+      const c = el('div', 'target-cell'); c.append(el('div', 'e', title), el('div', 'd' + (cls ? ' ' + cls : ''), value), el('div', 's', note)); box.append(c);
+    };
+    cell(`Остаток к ${target === null ? 'целевой дате' : fmt(target)}`, valid ? (F.remaining === 0 ? '0' : F.remaining < 0.1 ? '< 0,1' : '≈ ' + f1(F.remaining)) : '—',
+      valid ? (plan ? 'По плановому темпу, если начать завтра.' : 'По темпу выбранного периода.') + ' С учётом новых задач до цели.' : why,
+      valid ? F.remaining > 0 ? 'bad' : 'ok' : '');
+    cell('Запас до цели', marginText(F, target), valid ? (F.margin === null ? forecastNote(F) : 'В рабочих днях, Пн–Пт, без праздников.') : why,
+      F.margin !== null ? AS_OF + F.days > target ? 'bad' : 'ok' : '');
+  }
+
+  function renderScenarios(stop, target, end, plan) {
+    $('pace-scenarios').hidden = plan;
+    const body = $('scenario-body'); body.replaceChildren();
+    if (plan) return;
+    for (const x of pace.scenarios(recs, AS_OF, START, stop, target, end)) {
+      const R = x.rates, F = x.forecast, tr = el('tr');
+      const window = el('td'); window.append(el('b', null, `${x.window} дней`), el('small', null, `${fmt(x.from)} — ${fmt(x.to)}`),
+        el('small', null, `Закрыто ${x.closed} за ${wdays(R.work)}`));
+      tr.append(window, el('td', 'num', f1(R.inR)), el('td', 'num', f1(R.outR)), el('td', null, forecastText(F)),
+        el('td', 'num', F.remaining === null ? '—' : F.remaining === 0 ? '0' : F.remaining < 0.1 ? '< 0,1' : '≈ ' + f1(F.remaining)), el('td', null, marginText(F, target)));
+      body.append(tr);
+    }
   }
 
   /* Режим «Когда начать»: поступление — реальное за период темпа, закрытие —
      заданное: разработчиков × задач в рабочий день на одного, со дня
      старта; до старта задачи только копятся. Остальная страница — по факту. */
-  let paceMode = LS.get('cve.paceMode') === 'plan' ? 'plan' : 'fact';
+  let paceMode = LS.get('cve.paceMode') === 'plan' ? 'plan' : 'fact', paceInitialized = false;
   function renderPlan(R, WINDOW, stop, target, shown) {
     /* по умолчанию — сколько людей закрывали задачи в период темпа и их
        средний темп; никто не закрывал — 1 человек по 1 задаче */
@@ -760,10 +802,11 @@
     if (shown) {
       $('p-out').textContent = f2(P); $('p-out-l').textContent = 'по плану в рабочий день';
       $('p-out').parentElement.dataset.tip = `${people} × ${f2(rate)} в рабочий день`;
-      const wk = Math.round(R.inR * 7 - P * 5), pn = $('p-net');
+      const week = pace.project(N, R.inR, P, AS_OF, stop, 7, AS_OF + 1);
+      const wk = Math.round((week.length ? week[week.length - 1].open : N) - R.open), pn = $('p-net');
       pn.textContent = (wk > 0 ? '+' : wk < 0 ? '−' : '') + Math.abs(wk); pn.className = 'v ' + (wk < 0 ? 'ok' : wk > 0 ? 'bad' : '');
       $('p-net-l').textContent = 'бэклог за неделю по плану';  // знак и цвет — куда
-      pn.parentElement.dataset.tip = `За неделю работы по плану: придёт ≈ ${f1(R.inR * 7)}, закроем ${f2(P * 5)}`;
+      pn.parentElement.dataset.tip = 'Изменение очереди за следующие 7 дней, если начать завтра; с учётом сканфриза и задач с готовым решением';
     }
 
     const fc = $('forecast-plan'); fc.replaceChildren();
@@ -775,49 +818,44 @@
     const noTarget = target === null || target <= AS_OF || far;
     const askTarget = target === null ? 'Укажите дату «Хотим закончить к» — от неё считается старт.'
       : far ? 'Цель дальше чем через 10 лет — выберите дату ближе.' : `Выберите дату «Хотим закончить к» позже ${fmt(AS_OF)}.`;
-    const S = N === 0 || noTarget ? null : pace.latestStart(N, R.inR, P, AS_OF, stop, target);
+    const F = pace.forecast(N, R.inR, P, AS_OF, stop, target, AS_OF + 1);
+    const empty = F.days === 0, openEnded = F.state === 'open-ended';
+    const afterTarget = !noTarget && R.inR > 0 && stop !== null && stop - 1 > target;
+    const S = empty || noTarget || openEnded || afterTarget ? null : pace.latestStart(N, R.inR, P, AS_OF, stop, target);
 
-    /* 1. самый поздний старт */
     const T1 = 'Начать не позднее';
-    if (N === 0) line(T1, 'd ok', skip ? 'только закрыть' : 'не нужно', none);
+    if (empty) line(T1, 'd ok', 'не нужно', none);
     else if (noTarget) line(T1, 'd bad', target === null ? 'нет цели' : far ? 'слишком далеко' : 'дата прошла', askTarget);
-    else if (S === null) line(T1, 'd bad', 'не успеть', `Даже со старта завтра по ${f2(P)} в рабочий день к ${fmt(target)} не закрыть. Сколько людей нужно — в «Разработчиков нужно».`);
+    else if (openEnded) line(T1, 'd', 'срок не определён', forecastNote(F));
+    else if (afterTarget) line(T1, 'd bad', 'не успеть', 'Новые задачи продолжат поступать после целевой даты. Сдвиньте сканфриз или цель.');
+    else if (S === null) line(T1, 'd bad', 'не успеть', `Даже со старта завтра по ${f2(P)} в рабочий день весь объём к ${fmt(target)} не закрыть.`);
     else {
-      const end = AS_OF + pace.simulate(N, R.inR, P, AS_OF, inflow, S);
-      const c = Math.round(R.inR * Math.max(0, (stop === null ? end : Math.min(end, stop - 1)) - AS_OF));
-      const fresh = c ? ` и ≈ ${c} ${plural(c, 'новую', 'новые', 'новых')}${stop !== null && stop <= end ? ' до сканфриза' : ''}` : '';
-      line(T1, 'd', fmt(S), `Закрыть ${tasks(N)}${fresh} по ${f2(P)} в рабочий день — ≈ ${wd(S, end)}, до ${fmt(end)}.` + (S === AS_OF + 1 ? ' Начинать нужно уже завтра.' : ''));
+      const end = AS_OF + pace.simulate(N, R.inR, P, AS_OF, stop, S);
+      line(T1, 'd', fmt(S), `Весь объём с новыми задачами до сканфриза будет закрыт ${fmt(end)}.` + (S === AS_OF + 1 ? ' Начинать нужно уже завтра.' : ''));
     }
 
-    /* 2. старт завтра */
     const T2 = 'Если начать завтра';
-    const d1 = pace.simulate(N, R.inR, P, AS_OF, inflow, AS_OF + 1);
-    if (d1 === 0) line(T2, 'd ok', skip ? 'только закрыть' : 'завершено', none);
-    else if (d1 === null) line(T2, 'd bad', 'не завершится', `Задач приходит не меньше, чем закрываем по ${f2(P)} в рабочий день. ` + (stop === null ? 'Задайте сканфриз или увеличьте темп.' : 'Увеличьте темп.'));
-    else {
-      const end = AS_OF + d1, z = noTarget ? 0 : dates.workdays(end + 1, target);
-      const vs = noTarget ? '' : end > target ? ` Опоздание к цели — ${wd(target + 1, end)}.` : z ? ` Запас до цели — ${wdays(z)}.` : ' Укладываемся к цели.';
-      line(T2, !noTarget && end > target ? 'd bad' : 'd', fmt(end), `≈ ${wd(AS_OF + 1, end)}.${vs}`);
-    }
+    line(T2, F.days === 0 ? 'd ok' : F.days !== null && !noTarget && AS_OF + F.days > target ? 'd bad' : 'd', forecastText(F),
+      F.days === 0 ? none : F.days === null ? forecastNote(F) : `≈ ${wd(AS_OF + 1, AS_OF + F.days)}.` + (noTarget ? '' : ` ${marginText(F, target)}.`));
 
-    /* 3. сколько людей нужно со старта завтра */
     const T3 = 'Разработчиков нужно';
-    if (N === 0) line(T3, 'd ok', '0', none);
+    if (empty) line(T3, 'd ok', '0', none);
     else if (noTarget) line(T3, 'd', '—', askTarget);
+    else if (openEnded) line(T3, 'd', '—', forecastNote(F));
+    else if (afterTarget) line(T3, 'd bad', 'не успеть', 'Никакое число людей не завершит весь объём до последних ожидаемых поступлений.');
     else {
       const k = pace.devsNeeded(N, R.inR, rate, AS_OF, stop, target);
-      if (k === null) line(T3, 'd bad', 'не успеть', `До ${fmt(target)} не осталось рабочих дней.`);
+      if (k === null) line(T3, 'd bad', 'не успеть', `Нельзя закрыть весь объём к ${fmt(target)}. Проверьте сканфриз и оставшиеся рабочие дни.`);
       else line(T3, k <= devs ? 'd ok' : 'd bad', String(k), `Чтобы закончить к ${fmt(target)}, начав завтра, по ${f2(rate)} в рабочий день на одного. ` + (k <= devs ? `Задано ${devs} — хватает.` : `Задано ${devs} — не хватает ${k - devs}.`));
     }
 
-    /* старт для графика: самый поздний, а если его нет — завтра */
     const start = S !== null ? S : AS_OF + 1;
-    /* год симуляции считается от старта, а не от отчёта */
-    const proj = N > 0 ? pace.project(N, R.inR, P, AS_OF, inflow, start - AS_OF + BURN_HORIZON, start) : [];
-    /* ось симуляции — до конца ряда и до цели, если она в горизонте */
+    const proj = pace.project(N, R.inR, P, AS_OF, stop, start - AS_OF + BURN_HORIZON, start);
+    // Мгновенное исключение готовых задач должно быть видно и тогда,
+    // когда оставшаяся очередь пуста и прогнозу больше нечего рисовать.
+    if (skip && !proj.length) proj.push({ day: AS_OF + 1, inc: 0, out: 0, open: 0 });
     const pend = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, noTarget ? AS_OF : target);
-    /* pre — закрытые сразу задачи с готовым решением: ступенька на burn-графиках */
-    return { P, start: N > 0 ? start : null, proj, end: pend, pre: skip ? readyN : 0 };
+    return { P, start: empty ? null : start, proj, end: pend, pre: skip ? readyN : 0, forecast: F };
   }
 
   function renderPace() {
@@ -838,7 +876,7 @@
     const ready = recs.filter(r => r.open && r.reasons.length).length;
     const fc = $('forecast'); fc.replaceChildren();
     $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}: ${days(R.days)}, из них ${wdays(R.work)}` + (WINDOW.from > wa ? ` — начало прижато к началу работы` : '');
-    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Закрытая задача — со статусом «Готов» и заполненным End date. Новые задачи приходят каждый календарный день (до сканфриза — в текущем темпе), закрываем по рабочим дням, Пн–Пт, без учёта праздников.`;
+    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Закрытая задача — со статусом «Готов» и заполненным End date. Сканфриз — первый день без новых задач. До него новые задачи приходят каждый календарный день, закрываем по рабочим дням, Пн–Пт, без учёта праздников. Свободная мощность не накапливается. Завершение — после последних поступлений, а не при первом нуле в очереди.`;
     /* средние — за период, в подсказке — сколько это задач; баланс — сколько
        реально пришло минус закрыто за выбранный период */
     const inN = Math.round(R.inR * R.days), outN = Math.round(R.outR * R.work), bal = inN - outN;
@@ -852,48 +890,31 @@
     pn.parentElement.dataset.tip = `Поступило ${inN}, закрыто ${outN}`;
     $('p-open').textContent = R.open;
     const sd = $('stop-date'), td = $('target-date');
-    if (!sd.value) sd.value = LS.get('cve.stopDate');
-    if (!td.value) td.value = LS.get('cve.targetDate') || dates.isoOf(AS_OF + 30);
+    if (!paceInitialized) {
+      sd.value = LS.get('cve.stopDate');
+      td.value = LS.get('cve.targetDate') || dates.isoOf(AS_OF + 30);
+      paceInitialized = true;
+    }
     const stop = dates.dayOf(sd.value), target = dates.dayOf(td.value);
-    /* row — из образца, дни вместо миллисекунд */
-    const row = (title, d, sub, main, n) => {
+    const F = pace.forecast(R.open, R.inR, R.outR, AS_OF, stop, target);
+    const row = (title, result, note) => {
       const r = el('div', 'fc-cell');
-      /* ноль: открытых нет — «завершено» (в главной строке с эмодзи, ниже
-         просто слово); открытые есть, но у всех готовое решение (строка «без
-         задач с готовым решением») — «только закрыть» */
-      const dt = d === 0 ? el('div', 'd ok', R.open === 0 ? (main ? 'завершено 🎉' : 'завершено') : 'только закрыть') : d === null ? el('div', 'd bad', 'не завершится') : el('div', 'd', fmt(AS_OF + d));
-      /* sub-функция пишет описание целиком, строка — после «N задач · ≈ дни» */
-      const meta = el('div', 's', typeof sub === 'function' ? sub(d) : (d ? `${n} ${plural(n, 'задача', 'задачи', 'задач')} · ≈ ${wdays(dates.workdays(AS_OF + 1, AS_OF + d))}. ` : '') + sub);
-      r.append(el('div', 'e', title), dt, meta);
-      fc.append(r);
+      r.append(el('div', 'e', title), el('div', result.days === 0 ? 'd ok' : 'd', forecastText(result)), el('div', 's', note)); fc.append(r);
     };
-    if (stop !== null) {
-      const coming = Math.round(R.inR * Math.max(0, stop - AS_OF - 1));
-      row('Расчётная дата завершения', pace.simulate(R.open, R.inR, R.outR, AS_OF, stop),
-        R.open === 0 ? 'Открытых задач нет.' + (coming ? ` До сканфриза придёт ещё ≈ ${coming}.` : '')
-          : `До сканфриза придёт ещё ≈ ${coming}, дальше только закрываем по ${f1(R.outR)} в рабочий день.`, true, R.open);
-    } else {
-      row('Расчётная дата завершения', R.open === 0 || R.net > 0 ? pace.simulate(R.open, R.inR, R.outR, AS_OF) : null, R.open === 0 ? 'Открытых задач нет.' : R.net > 0 ? 'Сканфриз не задан: новые задачи поступают в текущем темпе.' : 'Сканфриз не задан, а задач приходит не меньше, чем закрывается. Укажите дату сканфриза.', true, R.open);
-    }
-    const rest = R.open - ready;
-    const comingToStop = stop !== null ? Math.round(R.inR * Math.max(0, stop - AS_OF - 1)) : 0;
-    row('Без задач с готовым решением', pace.simulate(rest, R.inR, R.outR, AS_OF, stop === null ? null : stop), d => {
-      if (d === 0) return (R.open === 0 ? 'Открытых задач нет.' : `Все открытые задачи (${R.open}) — с готовым решением: их осталось только закрыть.`)
-        + (comingToStop ? ` До сканфриза придёт ещё ≈ ${comingToStop}.` : '');
-      const head = `Если сразу закрыть ${tasks(ready)} с готовым решением, останется ${rest}`;
-      if (d === null) return `${head}, и при текущем темпе их не закрыть.`;
-      const span = wdays(dates.workdays(AS_OF + 1, AS_OF + d));
-      return `${head}. ` + (stop === null ? `Без новых задач — ≈ ${span}.` : `С новыми до сканфриза ${fmt(stop)} — ≈ ${span}.`);
-    }, false, rest);
-    if (target !== null) {
-      const r = el('div', 'fc-cell'); r.append(el('div', 'e', `Закончить к ${fmt(target)}`));
-      r.append(...needText(pace.need(R.open, R.inR, AS_OF, stop, target), R, stop, target));
-      fc.append(r);
-    }
+    row('Расчётная дата завершения', F, forecastNote(F));
+    const rest = R.open - ready, withoutReady = pace.forecast(rest, R.inR, R.outR, AS_OF, stop, target);
+    row('Без задач с готовым решением', withoutReady,
+      `Если сразу закрыть ${tasks(ready)}, останется ${rest}. Будущие поступления учитываются по той же модели. ` + (withoutReady.days === null ? forecastNote(withoutReady) : ''));
+    const r = el('div', 'fc-cell'); r.append(el('div', 'e', `Нулевой остаток к ${target === null ? 'цели' : fmt(target)}`));
+    if (target === null) r.append(el('div', 'd', '—'), el('div', 's', 'Укажите целевую дату.'));
+    else r.append(...needText(pace.need(R.open, R.inR, AS_OF, stop, target), R, stop, target));
+    fc.append(r);
     /* оба режима собираются всегда — видимый один, другой держит место */
     const plan = paceMode === 'plan', pctx = renderPlan(R, WINDOW, stop, target, plan);
     [['pace-sub', !plan], ['pace-sub-plan', plan], ['forecast', !plan], ['forecast-plan', plan], ['pace-note', !plan], ['pace-note-plan', plan]]
       .forEach(([id, on]) => { $(id).classList.toggle('off', !on); $(id).setAttribute('aria-hidden', String(!on)); });
+    renderTarget(plan ? pctx.forecast : F, target, plan);
+    renderScenarios(stop, target, wb, plan);
     paceCtx = { R, stop, target, WINDOW, plan: plan ? pctx : null };
     drawPaceChart();
     return WINDOW;
