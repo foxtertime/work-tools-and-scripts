@@ -520,8 +520,6 @@
     row(rk, 'Задач в день', `за период темпа ${f1(win.outR)}`, closedAll ? f1(all.outR) : '—', null,
       `Закрыто в рабочий день: за всё время ${f1(all.outR)} (${closedAll} ${plural(closedAll, 'задача', 'задачи', 'задач')} за ${all.work} ${plural(all.work, 'рабочий день', 'рабочих дня', 'рабочих дней')}), за период темпа ${fmt(paceCtx.WINDOW.from)} — ${fmt(paceCtx.WINDOW.to)} — ${f1(win.outR)}`);
 
-    const P = recs.filter(r => String(r.p).trim() === '+').length, D = recs.filter(r => String(r.d).trim() === '+').length;
-    $('pd').textContent = `P отмечен у ${P}, D у ${D} из ${N} задач`;
   }
 
   /* statTable — из образца; колонка «Ср. срок» → «Ср. часов» по закрытым */
