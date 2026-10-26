@@ -442,8 +442,12 @@
       { k: 'Устранено ранее', l: 'устранено ранее', c: 'var(--rs-patch)', f: r => r.open && r.reasons[0] === 'patch', g: 'ready' },
       { k: 'Вне диапазона', l: 'вне диапазона', c: 'var(--rs-range)', f: r => r.open && r.reasons[0] === 'range', g: 'ready' },
       { k: 'Дубликат', l: 'дубликат', c: 'var(--rs-dup)', f: r => r.open && r.reasons[0] === 'dup', g: 'ready' },
-    ].map(x => ({ ...x, n: recs.filter(x.f).length }));
+    ].map(x => {
+      const members = recs.filter(x.f);
+      return { ...x, n: members.length, triaged: members.filter(roles.isTriaged).length };
+    });
     const sum = g => parts.filter(x => x.g === g).reduce((a, x) => a + x.n, 0);
+    const triageText = (n, t) => `растриажено ${t} из ${n} (${Math.round(t / n * 100)}%)`;
     const G = [
       { g: 'done', n: sum('done'), l: 'готово' },
       { g: 'none', n: sum('none'), l: 'без решения' },
@@ -463,7 +467,8 @@
       if (!x.n) continue;
       const mine = shown.filter(p => p.g === x.g), span = mine.length;
       const d = el('div'); d.style.gridColumn = `span ${span}`; d.dataset.parts = span;
-      const cap = el('div', 'cap'); cap.append(el('b', null, String(x.n)), el('span', null, x.l)); cap.dataset.tip = `${x.l}: ${x.n} из ${N} (${pct(x.n)}%)`;
+      const triaged = mine.reduce((a, p) => a + p.triaged, 0);
+      const cap = el('div', 'cap'); cap.append(el('b', null, String(x.n)), el('span', null, x.l)); cap.dataset.tip = `${x.l}: всего ${x.n} (${pct(x.n)}% от всех задач) · ${triageText(x.n, triaged)}`;
       d.append(cap, el('div', 'br')); gb.append(d);
       const li = el('span'); li.hidden = true;
       if (span === 1) { const sw = el('i', 'sw'); sw.style.background = mine[0].c; li.append(sw); }
@@ -472,11 +477,14 @@
     }
     for (const x of shown) {
       const lab = x.g === 'ready' ? String(x.n) : pct(x.n) + '%';
-      const sp = el('span', null, lab); sp.dataset.label = lab; sp.style.background = x.c; sp.dataset.tip = `${x.k}: ${x.n} из ${N} (${pct(x.n)}%)`; mb.append(sp);
+      const sp = el('span', null, lab); sp.dataset.label = lab; sp.style.background = x.c;
+      sp.style.setProperty('--triaged', (x.triaged / x.n * 100) + '%');
+      sp.dataset.tip = `${x.k}: всего ${x.n} (${pct(x.n)}% от всех задач) · ${triageText(x.n, x.triaged)}`; mb.append(sp);
       if (x.g === 'ready') { const li = el('span'); const sw = el('i', 'sw'); sw.style.background = x.c; li.append(sw, `${x.l} `, el('b', null, String(x.n))); lg.append(li); }
     }
     const extra = ready.filter(r => r.reasons.length > 1).length;
     if (extra) { const li = el('span'); li.textContent = `· у ${extra} ${plural(extra, 'задачи', 'задач', 'задач')} несколько оснований, в полосе — по первому`; lg.append(li); }
+    lg.append(el('span', null, '· штриховка — растриажено'));
 
     const row = (box, label, note, val, cls, tip, dot) => {
       const d = el('div', cls || null); const k = el('span', 'k', label);
@@ -486,6 +494,7 @@
     };
     const review = working.filter(r => r.review).length, paused = working.filter(r => r.paused).length;
     const st = $('hero-state'); st.replaceChildren();
+    row(st, 'Готов', '', sum('done'), null, '', '--st-done');
     row(st, 'В работе', `ревью ${review} · пауза ${paused}`, working.length, null, `в работе ${working.length}, из них на ревью ${review}, на паузе ${paused}`, '--st-work');
     row(st, 'Не взято', 'без разработчика', recs.filter(r => !r.taken && !r.done).length, null, '', '--st-idle');
     const rk = $('hero-risk'); rk.replaceChildren();
