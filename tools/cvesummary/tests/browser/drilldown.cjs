@@ -1,0 +1,143 @@
+const { chromium } = require(process.env.CVESUMMARY_PLAYWRIGHT || 'playwright');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const D = require('../../cvesummary/assets/js/drilldown.js');
+const R = require('../../cvesummary/assets/js/roles.js');
+const path = require('node:path');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
+const { pathToFileURL } = require('node:url');
+const toolRoot = path.resolve(__dirname, '../..');
+const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cvesummary-browser-'));
+const preview = path.join(base, 'preview');
+const generated = spawnSync(process.env.PYTHON || 'python3', [path.join(__dirname, 'fixtures.py'), preview],
+  { cwd: toolRoot, env: { ...process.env, PYTHONPATH: toolRoot, PYTHONDONTWRITEBYTECODE: '1' }, encoding: 'utf8' });
+assert.equal(generated.status, 0, generated.stderr);
+let checks=0;
+(async()=>{
+ const browser=await chromium.launch({headless:true,...(process.env.CVESUMMARY_CHROMIUM ? { executablePath: process.env.CVESUMMARY_CHROMIUM } : {})});
+ const page=await browser.newPage({viewport:{width:1440,height:1000},acceptDownloads:true});
+ const errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/fonts.googleapis.com/**',r=>r.abort());
+ await page.route('**/fonts.gstatic.com/**',r=>r.abort());
+ const load=name=>page.goto(pathToFileURL(path.join(preview, name + '.html')).href,{waitUntil:'domcontentloaded'});
+ const close=()=>page.locator('.drill-close').click();
+ const count=async()=>Number((await page.locator('#drill-count').innerText()).match(/\d+/)[0]);
+ const rownums=()=>page.locator('#drill-body tr[data-row]').evaluateAll(nodes=>nodes.map(n=>Number(n.dataset.row)).sort((a,b)=>a-b));
+ try {
+  const values=[{row:1,cvss:'9,8',comp:'OpenSSL'},{row:2,cvss:'',comp:'curl'},{row:3,cvss:'7.5',comp:'openssl'}];
+  assert.deepEqual(D.select(values,'OPENSSL').map(r=>r.row),[1,3]); checks++;
+  assert.deepEqual(D.select(values,'','cvss','asc').map(r=>r.row),[3,1,2]); checks++;
+  assert.deepEqual(D.select(values,'openssl 9,8').map(r=>r.row),[1]); checks++;
+  assert.match(D.csv([{row:1,task:'=1+1',comment:'a;"b"\nc'}]),/"'=1\+1"/);
+  assert.match(D.csv([{comment:'a;"b"\nc'}]),/"a;""b""\nc"/); checks++;
+  await load('index');
+  const source=JSON.parse(await page.locator('#data').textContent());
+  await page.locator('#k-total').focus(); await page.keyboard.press('Enter');
+  assert.equal(await count(),100); assert.equal(await page.locator('#drill-body tr[data-row]').count(),50); checks++;
+  await page.getByRole('button',{name:'Далее →'}).click();
+  assert.match(await page.locator('.drill-footer').innerText(),/51–100/); checks++;
+  await page.locator('#drill-search').fill('openssl');
+  assert.equal(await count(),source.rows.filter(r=>r.comp==='openssl').length);
+  const sortedValues=await page.locator('#drill-body tr').evaluateAll(nodes=>nodes.map(n=>Number(n.children[5].textContent.replace(',','.'))));
+  assert.ok(sortedValues.every((x,i)=>!i||sortedValues[i-1]>=x)); checks++;
+  const downloadPromise=page.waitForEvent('download'); await page.getByRole('button',{name:'Скачать CSV'}).click();
+  const download=await downloadPromise; await download.saveAs(base+'/preview/selection.csv');
+  const csv=fs.readFileSync(base+'/preview/selection.csv','utf8');
+  assert.ok(csv.startsWith('\ufeff')); assert.equal(csv.split('\r\n').length-1,await count()); checks++;
+  await page.locator('#drill-search').fill('NO_SUCH_TASK');
+  assert.equal(await count(),0); assert.ok(await page.getByRole('button',{name:'Скачать CSV'}).isDisabled()); checks++;
+  await page.keyboard.press('Escape');
+  assert.ok(!(await page.locator('#task-explorer').evaluate(n=>n.open)));
+  assert.equal(await page.evaluate(()=>document.activeElement.id),'k-total'); checks++;
+  const critical=page.locator('#sevrows .k[data-key="Critical"]');
+  await critical.click();
+  assert.deepEqual(await rownums(),source.rows.filter(r=>r.sev==='Critical').map(r=>r.row).sort((a,b)=>a-b)); checks++;
+  await close();
+  await page.locator('#sevrows .k[data-key="Critical"] + .b > span > span').first().click();
+  assert.deepEqual(await rownums(),source.rows.filter(r=>r.sev==='Critical' && R.isDone(r)).map(r=>r.row).sort((a,b)=>a-b));
+  await close(); checks++;
+  await page.locator('#sevrows .k[data-key="Critical"] + .b > span > span').last().click();
+  assert.deepEqual(await rownums(),source.rows.filter(r=>r.sev==='Critical' && R.isOpen(r)).map(r=>r.row).sort((a,b)=>a-b));
+  await close(); checks++;
+  await page.locator('#close-why .k').first().locator('+ .b > span > span').first().click();
+  assert.deepEqual(await rownums(),source.rows.filter(r=>R.isOpen(r) && R.norm(r.rstate)==='fixed' && R.isTaken(r)).map(r=>r.row).sort((a,b)=>a-b));
+  await close(); checks++;
+  // Every bound plain numeric counter must reveal exactly its displayed count.
+  const counterResults=await page.evaluate(()=>{
+   const results=[];
+   for(const node of document.querySelectorAll('[data-drill]')) {
+    if(node.id==='k-comp'||!/^\d+$/.test(node.textContent.trim())) continue;
+    const visible=Number(node.textContent.trim()); node.click();
+    const actual=Number(document.querySelector('#drill-count').textContent.match(/\d+/)[0]);
+    results.push({title:node.getAttribute('aria-label'),visible,actual});
+    document.querySelector('#task-explorer').close();
+   }
+   return results;
+  });
+  assert.ok(counterResults.length>100);
+  for(const r of counterResults) assert.equal(r.actual,r.visible,JSON.stringify(r)); checks+=counterResults.length;
+  // Actual component controls continue to work, and new segments retain drilldowns.
+  await page.locator('#comp-by button[data-by="measure"]').click();
+  await page.waitForFunction(()=>document.querySelector('#components .track span[data-drill]'));
+  await page.locator('#components .lab').first().click(); assert.ok(await count()>0); await close(); checks++;
+  await page.locator('#pace-by button[data-by="up"]').click();
+  await page.locator('#hero-state > div').last().click(); assert.equal(await count(),source.rows.filter(r=>!R.isTaken(r)&&R.isOpen(r)).length); await close(); checks++;
+  await page.setViewportSize({width:390,height:844}); await page.locator('#k-total').click();
+  const bounds=await page.locator('#task-explorer').boundingBox();
+  assert.ok(bounds.x>=0&&bounds.x+bounds.width<=390);
+  assert.ok(bounds.y>=0&&bounds.y+bounds.height<=844);
+  await page.screenshot({path:base+'/preview/mobile.png'});
+  await page.emulateMedia({colorScheme:'dark'});
+  await page.screenshot({path:base+'/preview/mobile-dark.png'}); checks++;
+  await close();
+  for (const id of ['ai-leg', 'rem-leg']) {
+    const fallback = page.locator('#' + id + ' > span:not([hidden])').first();
+    const expected = Number((await fallback.innerText()).match(/\d+$/)[0]);
+    await fallback.click(); assert.equal(await count(), expected); await close(); checks++;
+  }
+  await page.setViewportSize({width:1440,height:1000}); await page.emulateMedia({colorScheme:'light'});
+  await load('index');
+  const trigger = page.locator('#sevrows .k[data-key="Critical"]');
+  await trigger.click();
+  const originalTrigger = await trigger.elementHandle();
+  await page.setViewportSize({width:390,height:844});
+  await page.waitForFunction(node => !node.isConnected, originalTrigger);
+  await page.waitForFunction(() => document.querySelector('#sevrows .k[data-key="Critical"]').dataset.drill);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.activeElement.matches('#sevrows .k[data-key="Critical"]'));
+  checks++;
+  await page.setViewportSize({width:1440,height:1000});
+  for(const name of ['empty','no-ai']) {
+   await load(name); await page.locator('#k-total').click(); assert.equal(await count(),name==='empty'?0:100); await close(); checks++;
+  }
+  await load('edge');
+  assert.equal(await page.locator('#ai-total .n').innerText(),'2');
+  await page.locator('#ai-rows .k[data-key="not affected"]').click();
+  assert.deepEqual(await rownums(),[4,6]); await close(); checks++;
+  const remNodes=page.locator('#rem-rows .k[data-key="pending"]');
+  assert.equal(await remNodes.count(),2);
+  await remNodes.nth(0).click(); assert.deepEqual(await rownums(),[5]); await close();
+  await remNodes.nth(1).click(); assert.deepEqual(await rownums(),[6]); await close(); checks++;
+  await page.locator('#ai-total .n').click(); assert.deepEqual(await rownums(),[7,8]); await close(); checks++;
+  await page.locator('#k-cve').click(); assert.equal(await count(),7); await close(); checks++;
+  await page.locator('#k-total').click();
+  assert.equal(await page.locator('#drill-body a[href^="javascript:"]').count(),0);
+  assert.equal(await page.locator('#drill-body img').count(),0); await close(); checks++;
+  await load('placeholders');
+  const unrunLabels=page.locator('#ai-rows .k[data-key="не прогнано"]');
+  assert.equal(await unrunLabels.count(),2);
+  await unrunLabels.first().click(); assert.deepEqual(await rownums(),[3]); await close(); checks++;
+  await unrunLabels.last().click(); assert.deepEqual(await rownums(),[4]); await close(); checks++;
+  const missingRemLabels=page.locator('#rem-rows .k[data-key="не указана"]');
+  await missingRemLabels.first().click(); assert.deepEqual(await rownums(),[5]); await close(); checks++;
+  await missingRemLabels.last().click(); assert.deepEqual(await rownums(),[6]); await close(); checks++;
+  await page.locator('#rem-rows .k[data-key="не прогнано"]').first().click();
+  assert.deepEqual(await rownums(),[3]); await close(); checks++;
+  await load('index'); await page.locator('#close-why .k').first().click();
+  await page.screenshot({path:base+'/preview/desktop.png'});
+  assert.deepEqual(errors,[]); checks++;
+  console.log(JSON.stringify({artifacts:base,checks,numericCountersChecked:counterResults.length,pageErrors:errors,download:base+'/preview/selection.csv',screenshots:['desktop.png','mobile.png','mobile-dark.png']},null,2));
+ } finally { await browser.close(); }
+})().catch(e=>{console.error(e);process.exitCode=1;});
