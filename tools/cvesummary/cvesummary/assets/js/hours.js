@@ -27,10 +27,10 @@
   function spanOf(r, asOf) {
     if (!roles.isTaken(r)) return { span: null, reason: null };
     if ((r.bad || []).some(k => k === 'start' || k === 'end')) return { span: null, reason: 'bad-date' };
-    const from = dates.dayOf(r.start), end = dates.dayOf(r.end);
-    if (from === null && roles.norm(r.dev) !== 'secops') return { span: null, reason: 'no-start' };
+    const from = dates.dayOf(r.start), end = dates.dayOf(r.end), secops = roles.norm(r.dev) === 'secops';
+    if (from === null && !secops) return { span: null, reason: 'no-start' };
     if (from !== null && end !== null && end < from) return { span: null, reason: 'end-before-start' };
-    if (end === null && roles.isDone(r)) return { span: null, reason: 'done-no-end' };
+    if (end === null && roles.isDone(r)) return { span: null, reason: secops ? null : 'done-no-end' };
     if (from === null || from > asOf) return { span: null, reason: null };
     return { span: { from, to: Math.min(end === null ? asOf : end, asOf), end }, reason: null };
   }
@@ -44,7 +44,7 @@
       if (reason) { anomalies.push({ index: i, reason }); return; }
       if (!roles.isTaken(r)) return;
       if (!span) {
-        if (dates.dayOf(r.start) !== null) hours[i] = 0;
+        if (dates.dayOf(r.start) !== null && !(roles.isDone(r) && dates.dayOf(r.end) === null)) hours[i] = 0;
         return;
       }
       hours[i] = 0;
