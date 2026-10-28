@@ -6,7 +6,7 @@
   --m1:var(--accent);--m2:color-mix(in srgb,var(--accent) 86%,var(--panel));--m3:color-mix(in srgb,var(--accent) 74%,var(--panel));--m4:color-mix(in srgb,var(--accent) 63%,var(--panel));--m5:color-mix(in srgb,var(--accent) 53%,var(--panel));--m6:color-mix(in srgb,var(--accent) 44%,var(--panel));--m7:color-mix(in srgb,var(--accent) 36%,var(--panel));--m8:color-mix(in srgb,var(--accent) 29%,var(--panel));--m9:color-mix(in srgb,var(--accent) 23%,var(--panel));--m10:color-mix(in srgb,var(--accent) 18%,var(--panel));
   --c1:#2a78d6;--c2:#eb6834;--c3:#1baf7a;--c4:#eda100;--c5:#e87ba4;--c6:#008300;--c7:#6250d6;--c8:#e34948;
   --bg:#F5F7F9; --panel:#FFFFFF; --fg:#14202B; --muted:#5A6B7A; --line:#DCE3EA; --grid:#E9EEF2;
-  --accent:#1D6A8A; --accent-soft:#E2EFF5; --weekend:rgba(20,32,43,.05);
+  --accent:#1D6A8A; --accent-soft:#E2EFF5; --weekend:rgba(20,32,43,.05); --hatch:rgba(0,0,0,.22);
   --hero-bg:#0F1D29; --hero-fg:#E8F0F6; --hero-muted:#8FA6B8; --hero-line:#25394A;
   --sev-crit:#9E2A16; --sev-imp:#D0582E; --sev-mod:#E8955F; --sev-low:#F1C9A6; --sev-none:#C3CDD6;
   --ok:#2E7D4F; --warn:#B7791F; --bad:#B42318;
@@ -19,7 +19,7 @@
   --rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B;
   --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;--c6:#008300;--c7:#9085e9;--c8:#e66767;
   --bg:#0C141B; --panel:#121D27; --fg:#E4ECF2; --muted:#93A6B5; --line:#223241; --grid:#1A2834;
-  --accent:#5DB3D6; --accent-soft:#16303D; --weekend:rgba(228,236,242,.045);
+  --accent:#5DB3D6; --accent-soft:#16303D; --weekend:rgba(228,236,242,.045); --hatch:rgba(255,255,255,.16);
   --hero-bg:#070D13; --hero-fg:#E8F0F6; --hero-muted:#8FA6B8; --hero-line:#1D2E3C;
   --sev-crit:#FF8A6B; --sev-imp:#E0693F; --sev-mod:#A65A33; --sev-low:#6A4532; --sev-none:#3A4A58;
   --ok:#5CC48A; --warn:#E3A846; --bad:#F27063; color-scheme:dark}}
@@ -28,7 +28,7 @@
   --rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B;
   --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;--c6:#008300;--c7:#9085e9;--c8:#e66767;
   --bg:#0C141B; --panel:#121D27; --fg:#E4ECF2; --muted:#93A6B5; --line:#223241; --grid:#1A2834;
-  --accent:#5DB3D6; --accent-soft:#16303D; --weekend:rgba(228,236,242,.045);
+  --accent:#5DB3D6; --accent-soft:#16303D; --weekend:rgba(228,236,242,.045); --hatch:rgba(255,255,255,.16);
   --hero-bg:#070D13; --hero-fg:#E8F0F6; --hero-muted:#8FA6B8; --hero-line:#1D2E3C;
   --sev-crit:#FF8A6B; --sev-imp:#E0693F; --sev-mod:#A65A33; --sev-low:#6A4532; --sev-none:#3A4A58;
   --ok:#5CC48A; --warn:#E3A846; --bad:#F27063; color-scheme:dark}
@@ -371,6 +371,8 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .pace-leg{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .tl .vmark{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 3}
 .tl text.vlab{font-size:11px;paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
+/* подпись перерыва в работе — по центру штриховки, поверх данных */
+.tl text.brk-lab{fill:var(--fg);font-weight:600}
 .pace-leg i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:3px;margin-right:6px}
 .pace-tl .wkend{opacity:.6}
 /* пояснение — мелко, отдельной строкой под линией */

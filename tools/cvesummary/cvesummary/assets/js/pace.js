@@ -16,6 +16,8 @@
 
   const HORIZON = 3650;
   const EPS = 1e-9;
+  /* столько рабочих дней подряд без работы — уже перерыв, а не простой */
+  const BREAK_WORKDAYS = 5;
 
   const inDay = r => dates.dayOf(r.tdate);
   const outDay = r => (roles.isDone(r) ? dates.dayOf(r.end) : null);
@@ -32,11 +34,36 @@
     return lo;
   }
 
+  /* Перерывы в работе — отрезки [from, to] от начала работы since до даты
+     отчёта, где нет ни одного дня работы (active — дни, когда на ком-то из
+     команды висела задача) и рабочих дней подряд не меньше
+     BREAK_WORKDAYS; хвост перед датой отчёта — тоже. Короткий простой —
+     обычные дни. Дней работы нет вовсе — сравнивать не с чем, перерывов нет. */
+  function breaks(active, since, asOf) {
+    const out = [];
+    if (since == null || !active.size) return out;
+    let from = null;
+    for (let d = since; d <= asOf + 1; d++) {
+      const idle = d <= asOf && !active.has(d);
+      if (idle && from === null) from = d;
+      if (!idle && from !== null) {
+        const work = dates.workdays(from, d - 1);
+        if (work >= BREAK_WORKDAYS) out.push({ from, to: d - 1, work });
+        from = null;
+      }
+    }
+    return out;
+  }
+  const inBreak = (gaps, d) => gaps.some(g => d >= g.from && d <= g.to);
+
   /* Окно (from, end]: win дней, кончающихся в end (по умолчанию и не позже
      даты отчёта), но не раньше начала работы since; win = Infinity — весь
      период от since (нет since — от первой даты в данных). days —
-     календарных дней в окне, work — рабочих. Открытые — на дату отчёта. */
-  function rates(rows, asOf, win, since, end) {
+     календарных дней в окне, work — рабочих за вычетом перерывов gaps
+     (сколько вычтено — cut), closed — закрытых в окне вне перерывов, на
+     них темп; closedTotal — всех закрытых в окне, для баланса очереди.
+     Поступление перерывы не трогают. Открытые — на дату отчёта. */
+  function rates(rows, asOf, win, since, end, gaps = []) {
     end = end === undefined || end === null ? asOf : Math.min(end, asOf);
     let from = end - win;
     if (since !== undefined && since !== null) from = Math.max(from, since - 1);
@@ -46,10 +73,12 @@
     }
     from = Math.min(from, end - 1);
     const within = d => d !== null && d > from && d <= end;
-    const days = end - from, work = dates.workdays(from + 1, end);
+    const cut = gaps.reduce((a, g) => a + dates.workdays(Math.max(g.from, from + 1), Math.min(g.to, end)), 0);
+    const days = end - from, work = dates.workdays(from + 1, end) - cut;
+    const shut = rows.map(outDay).filter(within), closed = shut.filter(d => !inBreak(gaps, d)).length;
     const inR = rows.map(inDay).filter(within).length / days;
-    const outR = work ? rows.map(outDay).filter(within).length / work : 0;
-    return { inR, outR, net: outR * 5 - inR * 7, open: rows.filter(roles.isOpen).length, days, work };
+    const outR = work ? closed / work : 0;
+    return { inR, outR, net: outR * 5 - inR * 7, open: rows.filter(roles.isOpen).length, days, work, cut, closed, closedTotal: shut.length };
   }
 
   // null и undefined одинаково означают отсутствие сканфриза.
@@ -162,13 +191,12 @@
     return { days, remaining, margin, state };
   }
 
-  function scenarios(rows, asOf, since, stop, target, end) {
+  function scenarios(rows, asOf, since, stop, target, end, gaps = []) {
     const to = end == null ? asOf : Math.min(end, asOf);
     return [7, 14, 30].map(window => {
-      const R = rates(rows, asOf, window, since, to);
+      const R = rates(rows, asOf, window, since, to, gaps);
       const from = to - R.days + 1;
-      const closed = rows.filter(r => { const d = outDay(r); return d !== null && d >= from && d <= to; }).length;
-      return { window, from, to, closed, rates: R,
+      return { window, from, to, closed: R.closed, rates: R,
         forecast: forecast(R.open, R.inR, R.outR, asOf, stop, target) };
     });
   }
@@ -208,5 +236,5 @@
     return hi;
   }
 
-  return { HORIZON, workStart, rates, simulate, need, daily, cumulative, project, latestStart, devsNeeded, forecast, scenarios };
+  return { HORIZON, BREAK_WORKDAYS, workStart, breaks, inBreak, rates, simulate, need, daily, cumulative, project, latestStart, devsNeeded, forecast, scenarios };
 }));
