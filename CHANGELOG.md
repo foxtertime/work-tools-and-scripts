@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-28
+
+### Изменено
+
+- `vulnsheet` (4.0.0): `--ai` читает `results.json` плагина
+  `rhel-security` в новом формате 2 — с разделами `completed`, `problems`
+  и `sources_not_found`; необработанные пары и пакеты без исходников
+  попадают в таблицу как `not processed`. Файл прежнего формата 1 больше
+  не читается.
+
 ## [0.25.0] - 2026-10-27
 
 ### Добавлено
@@ -465,7 +475,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.2...v0.25.0
 [0.24.2]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.1...v0.24.2
 [0.24.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.0...v0.24.1

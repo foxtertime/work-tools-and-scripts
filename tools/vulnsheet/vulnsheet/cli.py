@@ -389,8 +389,8 @@ def _header(args, cfg, run) -> None:
         meta = ", ".join(part for part in (
             run.ai.plugin and "plugin %s" % run.ai.plugin,
             run.ai.run and "прогон %s" % run.ai.run) if part)
-        logger.info("AI: %s%s, результатов %d", args.ai, " (%s)" % meta if meta else "",
-                    run.ai.total)
+        logger.info("AI: %s%s, %s", args.ai, " (%s)" % meta if meta else "",
+                    ", ".join("%s %d" % count for count in run.ai.counts))
     if not run.packages:
         logger.info("план: спрашивать нечего — в сеть не идём")
         return
@@ -444,7 +444,8 @@ def _warn_ai(verdicts: Optional[ai.Found]) -> None:
     if verdicts is None:
         return
     for skipped in verdicts.skipped:
-        logger.warning("AI: результат %d пропущен: %s", skipped.number, skipped.reason)
+        logger.warning("AI: результат %d в %s пропущен: %s",
+                       skipped.number, skipped.section, skipped.reason)
     if verdicts.repeated:
         logger.warning("AI: повторов пар %d — действует самый свежий по run", verdicts.repeated)
 
