@@ -21,7 +21,66 @@ test('rates: поступление на календарный день, зак
 
 test('rates без закрытых и без дат — нули, не NaN', function () {
   var got = pace.rates([{ tdate: '', status: '', end: '' }], D, 14);
-  assert.deepStrictEqual(got, { inR: 0, outR: 0, net: 0, open: 1, days: 14, work: 10 });
+  assert.deepStrictEqual(got, { inR: 0, outR: 0, net: 0, open: 1, days: 14, work: 10, cut: 0, closed: 0, closedTotal: 0 });
+});
+
+/* дни работы: D (Пн) … D + 4 (Пт), потом две недели пусто, с D + 21 (Пн) снова */
+function active(list) { return new Set(list); }
+var WEEK1 = [D, D + 1, D + 2, D + 3, D + 4], WEEK4 = [D + 21, D + 22, D + 23];
+
+test('breaks: пять рабочих дней подряд без работы — перерыв, со своими выходными', function () {
+  var got = pace.breaks(active(WEEK1.concat(WEEK4)), D, D + 23);
+  assert.deepStrictEqual(got, [{ from: D + 5, to: D + 20, work: 10 }]);
+});
+
+test('breaks: короткий простой — не перерыв, порог — ровно пять рабочих дней', function () {
+  // Вт–Пт пусто: 4 рабочих дня
+  assert.deepStrictEqual(pace.breaks(active([D, D + 7]), D, D + 7), []);
+  // Вт–Пн пусто: 5 рабочих дней
+  assert.deepStrictEqual(pace.breaks(active([D, D + 8]), D, D + 8), [{ from: D + 1, to: D + 7, work: 5 }]);
+  // работа в выходной (взял или закрыл) рвёт отрезок
+  assert.deepStrictEqual(pace.breaks(active([D, D + 5, D + 9]), D, D + 9), []);
+});
+
+test('breaks: хвост перед датой отчёта и пустое начало — по тому же правилу', function () {
+  assert.deepStrictEqual(pace.breaks(active(WEEK1), D, D + 13), [{ from: D + 5, to: D + 13, work: 5 }]);
+  assert.deepStrictEqual(pace.breaks(active(WEEK1), D, D + 10), []);
+  assert.deepStrictEqual(pace.breaks(active(WEEK4), D, D + 23), [{ from: D, to: D + 20, work: 15 }]);
+});
+
+test('breaks: нет начала работы или ни одного дня работы — перерывов нет', function () {
+  assert.deepStrictEqual(pace.breaks(active(WEEK1), null, D + 30), []);
+  assert.deepStrictEqual(pace.breaks(active([]), D, D + 30), []);
+});
+
+test('rates с перерывами: рабочие дни перерыва и закрытия в нём не считаются, поступление — как было', function () {
+  var gaps = [{ from: D + 5, to: D + 20, work: 10 }];
+  // 2 закрыты в первую неделю, 1 — в перерыве (SecOps), 3 — в четвёртую
+  var rows = [r(D, 'Готов', D + 1), r(D, 'Готов', D + 2), r(D + 9, 'Готов', D + 10),
+    r(D + 21, 'Готов', D + 21), r(D + 21, 'Готов', D + 22), r(D + 22, 'Готов', D + 23)];
+  var plain = pace.rates(rows, D + 23, Infinity, D);
+  var got = pace.rates(rows, D + 23, Infinity, D, undefined, gaps);
+  assert.strictEqual(plain.work, 18);
+  assert.strictEqual(plain.outR, 6 / 18);
+  assert.strictEqual(got.work, 8);
+  assert.strictEqual(got.cut, 10);
+  assert.strictEqual(got.closed, 5);
+  assert.strictEqual(got.closedTotal, 6);  // баланс очереди — по всем закрытым
+  assert.strictEqual(got.outR, 5 / 8);
+  assert.strictEqual(got.inR, plain.inR);
+  assert.strictEqual(got.days, plain.days);
+});
+
+test('rates с перерывом, задетым окном частично, и сценарии с ним', function () {
+  var gaps = [{ from: D + 5, to: D + 20, work: 10 }];
+  var rows = [r(D + 21, 'Готов', D + 21), r(D + 21, 'Готов', D + 22), r(D + 9, 'Готов', D + 10)];
+  // окно 14 дней до D + 23: (D + 9, D + 23] — из перерыва в нём 7 рабочих дней
+  var got = pace.rates(rows, D + 23, 14, D, undefined, gaps);
+  assert.strictEqual(got.cut, 7);
+  assert.strictEqual(got.work, 3);
+  assert.strictEqual(got.closed, 2);
+  var sc = pace.scenarios(rows, D + 23, D, null, null, undefined, gaps);
+  assert.deepStrictEqual(sc.map(function (x) { return [x.closed, x.rates.work]; }), [[2, 3], [2, 3], [2, 8]]);
 });
 
 test('simulate — приходят каждый день, закрываем по рабочим; результат — календарный сдвиг', function () {
