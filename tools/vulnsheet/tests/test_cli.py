@@ -1055,8 +1055,9 @@ class AiTest(CliCase):
         path = self.path("ai.json")
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(body if body is not None else
-                      {"format": 1, "plugin": "4.0.0",
-                       "run": "2026-10-22T07:45", "results": list(results)},
+                      {"format": 2, "plugin": "4.1.0", "run": "2026-10-22T07:45",
+                       "completed": list(results), "problems": [],
+                       "sources_not_found": []},
                       handle)
         return path
 
@@ -1075,8 +1076,8 @@ class AiTest(CliCase):
         self.assertEqual(self.run_cli("--ai", self.write_ai(AI_VIM, other)), EXIT_OK)
         self.assertEqual(self.report_lines(), [HEADER, EXPECTED_AI])
         messages = self.messages()
-        self.assertIn("AI: %s (plugin 4.0.0, прогон 2026-10-22T07:45), результатов 2"
-                      % self.path("ai.json"), messages)
+        self.assertIn("AI: %s (plugin 4.1.0, прогон 2026-10-22T07:45), completed 2, "
+                      "problems 0, sources_not_found 0" % self.path("ai.json"), messages)
         self.assertIn("  - AI, колонки ai_*:", messages)
         self.assertIn("    - заполнено строк 1", messages)
         self.assertIn("    - результатов без строки в таблице 1", messages)
@@ -1105,13 +1106,13 @@ class AiTest(CliCase):
         self.assertEqual(code, EXIT_PARTIAL)
         self.assertEqual(self.report_lines()[1], EXPECTED_AI)
         messages = self.messages()
-        self.assertIn("AI: результат 2 пропущен: нет cve", messages)
+        self.assertIn("AI: результат 2 в completed пропущен: нет cve", messages)
         self.assertIn("AI: повторов пар 1 — действует самый свежий по run", messages)
         self.assertIn("    - результатов AI без cve или package 1", messages)
 
     def test_broken_file_is_fatal_before_network(self):
-        path = self.write_ai(body={"format": 2, "results": []})
+        path = self.write_ai(body={"format": 1, "results": []})
         self.assertEqual(self.run_cli("--ai", path), EXIT_FATAL)
-        self.assertIn("ai.json: format 2", self.log)
+        self.assertIn("ai.json: format 1", self.log)
         self.connect.assert_not_called()
         self.assertFalse(os.path.exists(self.path("report.csv")))
