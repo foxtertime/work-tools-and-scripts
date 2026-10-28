@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-28
+
 ### Изменено
 
 - `vulnsheet` (4.0.0): `--ai` читает `results.json` плагина
@@ -473,7 +475,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.2...v0.25.0
 [0.24.2]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.1...v0.24.2
 [0.24.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.24.0...v0.24.1
