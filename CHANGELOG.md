@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-01
+
 ### Добавлено
 
 - `patchaudit` (0.2.0): новая тулза проверяет CVE-патчи из PATCH ветки
@@ -503,7 +505,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.25.0...v0.26.0
