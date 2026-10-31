@@ -1,0 +1,32 @@
+# Флаги главнее конфига. Путь: --config или $PATCHAUDIT_CONFIG.
+koji:
+  hub: https://koji.example.com/kojihub
+  tag: sl9-updates
+rhel: "9"  # точная версия: "9.2" и "9" — разные потоки
+
+gitlab:
+  default_host: gitlab.example.com
+  token_env: GITLAB_TOKEN  # токен с read_api хранится в окружении
+  patch_dir: PATCH
+  retries: 3
+  timeout: 30
+  hosts:
+    gitlab.example.com:
+      api: https://gitlab.example.com/api/v4
+
+vex:
+  # cache_dir: ~/.cache/patchaudit
+  cache_ttl: 3600
+  jobs: 8
+  retries: 3
+  timeout: 30
+
+# Модули задаются явно; без записи ищется обычный пакет.
+vex_streams:
+  "9":
+    nginx: nginx:1.26
+    npm: nodejs:20
+
+# Имена бинарных пакетов, которыми Red Hat обозначает исходный пакет.
+vex_names:
+  rust-afterburn: [afterburn, afterburn-dracut]

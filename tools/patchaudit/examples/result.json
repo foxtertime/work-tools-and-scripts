@@ -1,0 +1,154 @@
+{
+  "format": 1,
+  "tool_version": "0.2.0",
+  "complete": true,
+  "request": {
+    "mode": "nvr",
+    "package": "vim",
+    "target_nvr": "vim-8.2.2637-26.sl9_8^3",
+    "tag": "sl9-updates",
+    "rhel": "9",
+    "stream": null,
+    "aliases": []
+  },
+  "latest_build": "vim-8.2.2637-24.sl9_8^2",
+  "source": {
+    "host": "gitlab.example.com",
+    "project": "rpms/vim",
+    "branch": "updates/sl9"
+  },
+  "patch_directory": {
+    "path": "PATCH",
+    "present": true
+  },
+  "patches": [
+    {
+      "path": "PATCH/vim-CVE-2026-1000-1002.patch",
+      "cves": [
+        "CVE-2026-1000",
+        "CVE-2026-1002"
+      ],
+      "action": "keep"
+    },
+    {
+      "path": "PATCH/vim-CVE-2026-1000.patch",
+      "cves": [
+        "CVE-2026-1000"
+      ],
+      "action": "remove"
+    },
+    {
+      "path": "PATCH/vim-CVE-2026-1001.patch",
+      "cves": [
+        "CVE-2026-1001"
+      ],
+      "action": "remove_on_upgrade"
+    },
+    {
+      "path": "PATCH/vim-CVE-2026-1002.patch",
+      "cves": [
+        "CVE-2026-1002"
+      ],
+      "action": "keep"
+    },
+    {
+      "path": "PATCH/vim-CVE-2026-1003.patch",
+      "cves": [
+        "CVE-2026-1003"
+      ],
+      "action": "review"
+    }
+  ],
+  "cves": [
+    {
+      "cve": "CVE-2026-1000",
+      "status": "Fixed",
+      "vex_url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-1000.json",
+      "fixes": [
+        {
+          "nvr": "vim-8.2.2637-26.el9_8",
+          "fix_date": "2026-10-01",
+          "advisory_url": "https://access.redhat.com/errata/RHSA-2026:1000",
+          "products": [
+            "cpe:/a:redhat:enterprise_linux:9::appstream|vim||x86_64"
+          ]
+        }
+      ],
+      "action": "remove",
+      "reason": "target_includes_redhat_fix",
+      "fixed_in_target": [
+        {
+          "nvr": "vim-8.2.2637-26.el9_8",
+          "fix_date": "2026-10-01",
+          "advisory_url": "https://access.redhat.com/errata/RHSA-2026:1000",
+          "products": [
+            "cpe:/a:redhat:enterprise_linux:9::appstream|vim||x86_64"
+          ]
+        }
+      ],
+      "fixed_after_target": []
+    },
+    {
+      "cve": "CVE-2026-1001",
+      "status": "Fixed",
+      "vex_url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-1001.json",
+      "fixes": [
+        {
+          "nvr": "vim-8.2.2637-28.el9_8",
+          "fix_date": "2026-10-20",
+          "advisory_url": "https://access.redhat.com/errata/RHSA-2026:1001",
+          "products": [
+            "cpe:/a:redhat:enterprise_linux:9::appstream|vim||x86_64"
+          ]
+        }
+      ],
+      "action": "remove_on_upgrade",
+      "reason": "target_older_than_redhat_fix",
+      "fixed_in_target": [],
+      "fixed_after_target": [
+        {
+          "nvr": "vim-8.2.2637-28.el9_8",
+          "fix_date": "2026-10-20",
+          "advisory_url": "https://access.redhat.com/errata/RHSA-2026:1001",
+          "products": [
+            "cpe:/a:redhat:enterprise_linux:9::appstream|vim||x86_64"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-1002",
+      "status": "Affected",
+      "vex_url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-1002.json",
+      "fixes": [],
+      "action": "keep",
+      "reason": "redhat_not_fixed",
+      "fixed_in_target": [],
+      "fixed_after_target": []
+    },
+    {
+      "cve": "CVE-2026-1003",
+      "status": "no VEX record",
+      "vex_url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-1003.json",
+      "fixes": [],
+      "action": "review",
+      "reason": "no_reliable_verdict",
+      "fixed_in_target": [],
+      "fixed_after_target": []
+    }
+  ],
+  "ignored_files": [
+    "PATCH/build-fix.patch"
+  ],
+  "summary": {
+    "patches": 5,
+    "cves": 4,
+    "actions": {
+      "keep": 2,
+      "remove": 1,
+      "remove_on_upgrade": 1,
+      "review": 1
+    }
+  },
+  "problems": []
+}
