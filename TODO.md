@@ -17,6 +17,7 @@
 
 - [`tools/cvesummary/TODO.md`](tools/cvesummary/TODO.md)
 - [`tools/dashboard/TODO.md`](tools/dashboard/TODO.md)
+- [`tools/taskhistory/TODO.md`](tools/taskhistory/TODO.md)
 - [`tools/vulnsheet/TODO.md`](tools/vulnsheet/TODO.md)
 
 ## Как писать пункты
