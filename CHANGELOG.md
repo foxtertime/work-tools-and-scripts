@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-01
+
 ### Изменено
 
 - `dashboard` (4.0.0), `vulnsheet` (5.0.0), `patchaudit` (1.0.0),
@@ -516,7 +518,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.26.0...v0.27.0
