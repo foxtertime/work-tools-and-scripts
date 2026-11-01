@@ -21,6 +21,13 @@ vex:
   retries: 3
   timeout: 30
 
+vmaas:
+  arch: x86_64
+  # cache_dir: ~/.cache/patchaudit/vmaas
+  cache_ttl: 3600
+  retries: 3
+  timeout: 30
+
 # Модули задаются явно; без записи ищется обычный пакет.
 vex_streams:
   "9":
