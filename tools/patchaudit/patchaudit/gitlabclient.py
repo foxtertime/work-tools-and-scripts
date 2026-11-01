@@ -100,6 +100,8 @@ class GitlabClient:
         if cfg is None:
             return _tree_problem("gitlab: unknown host %s" % host)
         result = self._fetch_tree(cfg, project, ref, path)
+        if result.problem:
+            result = result._replace(problem=self._http.scrub(result.problem))
         if not note:
             return result
         # заметка о подмене хоста не отменяет удачное чтение: present
@@ -177,5 +179,5 @@ class GitlabClient:
                          project, ref, path)
             return TreeResult(False, [], None)
         logger.debug("%s: ветка %s — не удалось выяснить, есть ли она: %s %s",
-                     project, ref, response.status, server_message(response))
+                     project, ref, response.status, self._http.scrub(server_message(response)))
         return _tree_problem("gitlab: %s %s" % (response.status, server_message(response)))

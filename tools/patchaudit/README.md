@@ -5,7 +5,7 @@
 из `extra.source.original_url` этого билда, для CVE из имён файлов
 запрашивает Red Hat CSAF/VEX и пишет JSON. Патчи не удаляет.
 
-**Версия:** 0.2.0, источник номера — `patchaudit/__init__.py` и `--version`.
+**Версия:** 1.0.0, источник номера — `patchaudit/__init__.py` и `--version`.
 История — [CHANGELOG.md](CHANGELOG.md), задачи — [TODO.md](TODO.md).
 
 ## Два режима
@@ -26,8 +26,8 @@
 - PyYAML нужен только с YAML-конфигом: `python3-pyyaml` или `pip install pyyaml`.
 - Доступ к Koji, GitLab REST v4 и `https://security.access.redhat.com`.
   Все запросы — на чтение.
-- Для закрытого GitLab нужен токен с правом `read_api` в `GITLAB_TOKEN`.
-  Имя переменной меняется в конфиге; токен в JSON и журнал не попадает.
+- Для закрытого GitLab нужен токен с правом `read_api` в поле `gitlab.token`
+  YAML-конфига; токен в JSON и журнал не попадает.
 
 Из каталога этой тулзы, без установки:
 
@@ -65,6 +65,22 @@ patchaudit --version
 
 Шаблон — [patchaudit.example.yaml](patchaudit.example.yaml).
 Путь к конфигу: `--config` или `PATCHAUDIT_CONFIG`. Флаг главнее конфига.
+
+Токен задаётся значением в конфиге:
+
+```yaml
+gitlab:
+  token: "glpat-your-token"
+  hosts:
+    gitlab.example.com:
+      api: https://gitlab.example.com/api/v4
+```
+
+Пробелы по краям обрезаются. Отсутствующее поле, `null`, пустая или
+пробельная строка означают запросы без токена. Нестроковое значение — ошибка.
+С версии 1.0.0 токены из env не читаются: замените `gitlab.token_env`
+на `gitlab.token` и запишите сам токен вместо имени переменной.
+`PATCHAUDIT_CONFIG` по-прежнему задаёт путь к файлу.
 
 | Флаг | Назначение |
 | --- | --- |

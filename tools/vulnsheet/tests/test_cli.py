@@ -8,7 +8,7 @@ import stat
 import tempfile
 import unittest
 import urllib.error
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 from unittest import mock
 
 from tests.fakes import APPSTREAM96, RHEL9, FakeKojiSession, FakeTransport, Response, csaf, pid
@@ -358,7 +358,7 @@ VIM_NVR = "vim-8.2.2637-26.sl9_8.6^4"
 GITLAB_CONFIG = """\
 gitlab:
   retries: 1
-  token_env: VULNSHEET_TEST_TOKEN
+  token: "  glpat-t0ken-secret\\n"
   hosts:
     gitlab.example.com:
       api: https://gitlab.example.com/api/v4
@@ -383,7 +383,8 @@ class GitlabTest(CliCase):
             {"type": "blob", "path": "PATCH/vim-CVE-2026-73070.patch"}], {})})
         self.made = mock.patch("vulnsheet.cli.httpclient.UrllibTransport",
                                return_value=self.transport).start()
-        mock.patch.dict(os.environ, {"VULNSHEET_TEST_TOKEN": " glpat-t0ken-secret\n"}).start()
+        mock.patch.dict(os.environ, {"VULNSHEET_TEST_TOKEN": "env-custom-dummy",
+                                    "GITLAB_TOKEN": "env-default-dummy"}).start()
 
     def run_gitlab(self, *extra, config=GITLAB_CONFIG):
         path = self.path("vulnsheet.yaml")
@@ -412,12 +413,38 @@ class GitlabTest(CliCase):
         self.assertEqual(self.session.build_calls, [VIM_NVR])
         self.assertIn("    - «+» 1", self.log)
 
-    def test_token_from_the_environment_is_sent_stripped(self):
+    def test_token_from_yaml_is_sent_stripped(self):
         self.run_gitlab()
         url, params, headers = self.transport.requests[0]
         self.assertEqual(headers["PRIVATE-TOKEN"], "glpat-t0ken-secret")
         self.assertEqual(params["ref"], "sl9")
         self.assertEqual(self.made.call_args.kwargs["timeout"], 30)
+
+    def test_environment_tokens_never_authenticate_empty_yaml_token(self):
+        for value in ("", "  token: null\n", "  token: ''\n", "  token: '  '\n"):
+            with self.subTest(value=value), mock.patch.dict(os.environ, {
+                    "GITLAB_TOKEN": "env-default-dummy", "VULNSHEET_TEST_TOKEN": "env-custom-dummy"}):
+                self.transport.requests.clear()
+                cfg = GITLAB_CONFIG.replace('  token: "  glpat-t0ken-secret\\n"\n', value)
+                self.assertEqual(self.run_gitlab(config=cfg), EXIT_OK)
+                self.assertNotIn("PRIVATE-TOKEN", self.transport.requests[0][2])
+
+    def test_gitlab_network_errors_scrub_yaml_token_from_debug_and_csv(self):
+        for answer in (RuntimeError("header glpat-t0ken-secret"),
+                       Response(500, {"message": "echo glpat-t0ken-secret"}, {})):
+            failure = (mock.patch.object(self.transport, "get", side_effect=answer)
+                       if isinstance(answer, Exception) else nullcontext())
+            with self.subTest(answer=answer), failure:
+                self.transport.routes[TREE_URL] = answer
+                self.assertEqual(self.run_gitlab("--log-level", "debug"), EXIT_PARTIAL)
+                self.assertNotIn("glpat-t0ken-secret", self.log)
+                self.assertNotIn("glpat-t0ken-secret", "\n".join(self.report_lines()))
+
+    def test_bad_yaml_does_not_leak_secret_in_debug_traceback(self):
+        self.assertEqual(self.run_gitlab("--log-level", "debug", config=
+            "gitlab:\n  token: [dummy-malformed-secret\n"), EXIT_FATAL)
+        self.assertIn("YAML", self.log)
+        self.assertNotIn("dummy-malformed-secret", self.log)
 
     def test_without_a_patch_p_is_minus(self):
         self.transport.routes[TREE_URL] = Response(200, [
@@ -509,7 +536,7 @@ class RangesTest(CliCase):
     def test_version_inside_the_range_is_a_minus_in_d(self):
         self.assertEqual(self.run_ranges(), EXIT_OK)
         self.assertEqual(self.report_lines(), [HEADER, EXPECTED])
-        self.assertIn("диапазоны: NVD без ключа ($NVD_API_KEY пуст, запрос раз в 6 с), CVE.org",
+        self.assertIn("диапазоны: NVD без ключа (запрос раз в 6 с), CVE.org",
                       self.log)
         self.assertIn("диапазоны — CVE 1 → D", self.log)
 
@@ -527,14 +554,32 @@ class RangesTest(CliCase):
                      "    - источник: NVD 1, CVE.org 0"):
             self.assertIn(line + "\n", log)
 
-    def test_key_from_the_environment_goes_to_nvd_only(self):
-        with mock.patch.dict(os.environ, {"MY_NVD": " nvd-secret\n"}):
-            self.run_ranges("ranges:\n  nvd_key_env: MY_NVD\n")
-        self.assertIn("диапазоны: NVD с ключом из $MY_NVD", self.log)
+    def test_key_from_yaml_goes_to_nvd_only(self):
+        with mock.patch.dict(os.environ, {"MY_NVD": "env-custom-dummy",
+                                         "NVD_API_KEY": "env-default-dummy"}):
+            self.run_ranges('ranges:\n  nvd_key: " nvd-secret\\n"\n')
+        self.assertIn("диапазоны: NVD с ключом из ranges.nvd_key", self.log)
         self.assertNotIn("nvd-secret", self.log)
         headers = dict((url.split("/")[2], h) for url, h in self.range_calls)
         self.assertEqual(headers["services.nvd.nist.gov"], {"apiKey": "nvd-secret"})
         self.assertEqual(headers["cveawg.mitre.org"], {})
+
+    def test_environment_keys_never_authenticate_empty_yaml_key(self):
+        for value in ("", "  nvd_key: null\n", "  nvd_key: ''\n", "  nvd_key: '  '\n"):
+            with self.subTest(value=value), mock.patch.dict(os.environ, {
+                    "NVD_API_KEY": "env-default-dummy", "MY_NVD": "env-custom-dummy"}):
+                self.range_calls.clear()
+                self.assertEqual(self.run_ranges("ranges:\n  cache_ttl: 0\n" + value), EXIT_OK)
+                self.assertTrue(self.range_calls)
+                self.assertTrue(all("apiKey" not in headers for _, headers in self.range_calls))
+
+    def test_nvd_network_error_scrubs_yaml_key_from_logs_and_csv(self):
+        self.ranges_answers[nvd_url("CVE-2026-73070")] = urllib.error.URLError(
+            "Invalid header b'nvd-secret'")
+        self.run_ranges('ranges:\n  retries: 1\n  nvd_key: nvd-secret\n')
+        self.assertIn((nvd_url("CVE-2026-73070"), {"apiKey": "nvd-secret"}), self.range_calls)
+        self.assertNotIn("nvd-secret", self.log)
+        self.assertNotIn("nvd-secret", "\n".join(self.report_lines()))
 
     def test_product_names_from_the_config(self):
         self.ranges_answers[nvd_url("CVE-2026-73070")] = json.loads(
@@ -630,19 +675,19 @@ class HeaderTest(CliCase):
         header = self.header()
         self.assertEqual(header[1], "конфиг: " + path)
         self.assertIn("GitLab: gitlab.example.com (по умолчанию), каталог PATCH, "
-                      "токен из $VULNSHEET_TEST_TOKEN, потоков 3", header)
+                      "токен из gitlab.token, потоков 3", header)
         self.assertEqual(header[-1], "план: koji — пакетов 1, VEX — CVE 1, "
                                      "GitLab — каталог PATCH по билдам из koji (до 1) → P")
         self.assertNotIn("glpat-t0ken-secret", self.log)
 
     def test_gitlab_without_token_says_so(self):
-        path = self.write_config(GITLAB_CONFIG)
+        path = self.write_config(GITLAB_CONFIG.replace('  token: "  glpat-t0ken-secret\\n"\n', ""))
         with mock.patch.dict(os.environ, {"VULNSHEET_TEST_TOKEN": " "}), \
                 mock.patch("vulnsheet.cli.httpclient.UrllibTransport",
                            return_value=FakeTransport()):
             self.run_cli("--config", path)
         self.assertIn("GitLab: gitlab.example.com, каталог PATCH, без токена "
-                      "($VULNSHEET_TEST_TOKEN пуст) — видны только публичные проекты, "
+                      "— видны только публичные проекты, "
                       "потоков 8", self.header())
 
     def test_sync_names_table_blocks_output_and_rejects(self):

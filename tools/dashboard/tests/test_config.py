@@ -2,6 +2,7 @@ import os
 import re
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from dashboard.classify import CVE_RE, Classifier, find_cves
 from dashboard.config import Config, ConfigError, GitlabHost, load_config
@@ -17,7 +18,7 @@ koji:
   web: https://hub.example.com/koji
 gitlab:
   default_host: gitlab.example.com
-  token_env: MY_TOKEN
+  token: glpat-config-test-secret
   hosts:
     gitlab.example.com:
       api: https://gitlab.example.com/api/v4
@@ -42,14 +43,14 @@ class LoadConfigTest(unittest.TestCase):
         self.assertEqual(cfg.koji_hub, "https://hub.example.com/kojihub")
         self.assertIsNone(cfg.koji_web)
         self.assertEqual(cfg.patch_dir, "PATCH")
-        self.assertEqual(cfg.gitlab_token_env, "GITLAB_TOKEN")
+        self.assertIsNone(cfg.gitlab_token)
         self.assertEqual(cfg.gitlab_hosts, {})
 
     def test_full_config_is_read(self):
         cfg = load_config(write(FULL))
         self.assertEqual(cfg.koji_web, "https://hub.example.com/koji")
         self.assertEqual(cfg.gitlab_default_host, "gitlab.example.com")
-        self.assertEqual(cfg.gitlab_token_env, "MY_TOKEN")
+        self.assertEqual(cfg.gitlab_token, "glpat-config-test-secret")
         self.assertEqual(cfg.patch_dir, "PATCHES")
         self.assertEqual(
             cfg.gitlab_hosts["gitlab.example.com"],
@@ -369,44 +370,72 @@ class DefaultRulesOnRealNamesTest(unittest.TestCase):
 
 
 class TokenTest(unittest.TestCase):
-    """Токен из окружения. Пробелы по краям — не косметика: requests
-    отказывается отправлять такой заголовок и кладёт ЗНАЧЕНИЕ заголовка в
-    текст исключения, а тот уходит в лог, в проблемы билда, в снапшот и в
-    HTML."""
+    """Литеральный токен из YAML, без возврата к секретам окружения."""
 
-    ENV = "DASHBOARD_TEST_TOKEN"
+    def config(self, gitlab):
+        path = write(MINIMAL + "gitlab:\n" + gitlab)
+        self.addCleanup(os.unlink, path)
+        return load_config(path)
 
-    def setUp(self):
-        os.environ.pop(self.ENV, None)
-        self.addCleanup(os.environ.pop, self.ENV, None)
-        self.cfg = Config(koji_hub="https://hub/kojihub",
-                          gitlab_token_env=self.ENV)
+    def test_token_is_read_from_yaml_instead_of_environment(self):
+        with patch.dict(os.environ, {"GITLAB_TOKEN": "glpat-environment"}):
+            cfg = self.config('  token: "  glpat-config-test-secret \\n"\n')
+        self.assertEqual(cfg.gitlab_token, "glpat-config-test-secret")
+        self.assertEqual(cfg.token(), "glpat-config-test-secret")
 
-    def test_token_is_read_from_the_environment(self):
-        os.environ[self.ENV] = "glpat-t0ken"
-        self.assertEqual(self.cfg.token(), "glpat-t0ken")
+    def test_missing_null_and_blank_tokens_ignore_environment(self):
+        for section in ("  hosts: {}\n", "  token: null\n", "  token: ''\n",
+                        '  token: " \\n\\t "\n'):
+            with self.subTest(section=section), patch.dict(
+                    os.environ, {"GITLAB_TOKEN": "glpat-environment",
+                                 "MY_TOKEN": "glpat-custom-environment"}):
+                self.assertIsNone(self.config(section).token())
 
-    def test_trailing_newline_is_stripped(self):
-        # классическое GITLAB_TOKEN=$(cat token.txt)
-        os.environ[self.ENV] = "glpat-t0ken\n"
-        self.assertEqual(self.cfg.token(), "glpat-t0ken")
+    def test_literal_token_does_not_expand_environment_variable(self):
+        with patch.dict(os.environ, {"GITLAB_TOKEN": "glpat-environment"}):
+            self.assertEqual(self.config('  token: "${GITLAB_TOKEN}"\n').token(),
+                             "${GITLAB_TOKEN}")
 
-    def test_surrounding_whitespace_is_stripped(self):
-        # копипаста из вебморды приносит пробелы и с той, и с другой стороны
-        os.environ[self.ENV] = "  glpat-t0ken \r\n"
-        self.assertEqual(self.cfg.token(), "glpat-t0ken")
+    def test_invalid_token_types_are_safe_configuration_errors(self):
+        for value in ("true", "123456789", "1.23456789", "[glpat-secret-item]",
+                      "{glpat-secret-key: glpat-secret-value}", "2026-11-01"):
+            with self.subTest(value=value):
+                with self.assertRaises(ConfigError) as caught:
+                    self.config("  token: " + value + "\n")
+                self.assertIn("gitlab.token", str(caught.exception))
+                self.assertNotIn(value, str(caught.exception))
+                self.assertNotIn("glpat-secret", str(caught.exception))
 
-    def test_whitespace_only_value_is_none(self):
-        # пустого токена в заголовке быть не должно: это тот же «токена нет»
-        os.environ[self.ENV] = " \n\t "
-        self.assertIsNone(self.cfg.token())
+    def test_legacy_token_env_requires_migration_even_when_null(self):
+        for value in ("MY_SECRET_VARIABLE", "null", "''"):
+            for token in ("", "  token: glpat-config-test-secret\n"):
+                with self.subTest(value=value, token=bool(token)):
+                    with self.assertRaises(ConfigError) as caught:
+                        self.config("  token_env: " + value + "\n" + token)
+                    message = str(caught.exception)
+                    self.assertIn("gitlab.token_env", message)
+                    self.assertIn("gitlab.token", message)
+                    self.assertNotIn("MY_SECRET_VARIABLE", message)
+                    self.assertNotIn("glpat-config-test-secret", message)
 
-    def test_empty_value_is_none(self):
-        os.environ[self.ENV] = ""
-        self.assertIsNone(self.cfg.token())
+    def test_direct_config_token_is_trimmed(self):
+        cfg = Config(koji_hub="h", gitlab_token="  glpat-config-test-secret \r\n")
+        self.assertEqual(cfg.token(), "glpat-config-test-secret")
 
-    def test_unset_variable_is_none(self):
-        self.assertIsNone(self.cfg.token())
+    def test_config_repr_does_not_expose_token(self):
+        self.assertNotIn("glpat-config-test-secret",
+                         repr(self.config("  token: glpat-config-test-secret\n")))
+
+    def test_malformed_yaml_error_omits_source_and_reports_location(self):
+        for section in ('  token: [glpat-secret-value\n',
+                        '  token: !glpat-secret-tag value\n',
+                        '  token: "glpat-secret-value\\q"\n'):
+            with self.subTest(section=section), self.assertRaises(ConfigError) as caught:
+                self.config(section)
+            message = str(caught.exception)
+            self.assertNotIn("glpat-secret", message)
+            self.assertNotIn("token:", message)
+            self.assertRegex(message, r"строка \d+, столбец \d+")
 
 
 if __name__ == "__main__":

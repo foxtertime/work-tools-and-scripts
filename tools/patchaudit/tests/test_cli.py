@@ -141,7 +141,43 @@ class CliTest(unittest.TestCase):
 
     def test_token_trimmed_and_not_written_to_log_or_json(self):
         token = "secret-gitlab-token-123456"
-        with mock.patch.dict(os.environ, {"GITLAB_TOKEN": " " + token + "\n"}):
-            self.assertEqual(self.invoke(["--package", "vim"]), 0)
+        path = self.token_config(" " + token + "\n")
+        with mock.patch.dict(os.environ, {"GITLAB_TOKEN": "wrong-env-token"}):
+            self.assertEqual(self.invoke(["--package", "vim", "--config", str(path)]), 0)
         self.assertEqual(self.transport.requests[0][2]["PRIVATE-TOKEN"], token)
         self.assertNotIn(token, self.stdout + self.stderr)
+
+    def token_config(self, token):
+        try:
+            import yaml
+        except ImportError:
+            self.skipTest("PyYAML not installed")
+        path = self.room / "credentials.yaml"
+        path.write_text("gitlab:\n  token: " + json.dumps(token) + "\n"
+                        "  hosts:\n    git.example.org:\n      api: https://git.example.org/api/v4\n")
+        return path
+
+    def test_env_token_is_never_used_without_a_config_token(self):
+        with mock.patch.dict(os.environ, {"GITLAB_TOKEN": "glpat-unused-env-secret"}):
+            configs = [None, self.token_config(None), self.token_config("  ")]
+            for config_path in configs:
+                flags = ["--config", str(config_path)] if config_path else []
+                self.transport.requests.clear()
+                self.assertEqual(self.invoke(["--package", "vim"] + flags), 0)
+                self.assertNotIn("PRIVATE-TOKEN", self.transport.requests[0][2])
+
+    def test_secret_in_http_error_body_is_redacted_from_debug_log_and_json(self):
+        secret = "glpat-config-response-secret"
+        path = self.token_config(secret)
+        url = "https://git.example.org/api/v4/projects/rpms%2Fvim/repository/tree"
+        self.transport.routes[url] = Response(403, {"message": "rejected token " + secret}, {})
+        self.assertEqual(self.invoke(["--package", "vim", "--config", str(path), "--log-level", "debug"]), 1)
+        self.assertTrue(json.loads(self.stdout)["problems"])
+        self.assertNotIn(secret, self.stdout + self.stderr)
+
+    def test_yaml_error_does_not_expose_config_token_in_stderr(self):
+        secret = "glpat-config-yaml-error-secret"
+        path = self.token_config(None)
+        path.write_text("gitlab:\n  token: [" + secret + "\n")
+        self.assertEqual(self.invoke(["--package", "vim", "--config", str(path)]), 2)
+        self.assertNotIn(secret, self.stdout + self.stderr)

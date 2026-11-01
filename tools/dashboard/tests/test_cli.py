@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from unittest.mock import patch as mock_patch
 
 from dashboard import cli, kojiclient
 from dashboard.cli import main
@@ -90,6 +91,32 @@ class TempDirTest(LoggerStateMixin, unittest.TestCase):
 
 
 class CliTest(TempDirTest):
+    def test_secret_yaml_errors_are_safe_even_in_debug_tracebacks(self):
+        for content in ('gitlab:\n  token: [glpat-secret-value\n',
+                        'gitlab:\n  token: !glpat-secret-tag value\n',
+                        'gitlab:\n  token: "glpat-secret-value\\q"\n',
+                        'gitlab:\n  token: [glpat-secret-value]\n',
+                        'gitlab:\n  token_env: glpat-secret-value\n'):
+            with self.subTest(content=content):
+                path = self.out_path("bad.yaml")
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write(content)
+                code, err = self.run_cli(["--config", path, "--log-level",
+                                          "debug", "page", "-o",
+                                          self.out_path()])
+                self.assertEqual(code, 2)
+                self.assertNotIn("glpat-secret", err)
+                self.assertIn("ошибка конфига", err)
+
+    def test_dashboard_config_environment_still_selects_the_config(self):
+        path = self.out_path("bad.yaml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("gitlab: notadict\n")
+        with mock_patch.dict(os.environ, {"DASHBOARD_CONFIG": path}):
+            code, err = self.run_cli(["page", "-o", self.out_path()])
+        self.assertEqual(code, 2)
+        self.assertIn("gitlab", err)
+
     def test_render_command_is_gone(self):
         """Дашборд больше не печёт данные внутрь себя: снапшоты в него
         подгружают. Молчаливо принять старую команду значило бы написать
@@ -317,6 +344,82 @@ class CollectCommandTest(TempDirTest):
     def argv(self, *rest):
         return ["--koji-hub", HUB, "--gitlab-api", GITLAB_API,
                 "--jobs", "1"] + list(rest)
+
+    def test_yaml_token_reaches_http_headers_without_reaching_outputs(self):
+        token = "glpat-config-test-secret"
+        path = self.out_path("config.yaml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write('gitlab:\n  token: "  ' + token + ' \\n"\n')
+        output = self.out_path("collected.json")
+        with mock_patch.dict(os.environ, {"GITLAB_TOKEN": "glpat-env-secret"}):
+            code, err = self.run_cli(["--config", path, "--log-level", "debug"]
+                                     + self.argv("collect", "--tag", "os-9.2",
+                                                 "-o", output))
+        self.assertEqual(code, 0)
+        self.assertTrue(self.transport.requests)
+        for _url, _params, headers in self.transport.requests:
+            self.assertEqual(headers.get("PRIVATE-TOKEN"), token)
+        with open(output, encoding="utf-8") as handle:
+            self.assertNotIn(token, handle.read())
+        self.assertNotIn(token, err)
+        html = self.out_path("dashboard.html")
+        code, err = self.run_cli(["--config", path, "page", "-o", html])
+        self.assertEqual(code, 0)
+        with open(html, encoding="utf-8") as handle:
+            self.assertNotIn(token, handle.read())
+        self.assertNotIn(token, err)
+
+    def test_anonymous_collection_ignores_environment_tokens(self):
+        with mock_patch.dict(os.environ, {"GITLAB_TOKEN": "glpat-env-secret",
+                                         "MY_TOKEN": "glpat-custom-secret"}):
+            code, err = self.run_cli(self.argv("collect", "--tag", "os-9.2",
+                                               "-o", self.out_path("out.json")))
+        self.assertEqual(code, 0)
+        self.assertTrue(self.transport.requests)
+        for _url, _params, headers in self.transport.requests:
+            self.assertNotIn("PRIVATE-TOKEN", headers)
+        self.assertIn("токен не задан", err)
+
+    def test_transport_exception_with_yaml_token_is_scrubbed_from_snapshot(self):
+        token = "glpat-config-test-secret"
+        path = self.out_path("config.yaml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("gitlab:\n  token: " + token + "\n")
+
+        class LeakingTransport(FakeTransport):
+            def get(self, url, headers=None, params=None):
+                raise RuntimeError("Invalid header value: " + headers["PRIVATE-TOKEN"])
+
+        self.transport = LeakingTransport()
+        output = self.out_path("collected.json")
+        code, err = self.run_cli(["--config", path, "--log-level", "debug"]
+                                 + self.argv("collect", "--tag", "os-9.2",
+                                             "-o", output))
+        self.assertEqual(code, 0)
+        self.assertNotIn(token, err)
+        with open(output, encoding="utf-8") as handle:
+            snapshot = handle.read()
+        self.assertIn("Invalid header value", snapshot)
+        self.assertNotIn(token, snapshot)
+
+    def test_http_error_echoing_yaml_token_is_scrubbed_from_outputs(self):
+        for token in ("glpat-config-test-secret", "tiny"):
+            with self.subTest(token=token):
+                path = self.out_path("config.yaml")
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("gitlab:\n  token: " + token + "\n")
+                self.transport = FakeTransport({TREE % "g%2Fnginx": Response(
+                    403, {"message": "Access denied for " + token}, {})})
+                output = self.out_path("collected.json")
+                code, err = self.run_cli(["--config", path, "--log-level", "debug"]
+                                         + self.argv("collect", "--tag", "os-9.2",
+                                                     "-o", output))
+                self.assertEqual(code, 0)
+                self.assertNotIn(token, err)
+                with open(output, encoding="utf-8") as handle:
+                    snapshot = handle.read()
+                self.assertIn("Access denied", snapshot)
+                self.assertNotIn(token, snapshot)
 
     def test_collect_writes_a_loadable_snapshot(self):
         path = os.path.join(self.tmp, "collected.json")

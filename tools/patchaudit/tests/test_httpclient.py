@@ -85,12 +85,8 @@ class ScrubTest(unittest.TestCase):
         self.assertEqual(self.scrub(token, "хвост %s хвост" % SECRET),
                          "хвост *** хвост")
 
-    def test_short_token_is_not_scrubbed(self):
-        # настоящий PAT GitLab — около 26 символов; слепая замена короткого
-        # «токена» испортила бы обычный текст ошибки, а он идёт в журнал
-        text = "connection reset by peer"
-        self.assertEqual(self.scrub("t", text), text)
-        self.assertEqual(self.scrub("connect", text), text)
+    def test_short_configured_token_is_scrubbed_too(self):
+        self.assertEqual(self.scrub("abc", "rejected token abc"), "rejected token ***")
 
     def test_token_at_the_threshold_is_scrubbed(self):
         self.assertEqual(self.scrub("abcdefgh", "x abcdefgh y"), "x *** y")
@@ -104,9 +100,32 @@ class ScrubTest(unittest.TestCase):
         self.assertEqual(self.scrub(None, text), text)
         self.assertEqual(self.scrub("", text), text)
 
+    def test_error_body_is_redacted_before_debug_truncation(self):
+        secret = "glpat-config-secret-crossing-log-boundary"
+        transport = FakeTransport({URL: Response(403, {"message": "x" * 170 + secret}, {})})
+        client = HttpClient(transport=transport, token=secret)
+        with self.assertLogs("patchaudit", "DEBUG") as caught:
+            client.get(URL, {}, {})
+        self.assertNotIn(secret[:10], "\n".join(caught.output))
+
     def test_non_string_input_is_converted(self):
         self.assertEqual(self.scrub(SECRET, ValueError("ой %s" % SECRET)),
                          "ой ***")
+
+    def test_quote_escaped_secret_is_redacted(self):
+        token = "a'b\"c"
+        message = ValueError("bad token %r" % token)
+        self.assertEqual(self.scrub(token, message), "bad token '***'")
+
+    def test_quote_escaped_secret_is_redacted_from_debug_body(self):
+        token = "a'b\"c"
+        transport = FakeTransport({URL: Response(403, {"message": "denied " + token}, {})})
+        client = HttpClient(transport=transport, token=token)
+        with self.assertLogs("patchaudit", "DEBUG") as caught:
+            client.get(URL, {}, {})
+        log = "\n".join(caught.output)
+        self.assertNotIn(repr(token)[1:-1], log)
+        self.assertIn("***", log)
 
 class LoggingTest(unittest.TestCase):
     """Что попадает в лог при неудачах: предупреждение обещает следующую

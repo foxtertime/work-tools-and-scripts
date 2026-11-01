@@ -39,7 +39,7 @@ vex_names:
   rust-coreos-installer: coreos-installer
 gitlab:
   default_host: gitlab.example.com
-  token_env: SL_GITLAB_TOKEN
+  token: glpat-config-test-secret
   patch_dir: patches
   jobs: 2
   retries: 5
@@ -139,14 +139,14 @@ class LoadTest(unittest.TestCase):
             # web допускается и не используется
             hosts={"gitlab.example.com": GitlabHost("https://gitlab.example.com/api/v4/"),
                    "mirror.example.com": GitlabHost("https://mirror.example.com/api/v4")},
-            default_host="gitlab.example.com", token_env="SL_GITLAB_TOKEN",
+            default_host="gitlab.example.com", token="glpat-config-test-secret",
             patch_dir="patches", jobs=2, retries=5, timeout=7))
 
     def test_gitlab_defaults(self):
         cfg = load_config(self.write(
             "gitlab:\n  hosts:\n    gl.example.com:\n      api: https://gl.example.com/api/v4\n"))
         self.assertEqual(cfg.gitlab._replace(hosts={}), GitlabSettings(
-            hosts={}, default_host=None, token_env="GITLAB_TOKEN", patch_dir="PATCH",
+            hosts={}, default_host=None, token=None, patch_dir="PATCH",
             jobs=8, retries=3, timeout=30))
 
 
@@ -202,7 +202,7 @@ class LoadTest(unittest.TestCase):
             ("vex_names:\n  rust-afterburn: [1]\n", "vex_names.rust-afterburn"),
             ("vex_names:\n  rust-afterburn: {a: b}\n", "vex_names.rust-afterburn"),
             ("gitlab: [a]\n", "gitlab"),
-            ("gitlab:\n  token_env: X\n", "gitlab.hosts"),
+            ("gitlab:\n  token: X\n", "gitlab.hosts"),
             ("gitlab:\n  hosts: {}\n", "gitlab.hosts"),
             ("gitlab:\n  hosts:\n    gl:\n", "gitlab.hosts.gl"),
             ("gitlab:\n  hosts:\n    gl: {web: x}\n", "gitlab.hosts.gl.api"),
@@ -281,6 +281,37 @@ class LoadTest(unittest.TestCase):
 
     def test_yaml_syntax_error(self):
         self.assertRejected("koji: [\n", "YAML")
+
+    def test_token_is_trimmed_and_empty_tokens_mean_anonymous(self):
+        base = "gitlab:\n  hosts:\n    gl: {api: https://gl.example.org/api/v4}\n"
+        for scalar, expected in (("'  glpat-config-secret  '", "glpat-config-secret"),
+                                 ("null", None), ("''", None), ("'  '", None)):
+            with self.subTest(scalar=scalar):
+                cfg = load_config(self.write(base + "  token: " + scalar + "\n"))
+                self.assertEqual(cfg.gitlab.token, expected)
+
+    def test_invalid_token_type_and_yaml_error_do_not_echo_secret(self):
+        base = "gitlab:\n  hosts:\n    gl: {api: https://gl.example.org/api/v4}\n"
+        secret = "glpat-should-never-be-in-errors"
+        for scalar in ("[" + secret + "]", "{" + secret + ": value}", "123", "true"):
+            error = self.assertRejected(base + "  token: " + scalar + "\n", "gitlab.token")
+            self.assertNotIn(secret, str(error))
+        error = self.assertRejected(base + "  token: [" + secret + "\n", "YAML")
+        self.assertNotIn(secret, str(error))
+
+    def test_invalid_secret_mapping_keys_are_not_disclosed(self):
+        base = "gitlab:\n  hosts:\n    gl: {api: https://gl.example.org/api/v4}\n"
+        secret = "glpat-secret-invalid-map-key"
+        for scalar in ("{" + secret + ": a, " + secret + ": b}", "{[" + secret + "]: a}"):
+            with self.subTest(scalar=scalar):
+                with self.assertRaises(ConfigError) as caught:
+                    load_config(self.write(base + "  token: " + scalar + "\n"))
+                self.assertNotIn(secret, str(caught.exception))
+
+    def test_legacy_token_env_requires_migration(self):
+        base = "gitlab:\n  hosts:\n    gl: {api: https://gl.example.org/api/v4}\n"
+        error = self.assertRejected(base + "  token_env: OLD_PRIVATE_TOKEN\n", "gitlab.token_env")
+        self.assertIn("gitlab.token", str(error))
 
     def test_example_file_is_valid(self):
         cfg = load_config(os.path.join(ROOT, "patchaudit.example.yaml"))

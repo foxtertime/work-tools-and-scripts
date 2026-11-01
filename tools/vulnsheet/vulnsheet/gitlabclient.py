@@ -123,7 +123,7 @@ class GitlabClient:
             if isinstance(response, str):
                 return _tree_problem(response)
             if response.status == 404:
-                note = server_message(response)
+                note = self._http.scrub(server_message(response))
                 if "project not found" in note.lower():
                     return _tree_problem("gitlab: %s" % note)
                 # Остальные 404 неоднозначны: «в ветке нет каталога» и «нет
@@ -133,8 +133,8 @@ class GitlabClient:
                 # Поэтому решает не текст, а отдельный запрос к ветке.
                 return self._resolve_missing_tree(cfg, project, ref, path, headers)
             if response.status >= 400:
-                return _tree_problem("gitlab: %s %s" % (response.status,
-                                                        server_message(response)))
+                note = self._http.scrub(server_message(response))
+                return _tree_problem("gitlab: %s %s" % (response.status, note))
             for item in response.body or []:
                 if item.get("type") == "blob":
                     paths.append(item["path"])
@@ -165,7 +165,8 @@ class GitlabClient:
                          "ошибка, у билда его просто нет",
                          project, ref, path)
             return TreeResult(False, [], None)
+        note = self._http.scrub(server_message(response))
         logger.debug("%s: ветка %s — не удалось выяснить, есть ли она: %s %s",
-                     project, ref, response.status, server_message(response))
-        return _tree_problem("gitlab: %s %s" % (response.status, server_message(response)))
+                     project, ref, response.status, note)
+        return _tree_problem("gitlab: %s %s" % (response.status, note))
 

@@ -4,7 +4,8 @@ koji:
 
 gitlab:
   default_host: gitlab.example.com
-  token_env: GITLAB_TOKEN
+  # Литеральный токен GitLab; null — анонимный доступ, окружение не читается.
+  token: null
   hosts:
     gitlab.example.com:
       api: https://gitlab.example.com/api/v4

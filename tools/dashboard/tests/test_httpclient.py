@@ -88,15 +88,13 @@ class ScrubTest(unittest.TestCase):
         self.assertEqual(self.scrub(token, "хвост %s хвост" % SECRET),
                          "хвост *** хвост")
 
-    def test_short_token_is_not_scrubbed(self):
-        # настоящий PAT GitLab — около 26 символов; слепая замена короткого
-        # «токена» испортила бы обычный текст ошибки, а он идёт в проблемы
-        # билда, в снапшот и в дашборд
+    def test_short_token_is_scrubbed(self):
+        # Короткий ошибочный токен тоже нельзя раскрывать в диагностике.
         text = "connection reset by peer"
-        self.assertEqual(self.scrub("t", text), text)
-        self.assertEqual(self.scrub("connect", text), text)
+        self.assertNotIn("t", self.scrub("t", text))
+        self.assertNotIn("connect", self.scrub("connect", text))
 
-    def test_token_at_the_threshold_is_scrubbed(self):
+    def test_eight_character_token_is_scrubbed(self):
         self.assertEqual(self.scrub("abcdefgh", "x abcdefgh y"), "x *** y")
 
     def test_whitespace_only_token_is_not_scrubbed(self):
@@ -111,6 +109,21 @@ class ScrubTest(unittest.TestCase):
     def test_non_string_input_is_converted(self):
         self.assertEqual(self.scrub(SECRET, ValueError("ой %s" % SECRET)),
                          "ой ***")
+
+    def test_quote_escaped_secret_is_redacted(self):
+        token = "a'b\"c"
+        message = ValueError("bad token %r" % token)
+        self.assertEqual(self.scrub(token, message), "bad token '***'")
+
+    def test_quote_escaped_secret_is_redacted_from_debug_body(self):
+        token = "a'b\"c"
+        transport = FakeTransport({URL: Response(403, {"message": "denied " + token}, {})})
+        client = HttpClient(transport=transport, token=token)
+        with self.assertLogs("dashboard", "DEBUG") as caught:
+            client.get(URL, {}, {})
+        log = "\n".join(caught.output)
+        self.assertNotIn(repr(token)[1:-1], log)
+        self.assertIn("***", log)
 
 class LoggingTest(unittest.TestCase):
     """Что попадает в лог при неудачах: предупреждение обещает следующую
