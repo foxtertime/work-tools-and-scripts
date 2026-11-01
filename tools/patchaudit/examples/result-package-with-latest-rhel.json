@@ -1,0 +1,136 @@
+{
+  "format": 1,
+  "tool_version": "1.1.0",
+  "complete": true,
+  "request": {
+    "mode": "package",
+    "package": "httpd",
+    "target_nvr": null,
+    "tag": "sl9-updates",
+    "rhel": "9",
+    "stream": null,
+    "aliases": []
+  },
+  "latest_build": "httpd-2.4.62-11.sl9_8^1",
+  "latest_rhel_build": "httpd-2.4.62-13.el9_8.9",
+  "source": {
+    "host": "gitlab.example.com",
+    "project": "rpms/httpd",
+    "branch": "updates/sl9"
+  },
+  "patch_directory": {
+    "path": "PATCH",
+    "present": true
+  },
+  "patches": [
+    {
+      "path": "PATCH/httpd-CVE-2026-1000-1002.patch",
+      "cves": [
+        "CVE-2026-1000",
+        "CVE-2026-1002"
+      ],
+      "action": "keep"
+    },
+    {
+      "path": "PATCH/httpd-CVE-2026-1000.patch",
+      "cves": [
+        "CVE-2026-1000"
+      ],
+      "action": "fixed"
+    },
+    {
+      "path": "PATCH/httpd-CVE-2026-1001.patch",
+      "cves": [
+        "CVE-2026-1001"
+      ],
+      "action": "fixed"
+    },
+    {
+      "path": "PATCH/httpd-CVE-2026-1002.patch",
+      "cves": [
+        "CVE-2026-1002"
+      ],
+      "action": "keep"
+    },
+    {
+      "path": "PATCH/httpd-CVE-2026-1003.patch",
+      "cves": [
+        "CVE-2026-1003"
+      ],
+      "action": "review"
+    }
+  ],
+  "cves": [
+    {
+      "cve": "CVE-2026-1000",
+      "status": "Fixed",
+      "vex_url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-1000.json",
+      "fixes": [
+        {
+          "nvr": "httpd-2.4.62-12.el9_8",
+          "fix_date": "2026-10-01",
+          "advisory_url": "https://access.redhat.com/errata/RHSA-2026:1000",
+          "products": [
+            "cpe:/a:redhat:enterprise_linux:9::appstream|httpd||x86_64"
+          ]
+        }
+      ],
+      "action": "fixed",
+      "reason": "redhat_fix_available",
+      "fixed_in_target": [],
+      "fixed_after_target": []
+    },
+    {
+      "cve": "CVE-2026-1001",
+      "status": "Fixed",
+      "vex_url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-1001.json",
+      "fixes": [
+        {
+          "nvr": "httpd-2.4.62-13.el9_8.9",
+          "fix_date": "2026-10-22",
+          "advisory_url": "https://access.redhat.com/errata/RHSA-2026:1001",
+          "products": [
+            "cpe:/a:redhat:enterprise_linux:9::appstream|httpd||x86_64"
+          ]
+        }
+      ],
+      "action": "fixed",
+      "reason": "redhat_fix_available",
+      "fixed_in_target": [],
+      "fixed_after_target": []
+    },
+    {
+      "cve": "CVE-2026-1002",
+      "status": "Affected",
+      "vex_url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-1002.json",
+      "fixes": [],
+      "action": "keep",
+      "reason": "redhat_not_fixed",
+      "fixed_in_target": [],
+      "fixed_after_target": []
+    },
+    {
+      "cve": "CVE-2026-1003",
+      "status": "no VEX record",
+      "vex_url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-1003.json",
+      "fixes": [],
+      "action": "review",
+      "reason": "no_reliable_verdict",
+      "fixed_in_target": [],
+      "fixed_after_target": []
+    }
+  ],
+  "ignored_files": [
+    "PATCH/build-fix.patch"
+  ],
+  "summary": {
+    "patches": 5,
+    "cves": 4,
+    "actions": {
+      "fixed": 2,
+      "keep": 2,
+      "review": 1
+    }
+  },
+  "problems": []
+}

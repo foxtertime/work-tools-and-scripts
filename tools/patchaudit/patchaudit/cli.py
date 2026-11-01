@@ -9,7 +9,7 @@ import sys
 import tempfile
 from urllib.parse import urlsplit
 
-from . import __version__, audit, config, httpclient, kojiclient, logs, vex
+from . import __version__, audit, config, httpclient, kojiclient, logs, vex, vmaas
 from .decisions import parse_nvr
 from .gitlabclient import GitlabClient, GitlabHost
 
@@ -32,9 +32,10 @@ def _parser():
     parser.add_argument("--koji-url", help="URL kojihub")
     parser.add_argument("--tag", help="Koji-тег с последним билдом пакета")
     parser.add_argument("--rhel", help="точная версия RHEL: 9, 9.2 и т. п.")
+    parser.add_argument("--arch", help="архитектура билда RHEL в VMaaS, по умолчанию x86_64")
     parser.add_argument("--gitlab-url", help="адрес GitLab или его API v4; токен в gitlab.token YAML-конфига")
     parser.add_argument("--patch-dir", help="каталог патчей, по умолчанию PATCH")
-    parser.add_argument("--stream", help="стрим VEX, например nginx:1.26")
+    parser.add_argument("--stream", help="стрим VEX и VMaaS, например nginx:1.26")
     parser.add_argument("--vex-name", action="append", help="другое имя пакета в VEX; можно повторять")
     parser.add_argument("-o", "--output", default="-", help="JSON-файл, по умолчанию stdout")
     parser.add_argument("--log-level", choices=logs.LEVELS, default="info")
@@ -73,6 +74,9 @@ def main(argv=None):
         package = target.name if target else args.package
         cfg = config.load_config(args.config or os.environ.get(config.ENV_VAR) or None)
         rhel = vex.parse_rhel(args.rhel or cfg.rhel or "")
+        arch = args.arch if args.arch is not None else cfg.vmaas.arch
+        if not re.fullmatch(r"[A-Za-z0-9_]+", arch):
+            raise ValueError("--arch: нужно имя архитектуры, например x86_64")
         hub, tag = args.koji_url or cfg.koji_hub, args.tag or cfg.koji_tag
         if not hub or not tag:
             raise ValueError("нужны --koji-url и --tag или koji.hub и koji.tag в конфиге")
@@ -96,6 +100,9 @@ def main(argv=None):
         cache_base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
         cache = vex.prepare_cache(cfg.vex.cache_dir or os.path.join(cache_base, "patchaudit"))
         settings = cfg.vex._replace(cache_dir=cache)
+        rhel_settings = cfg.vmaas._replace(
+            arch=arch, cache_dir=cfg.vmaas.cache_dir or (os.path.join(cache, "vmaas") if cache else None))
+        rhel_client = vmaas.VmaasClient(rhel_settings)
         token = gitlab.token
         client = GitlabClient(dict(gitlab.hosts), token=token, patch_dir=gitlab.patch_dir,
                               transport=httpclient.UrllibTransport(timeout=gitlab.timeout),
@@ -104,7 +111,7 @@ def main(argv=None):
                     " → " + args.nvr if target else " (все фиксы)", tag, rhel)
         session = kojiclient.connect(hub)
         result = audit.run(package, args.nvr, tag, rhel, session, client, settings,
-                           stream=stream, aliases=aliases)
+                           stream=stream, aliases=aliases, rhel_client=rhel_client)
         json.dump(result, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
         handle.flush()
