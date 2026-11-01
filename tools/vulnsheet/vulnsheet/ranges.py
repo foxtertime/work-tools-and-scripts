@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Iterable, List, NamedTuple, Optional, Set, Tuple
 
 from . import __version__
+from .httpclient import HttpClient
 from .rpmvercmp import rpmvercmp
 from .vex import read_cache, write_cache
 
@@ -294,6 +295,7 @@ def _fetch_nvd(cves, settings, cveorg_seconds):
 def _fetch_many(source, cves, settings, headers, limiter, progress=None):
     """Документы одного источника параллельно: (CVE → документ, CVE → ошибка)."""
     docs, errors = {}, {}
+    scrub = HttpClient(token=settings.nvd_key).scrub
     lock = threading.Lock()
     rejected = threading.Event()
     url = nvd_url if source == NVD else cveorg_url
@@ -313,9 +315,10 @@ def _fetch_many(source, cves, settings, headers, limiter, progress=None):
             with lock:
                 errors[cve] = str(exc)
         except Exception as exc:
-            logger.warning("диапазоны: %s по %s не ответил: %s", source, cve, exc)
+            message = scrub(exc)
+            logger.warning("диапазоны: %s по %s не ответил: %s", source, cve, message)
             with lock:
-                errors[cve] = str(exc)
+                errors[cve] = message
         else:
             with lock:
                 docs[cve] = doc

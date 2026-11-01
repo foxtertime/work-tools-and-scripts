@@ -1,5 +1,4 @@
 """Загрузка и валидация конфигурации."""
-import os
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -9,7 +8,6 @@ import yaml
 from .classify import CVE_RE
 
 DEFAULT_PATCH_DIR = "PATCH"
-DEFAULT_TOKEN_ENV = "GITLAB_TOKEN"
 DEFAULT_PATCH_CLASSES = [
     # Сгенерированные списки патчей (autogen-sast-patches.inc.new и т.п.).
     # Правило стоит первым, и это не нарушение принципа «класс отвечает,
@@ -83,7 +81,7 @@ class Config:
     koji_web: Optional[str] = None
     gitlab_default_host: Optional[str] = None
     gitlab_hosts: Dict[str, GitlabHost] = field(default_factory=dict)
-    gitlab_token_env: str = DEFAULT_TOKEN_ENV
+    gitlab_token: Optional[str] = field(default=None, repr=False)
     patch_dir: str = DEFAULT_PATCH_DIR
     patch_classes: List[Tuple[str, str]] = field(
         default_factory=lambda: list(DEFAULT_PATCH_CLASSES) + [CATCH_ALL])
@@ -94,17 +92,25 @@ class Config:
         default_factory=lambda: list(DEFAULT_AUTOGEN_CLASSES))
 
     def token(self) -> Optional[str]:
-        """Токен GitLab из окружения; None означает анонимный доступ.
+        """Токен GitLab из конфига; None означает анонимный доступ.
 
-        Пробелы по краям срезаем, и это не косметика: GITLAB_TOKEN=$(cat
-        token.txt) и копипаста из вебморды приносят токен с переводом строки,
-        а requests такой заголовок отправлять отказывается — и кладёт ЗНАЧЕНИЕ
+        Пробелы по краям срезаем: копипаста из вебморды приносит токен
+        с переводом строки, а requests такой заголовок отправлять
+        отказывается — и кладёт ЗНАЧЕНИЕ
         заголовка в текст исключения. Дальше этот текст уходит в лог, в
         проблемы билда, в снапшот и в HTML, который люди вставляют в тикеты.
         Срезка убирает саму причину: запрос с чистым токеном просто удаётся.
         Строка из одних пробелов — тот же «токена нет», что и пустая.
         """
-        return (os.environ.get(self.gitlab_token_env) or "").strip() or None
+        return _token(self.gitlab_token)
+
+
+def _token(raw) -> Optional[str]:
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise ConfigError("gitlab.token должен быть строкой или null")
+    return raw.strip() or None
 
 
 def _read_yaml(path: str) -> dict:
@@ -114,7 +120,13 @@ def _read_yaml(path: str) -> dict:
     except OSError as exc:
         raise ConfigError("не удалось прочитать конфиг %s: %s" % (path, exc))
     except yaml.YAMLError as exc:
-        raise ConfigError("конфиг %s не разбирается: %s" % (path, exc))
+        # Текст PyYAML включает исходную строку и иногда значение тега.
+        # Цепочку исключений тоже скрываем: CLI печатает её на debug.
+        mark = getattr(exc, "problem_mark", None)
+        location = (" (строка %d, столбец %d)" % (mark.line + 1, mark.column + 1)
+                    if mark is not None else "")
+        raise ConfigError("конфиг %s не разбирается: некорректный YAML%s"
+                          % (path, location)) from None
     if data is None:
         return {}
     if not isinstance(data, dict):
@@ -194,6 +206,11 @@ def load_config(path: Optional[str],
 
     koji = _require_mapping(data.get("koji"), "koji")
     gitlab = _require_mapping(data.get("gitlab"), "gitlab")
+    if "token_env" in gitlab:
+        raise ConfigError("gitlab.token_env больше не поддерживается: удалите "
+                          "его и запишите токен в gitlab.token (или null "
+                          "для анонимного доступа)")
+    token = _token(gitlab.get("token"))
     raw_hosts = _require_mapping(gitlab.get("hosts"), "gitlab.hosts")
     hosts = {}
     for host, spec in raw_hosts.items():
@@ -209,7 +226,7 @@ def load_config(path: Optional[str],
         koji_web=koji.get("web"),
         gitlab_default_host=gitlab.get("default_host"),
         gitlab_hosts=hosts,
-        gitlab_token_env=gitlab.get("token_env") or DEFAULT_TOKEN_ENV,
+        gitlab_token=token,
         patch_dir=overrides.get("patch_dir") or data.get("patch_dir") or DEFAULT_PATCH_DIR,
         patch_classes=rules,
         autogen_classes=_autogen_classes(data.get("autogen_classes"), rules),

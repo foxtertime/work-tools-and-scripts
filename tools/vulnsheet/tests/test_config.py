@@ -39,7 +39,7 @@ vex_names:
   rust-coreos-installer: coreos-installer
 gitlab:
   default_host: gitlab.example.com
-  token_env: SL_GITLAB_TOKEN
+  token: "  gitlab-dummy-secret  "
   patch_dir: patches
   jobs: 2
   retries: 5
@@ -139,24 +139,24 @@ class LoadTest(unittest.TestCase):
             # web допускается и не используется
             hosts={"gitlab.example.com": GitlabHost("https://gitlab.example.com/api/v4/"),
                    "mirror.example.com": GitlabHost("https://mirror.example.com/api/v4")},
-            default_host="gitlab.example.com", token_env="SL_GITLAB_TOKEN",
+            default_host="gitlab.example.com", token="gitlab-dummy-secret",
             patch_dir="patches", jobs=2, retries=5, timeout=7))
 
     def test_gitlab_defaults(self):
         cfg = load_config(self.write(
             "gitlab:\n  hosts:\n    gl.example.com:\n      api: https://gl.example.com/api/v4\n"))
         self.assertEqual(cfg.gitlab._replace(hosts={}), GitlabSettings(
-            hosts={}, default_host=None, token_env="GITLAB_TOKEN", patch_dir="PATCH",
+            hosts={}, default_host=None, token=None, patch_dir="PATCH",
             jobs=8, retries=3, timeout=30))
 
     def test_ranges_section(self):
         cfg = load_config(self.write(
-            "ranges:\n  nvd_key_env: MY_NVD\n  cache_ttl: 60\n  jobs: 2\n  retries: 1\n"
+            "ranges:\n  nvd_key: \"  nvd-dummy-secret  \"\n  cache_ttl: 60\n  jobs: 2\n  retries: 1\n"
             "  timeout: 5\n  names:\n    nginx: [nginx, nginx_open_source]\n"
             "    httpd: http_server\n"))
         self.assertEqual(cfg.ranges, RangesConfig(
             names={"nginx": ("nginx", "nginx_open_source"), "httpd": ("http_server",)},
-            nvd_key_env="MY_NVD", cache_ttl=60, jobs=2, retries=1, timeout=5))
+            nvd_key="nvd-dummy-secret", cache_ttl=60, jobs=2, retries=1, timeout=5))
         self.assertEqual(cfg.ranges.names_for("httpd"), {"httpd", "http_server"})
         self.assertEqual(cfg.ranges.names_for("vim"), {"vim"})
 
@@ -164,7 +164,7 @@ class LoadTest(unittest.TestCase):
         for text in ("ranges:\n", "ranges: {}\n"):
             with self.subTest(text=text):
                 self.assertEqual(load_config(self.write(text)).ranges, RangesConfig())
-        self.assertEqual(RangesConfig().nvd_key_env, "NVD_API_KEY")
+        self.assertEqual(RangesConfig().nvd_key, None)
         self.assertEqual(RangesConfig().cache_ttl, 86400)
 
     def test_without_ranges_section_the_check_is_off(self):
@@ -220,7 +220,7 @@ class LoadTest(unittest.TestCase):
             ("vex_names:\n  rust-afterburn: [1]\n", "vex_names.rust-afterburn"),
             ("vex_names:\n  rust-afterburn: {a: b}\n", "vex_names.rust-afterburn"),
             ("gitlab: [a]\n", "gitlab"),
-            ("gitlab:\n  token_env: X\n", "gitlab.hosts"),
+            ("gitlab:\n  token: X\n", "gitlab.hosts"),
             ("gitlab:\n  hosts: {}\n", "gitlab.hosts"),
             ("gitlab:\n  hosts:\n    gl:\n", "gitlab.hosts.gl"),
             ("gitlab:\n  hosts:\n    gl: {web: x}\n", "gitlab.hosts.gl.api"),
@@ -233,7 +233,7 @@ class LoadTest(unittest.TestCase):
             ("gitlab:\n  timeout: 0\n  hosts:\n    gl: {api: x}\n", "gitlab.timeout"),
             ("gitlab:\n  patch_dir: ''\n  hosts:\n    gl: {api: x}\n", "gitlab.patch_dir"),
             ("ranges: [a]\n", "ranges"),
-            ("ranges:\n  nvd_key: x\n", "ranges.nvd_key"),
+            ("ranges:\n  nvd_keey: x\n", "ranges.nvd_keey"),
             ("ranges:\n  jobs: 0\n", "ranges.jobs"),
             ("ranges:\n  cache_ttl: -1\n", "ranges.cache_ttl"),
             ("ranges:\n  timeout: 0\n", "ranges.timeout"),
@@ -244,6 +244,57 @@ class LoadTest(unittest.TestCase):
         for text, needle in cases:
             with self.subTest(text=text):
                 self.assertRejected(text, needle)
+
+    def test_secrets_accept_strings_null_and_empty_values(self):
+        for value, expected in (("null", None), ("''", None), ('"  "', None),
+                                ('"  dummy-secret\\n"', "dummy-secret")):
+            with self.subTest(value=value):
+                cfg = load_config(self.write(
+                    "gitlab:\n  hosts:\n    gl: {api: x}\n  token: %s\n"
+                    "ranges:\n  nvd_key: %s\n" % (value, value)))
+                self.assertEqual(cfg.gitlab.token, expected)
+                self.assertEqual(cfg.ranges.nvd_key, expected)
+
+    def test_invalid_secret_types_do_not_echo_the_value(self):
+        for field, prefix in (("token", "gitlab:\n  hosts:\n    gl: {api: x}\n"),
+                              ("nvd_key", "ranges:\n")):
+            for value in ("[dummy-secret]", "{secret: dummy-secret}",
+                          "42", "true"):
+                with self.subTest(field=field, value=value):
+                    error = self.assertRejected(prefix + "  %s: %s\n" % (field, value), field)
+                    self.assertNotIn("dummy-secret", str(error))
+                    self.assertNotIn(value, str(error))
+
+    def test_duplicate_key_inside_invalid_secret_does_not_echo_value(self):
+        error = self.assertRejected(
+            "ranges:\n  nvd_key: {dummy-secret: x, dummy-secret: y}\n", "дважды")
+        self.assertNotIn("dummy-secret", str(error))
+
+    def test_unhashable_yaml_key_is_a_safe_config_error(self):
+        error = self.assertRejected(
+            "ranges:\n  nvd_key: {? [dummy-secret]: value}\n", "YAML")
+        self.assertNotIn("dummy-secret", str(error))
+        self.assertIn("строка", str(error))
+        self.assertIn("столбец", str(error))
+
+    def test_old_secret_keys_name_the_replacement(self):
+        for section, old, new in (("gitlab", "token_env", "token"),
+                                  ("ranges", "nvd_key_env", "nvd_key")):
+            with self.subTest(section=section):
+                error = self.assertRejected(
+                    "%s:\n  %s: OLD_DUMMY_SECRET\n" % (section, old), section + "." + old)
+                self.assertIn(section + "." + new, str(error))
+                self.assertNotIn("OLD_DUMMY_SECRET", str(error))
+
+    def test_yaml_errors_hide_source_snippets_and_secret_tags(self):
+        for source in ('gitlab:\n  token: [dummy-secret\n',
+                       'ranges:\n  nvd_key: !dummy-secret value\n',
+                       'ranges:\n  nvd_key: *dummy-secret\n'):
+            with self.subTest(source=source):
+                error = self.assertRejected(source, "YAML")
+                self.assertNotIn("dummy-secret", str(error))
+                self.assertIn("строка", str(error))
+                self.assertIn("столбец", str(error))
 
     def test_unquoted_integer_version_key(self):
         cfg = load_config(self.write("vex_streams:\n  9:\n    nginx: nginx:1.26\n"))

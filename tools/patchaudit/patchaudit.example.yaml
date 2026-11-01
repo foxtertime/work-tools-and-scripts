@@ -6,7 +6,7 @@ rhel: "9"  # точная версия: "9.2" и "9" — разные поток
 
 gitlab:
   default_host: gitlab.example.com
-  token_env: GITLAB_TOKEN  # токен с read_api хранится в окружении
+  token: ""  # токен GitLab с read_api; пусто — только публичные проекты
   patch_dir: PATCH
   retries: 3
   timeout: 30

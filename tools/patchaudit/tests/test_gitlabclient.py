@@ -28,6 +28,16 @@ def client(routes, **kwargs):
 
 
 class PatchFilesTest(unittest.TestCase):
+    def test_commit_probe_error_is_scrubbed_in_debug_log_and_problem(self):
+        cli, _ = client({
+            TREE_URL: Response(404, {"message": "404 Tree Not Found"}, {}),
+            COMMITS_URL: Response(403, {"message": "denied " + TOKEN}, {})})
+        with self.assertLogs("patchaudit", "DEBUG") as caught:
+            result = cli.patch_files("gitlab.example.com", "g/r", "br")
+        self.assertIsNone(result.present)
+        self.assertNotIn(TOKEN, result.problem)
+        self.assertNotIn(TOKEN, "\n".join(caught.output))
+
     def test_malformed_success_is_a_problem_instead_of_an_empty_directory(self):
         for body in (None, {"message": "proxy error"}, [{"type": "blob"}], ["not an entry"]):
             with self.subTest(body=body):

@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-01
+
+### Изменено
+
+- `dashboard` (4.0.0), `vulnsheet` (5.0.0), `patchaudit` (1.0.0),
+  несовместимо: токены и API-ключи задаются значениями в YAML-конфиге.
+  Вместо `gitlab.token_env` используйте `gitlab.token`, вместо
+  `ranges.nvd_key_env` в vulnsheet — `ranges.nvd_key`; значения секретов
+  из env больше не читаются. Пустые значения и null означают работу без
+  токена/ключа. Пути конфигов и настройки кэша через env сохраняются.
+- В этих трёх тулзах сообщения YAML и HTTP очищаются от значений секретов,
+  включая debug-журнал и ошибки, попадающие в результаты.
+
 ## [0.29.0] - 2026-11-01
 
 ### Добавлено
@@ -505,7 +518,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.26.0...v0.27.0

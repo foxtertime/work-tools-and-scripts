@@ -20,8 +20,8 @@ ENV_VAR = "VULNSHEET_CONFIG"
 _TOP_KEYS = {"koji", "rhel", "vex", "vex_streams", "vex_names", "gitlab", "ranges"}
 _KOJI_KEYS = {"hub", "tag"}
 _VEX_KEYS = {"cache_dir", "cache_ttl", "jobs", "retries", "timeout"}
-_GITLAB_KEYS = {"hosts", "default_host", "token_env", "patch_dir", "jobs", "retries", "timeout"}
-_RANGES_KEYS = {"names", "nvd_key_env", "cache_ttl", "jobs", "retries", "timeout"}
+_GITLAB_KEYS = {"hosts", "default_host", "token", "patch_dir", "jobs", "retries", "timeout"}
+_RANGES_KEYS = {"names", "nvd_key", "cache_ttl", "jobs", "retries", "timeout"}
 # web не используется: допускается, чтобы блок хостов можно было взять из
 # конфига dashboard как есть
 _HOST_KEYS = {"api", "web"}
@@ -32,10 +32,10 @@ class ConfigError(Exception):
 
 
 class GitlabSettings(NamedTuple):
-    """Где искать каталог патчей. Токен — в переменной token_env, не в файле."""
+    """Где искать каталог патчей. Необязательный токен — из YAML."""
     hosts: Mapping[str, GitlabHost]
     default_host: Optional[str] = None
-    token_env: str = "GITLAB_TOKEN"
+    token: Optional[str] = None
     patch_dir: str = "PATCH"
     jobs: int = 8
     retries: int = 3
@@ -43,11 +43,10 @@ class GitlabSettings(NamedTuple):
 
 
 class RangesConfig(NamedTuple):
-    """Апстрим-диапазоны версий. Ключ NVD — в переменной nvd_key_env, не в
-    файле; без ключа NVD спрашивается медленнее."""
+    """Апстрим-диапазоны версий. Ключ NVD — из YAML; без ключа медленнее."""
     # пакет → имена продукта в NVD и CVE.org сверх самого имени пакета
     names: Mapping[str, Tuple[str, ...]] = types.MappingProxyType({})
-    nvd_key_env: str = "NVD_API_KEY"
+    nvd_key: Optional[str] = None
     cache_ttl: int = 86400
     jobs: int = 8
     retries: int = 3
@@ -148,9 +147,14 @@ def _read_yaml(path):
                 if key_node.tag == "tag:yaml.org,2002:merge":
                     continue
                 key = self.construct_object(key_node, deep=True)
-                if key in seen:
-                    raise ConfigError("%s: ключ %r указан дважды (строка %d)" % (
-                        path, key, key_node.start_mark.line + 1))
+                try:
+                    duplicate = key in seen
+                except TypeError:
+                    raise yaml.constructor.ConstructorError(
+                        None, None, "недопустимый ключ YAML", key_node.start_mark) from None
+                if duplicate:
+                    raise ConfigError("%s: ключ указан дважды (строка %d, столбец %d)" % (
+                        path, key_node.start_mark.line + 1, key_node.start_mark.column + 1))
                 seen.add(key)
             return super().construct_mapping(node, deep=deep)
 
@@ -160,10 +164,20 @@ def _read_yaml(path):
     except OSError as exc:
         raise ConfigError("%s: не читается: %s" % (path, exc))
     except (yaml.YAMLError, ValueError) as exc:  # ValueError — не UTF-8
-        raise ConfigError("%s: ошибка YAML: %s" % (path, exc))
+        # PyYAML печатает строку исходника, а problem может содержать значение
+        # тега/якоря. Оставляем только безопасное описание и координаты.
+        mark = getattr(exc, "problem_mark", None)
+        location = (" (строка %d, столбец %d)" % (mark.line + 1, mark.column + 1)
+                    if mark is not None else "")
+        raise ConfigError("%s: ошибка YAML%s" % (path, location)) from None
 
 
 def _check_keys(section, allowed, prefix, path):
+    for old, new in (("gitlab.token_env", "gitlab.token"),
+                     ("ranges.nvd_key_env", "ranges.nvd_key")):
+        if prefix == old.rsplit(".", 1)[0] + "." and old[len(prefix):] in section:
+            raise ConfigError("%s: %s больше не поддерживается; используйте %s в YAML"
+                              % (path, old, new))
     unknown = sorted(str(key) for key in section if str(key) not in allowed)
     if unknown:
         raise ConfigError("%s: неизвестный ключ %s" % (
@@ -186,6 +200,15 @@ def _string(section, key, name, path):
     if not isinstance(value, str) or not value.strip():
         raise ConfigError("%s: %s должен быть непустой строкой" % (path, name))
     return value.strip()
+
+
+def _secret(section, key, name, path):
+    value = section.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigError("%s: %s должен быть строкой или null" % (path, name))
+    return value.strip() or None
 
 
 def _integer(section, key, name, path, minimum, default):
@@ -237,7 +260,7 @@ def _gitlab(section, path) -> Optional[GitlabSettings]:
     return GitlabSettings(
         hosts=types.MappingProxyType(hosts),
         default_host=default_host,
-        token_env=_string(section, "token_env", "gitlab.token_env", path) or defaults.token_env,
+        token=_secret(section, "token", "gitlab.token", path),
         patch_dir=_string(section, "patch_dir", "gitlab.patch_dir", path) or defaults.patch_dir,
         jobs=_integer(section, "jobs", "gitlab.jobs", path, 1, defaults.jobs),
         retries=_integer(section, "retries", "gitlab.retries", path, 1, defaults.retries),
@@ -323,8 +346,7 @@ def _ranges(raw, path) -> Optional[RangesConfig]:
     defaults = RangesConfig()
     return RangesConfig(
         names=_names(section.get("names"), path, "ranges.names"),
-        nvd_key_env=(_string(section, "nvd_key_env", "ranges.nvd_key_env", path)
-                     or defaults.nvd_key_env),
+        nvd_key=_secret(section, "nvd_key", "ranges.nvd_key", path),
         cache_ttl=_integer(section, "cache_ttl", "ranges.cache_ttl", path, 0, defaults.cache_ttl),
         jobs=_integer(section, "jobs", "ranges.jobs", path, 1, defaults.jobs),
         retries=_integer(section, "retries", "ranges.retries", path, 1, defaults.retries),

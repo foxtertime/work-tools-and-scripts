@@ -442,6 +442,39 @@ class LoggingTest(unittest.TestCase):
         self.assertIsNone(result.present)
         self.assertNotIn(SECRET, result.problem)
 
+    def test_echoed_token_is_scrubbed_on_all_http_error_paths(self):
+        cases = (
+            ({TREE_URL: Response(403, {"message": "Access denied " + SECRET}, {})},
+             False),
+            ({TREE_URL: Response(404, {"message": "Project Not Found " + SECRET}, {})},
+             False),
+            ({TREE_URL: Response(404, {}, {}),
+              COMMITS_URL: Response(403, {"message": "Access denied " + SECRET}, {})},
+             False),
+            ({"https://gitlab.example.com/api/v4/projects/g%2Fr/repository/compare":
+              Response(503, {"message": "Unavailable " + SECRET}, {})}, True),
+        )
+        for routes, compare in cases:
+            with self.subTest(compare=compare, routes=list(routes)):
+                cli = GitlabClient(HOSTS, token=SECRET,
+                                   transport=FakeTransport(routes),
+                                   sleeper=lambda _s: None)
+                with self.assertLogs("dashboard", level="DEBUG") as caught:
+                    result = (cli.compare("gitlab.example.com", "g/r", "abc", "br")
+                              if compare else
+                              cli.patch_files("gitlab.example.com", "g/r", "br"))
+                self.assertNotIn(SECRET, "\n".join(caught.output))
+                self.assertNotIn(SECRET, result.problem)
+
+    def test_response_body_is_scrubbed_before_log_truncation(self):
+        # Токен пересекает границу обрезки: в журнал не должен попасть и его префикс.
+        transport = FakeTransport({TREE_URL: Response(
+            403, {"message": "x" * 180 + SECRET}, {})})
+        cli = GitlabClient(HOSTS, token=SECRET, transport=transport)
+        with self.assertLogs("dashboard", level="DEBUG") as caught:
+            cli.patch_files("gitlab.example.com", "g/r", "br")
+        self.assertNotIn("glpat-", "\n".join(caught.output))
+
     def test_token_is_scrubbed_on_the_substituted_host_path(self):
         # заметка о подмене хоста склеивается с проблемой запроса: склейка
         # не должна протащить токен мимо очистки
