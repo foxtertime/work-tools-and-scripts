@@ -73,6 +73,33 @@ class CliTest(unittest.TestCase):
                 self.assertEqual(data["patches"][0]["action"], expected)
                 self.assertEqual(data["cves"][0]["fixes"][0]["nvr"], "vim-8.2-9.el9")
 
+    def test_latest_rhel_build_is_written_to_json_and_service_failure_is_partial(self):
+        self.assertEqual(self.invoke(["--package", "vim"]), 0)
+        self.assertEqual(json.loads(self.stdout)["latest_rhel_build"], "vim-8.2-11.el9")
+        from patchaudit.vmaas import VmaasError
+        self.fixture.latest_rhel.side_effect = VmaasError("VMaaS unavailable")
+        self.assertEqual(self.invoke(["--package", "vim"]), 1)
+        data = json.loads(self.stdout)
+        self.assertIsNone(data["latest_rhel_build"])
+        self.assertTrue(data["patches"])
+
+    def test_arch_flag_overrides_config_and_vmaas_settings_reach_client(self):
+        from patchaudit import vmaas
+        path = self.token_config(None)
+        with path.open("a") as handle:
+            handle.write("vmaas:\n  arch: aarch64\n  cache_ttl: 0\n  retries: 1\n  timeout: 5\n")
+        with mock.patch("patchaudit.cli.vmaas.VmaasClient", wraps=vmaas.VmaasClient) as client:
+            self.assertEqual(self.invoke(["--package", "vim", "--config", str(path)]), 0)
+            settings = client.call_args.args[0]
+            self.assertEqual((settings.arch, settings.cache_ttl, settings.retries, settings.timeout),
+                             ("aarch64", 0, 1, 5))
+            self.assertEqual(self.invoke(["--package", "vim", "--config", str(path), "--arch", "s390x"]), 0)
+            self.assertEqual(client.call_args.args[0].arch, "s390x")
+
+    def test_invalid_arch_is_rejected_before_network(self):
+        self.assertEqual(self.invoke(["--package", "vim", "--arch", "../other"]), 2)
+        self.connect.assert_not_called()
+
     def test_partial_report_is_written_with_exit_one(self):
         self.fixture.docs.clear()
         self.fixture.docs.update({"https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-1000.json": {}})

@@ -3,7 +3,7 @@ import logging
 from collections import Counter
 from pathlib import PurePosixPath
 
-from . import __version__, kojiclient, vex
+from . import __version__, kojiclient, vex, vmaas
 from .cveid import cves_of
 from .decisions import classify, patch_action
 from .sourceurl import SourceUrlError, parse_source_url
@@ -12,13 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 def run(package, target_nvr, tag, rhel, session, client,
-        settings=vex.VexSettings(), stream=None, aliases=()):
+        settings=vex.VexSettings(), stream=None, aliases=(), rhel_client=None):
     report = {
         "format": 1, "tool_version": __version__, "complete": True,
         "request": {"mode": "nvr" if target_nvr else "package", "package": package,
                     "target_nvr": target_nvr, "tag": tag, "rhel": rhel,
                     "stream": stream, "aliases": list(aliases)},
-        "latest_build": None, "source": None,
+        "latest_build": None, "latest_rhel_build": None, "source": None,
         "patch_directory": {"path": client.patch_dir, "present": None},
         "patches": [], "cves": [], "ignored_files": [], "summary": {}, "problems": [],
     }
@@ -29,6 +29,11 @@ def run(package, target_nvr, tag, rhel, session, client,
         logger.warning("%s: %s", stage, message)
 
     latest = kojiclient.latest_builds(session, tag, [package])[package]
+    try:
+        report["latest_rhel_build"] = (rhel_client or vmaas.VmaasClient()).latest(
+            package, rhel, stream=stream, aliases=aliases)
+    except vmaas.VmaasError as exc:
+        problem("vmaas", str(exc))
     if latest in (kojiclient.NOT_FOUND, kojiclient.ERROR):
         problem("koji", "последний билд не найден" if latest == kojiclient.NOT_FOUND else "ошибка запроса последнего билда")
         return _finish(report)

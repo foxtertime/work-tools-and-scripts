@@ -317,3 +317,19 @@ class LoadTest(unittest.TestCase):
         cfg = load_config(os.path.join(ROOT, "patchaudit.example.yaml"))
         self.assertEqual(cfg.stream_for("nginx", "9"), "nginx:1.26")
         self.assertIn("gitlab.example.com", cfg.gitlab.hosts)
+
+    def test_vmaas_settings_and_defaults(self):
+        from patchaudit.vmaas import VmaasSettings
+        self.assertEqual(Config().vmaas, VmaasSettings())
+        cfg = load_config(self.write("vmaas:\n  arch: aarch64\n  cache_dir: ~/vmaas\n"
+                                     "  cache_ttl: 0\n  retries: 1\n  timeout: 5\n"))
+        self.assertEqual(cfg.vmaas, VmaasSettings(arch="aarch64", cache_dir=os.path.expanduser("~/vmaas"),
+                                               cache_ttl=0, retries=1, timeout=5))
+
+    def test_vmaas_invalid_settings_are_rejected(self):
+        for body, field in (("arch: ''", "arch"), ("arch: ../other", "arch"),
+                            ("arch: 9", "arch"), ("cache_ttl: -1", "cache_ttl"),
+                            ("retries: 0", "retries"), ("timeout: 0", "timeout"),
+                            ("timeout: .nan", "timeout"), ("cache_tll: 0", "cache_tll")):
+            with self.subTest(body=body):
+                self.assertRejected("vmaas:\n  " + body + "\n", "vmaas." + field)

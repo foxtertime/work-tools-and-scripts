@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "tool_version": "1.0.0",
+  "tool_version": "1.1.0",
   "complete": true,
   "request": {
     "mode": "package",
@@ -12,6 +12,7 @@
     "aliases": []
   },
   "latest_build": "vim-8.2.2637-24.sl9_8^2",
+  "latest_rhel_build": "vim-8.2.2637-26.el9_8.23",
   "source": {
     "host": "gitlab.example.com",
     "project": "rpms/vim",

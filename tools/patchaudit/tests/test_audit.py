@@ -32,6 +32,8 @@ class AuditTest(unittest.TestCase):
         self.client.patch_files.return_value = TreeResult(True, [PATCH, "PATCH/build.patch"], None)
         self.docs = {vex_url(CVE): doc()}
         self.download = mock.patch("patchaudit.vex.download", side_effect=self._download).start()
+        self.latest_rhel = mock.patch("patchaudit.vmaas.VmaasClient.latest",
+                                      return_value="vim-8.2-11.el9").start()
         self.addCleanup(mock.patch.stopall)
 
     def _download(self, url, timeout=None):
@@ -54,6 +56,36 @@ class AuditTest(unittest.TestCase):
         self.client.patch_files.assert_called_once_with("git.example.org", "rpms/vim", BRANCH)
         self.assertEqual(self.session.build_calls, [LATEST])
         self.assertEqual(result["ignored_files"], ["PATCH/build.patch"])
+
+    def test_latest_rhel_build_is_a_single_nvr_field_in_both_modes(self):
+        for target in (None, "vim-8.2-9.el9"):
+            result = self.run_audit(target)
+            self.assertEqual(result["latest_rhel_build"], "vim-8.2-11.el9")
+            self.assertNotIn("latest_rhel", result)
+            self.assertEqual(result["request"]["target_nvr"], target)
+        self.latest_rhel.assert_called_with("vim", "9", stream=None, aliases=())
+
+    def test_latest_rhel_is_queried_without_patch_directory(self):
+        self.client.patch_files.return_value = TreeResult(False, [], None)
+        result = self.run_audit()
+        self.assertEqual(result["latest_rhel_build"], "vim-8.2-11.el9")
+        self.assertTrue(result["complete"])
+        self.download.assert_not_called()
+
+    def test_missing_rhel_package_is_null_without_network_failure(self):
+        self.latest_rhel.return_value = None
+        result = self.run_audit()
+        self.assertIsNone(result["latest_rhel_build"])
+        self.assertTrue(result["complete"])
+
+    def test_vmaas_error_does_not_hide_patch_decisions(self):
+        from patchaudit.vmaas import VmaasError
+        self.latest_rhel.side_effect = VmaasError("VMaaS unavailable")
+        result = self.run_audit("vim-8.2-9.el9")
+        self.assertIsNone(result["latest_rhel_build"])
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["problems"][0]["stage"], "vmaas")
+        self.assertEqual(result["patches"][0]["action"], "remove")
 
     def test_target_does_not_have_to_exist_in_koji(self):
         result = self.run_audit("vim-8.2-9.el9")

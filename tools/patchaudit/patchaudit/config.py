@@ -8,17 +8,20 @@ PyYAML импортируется только при заданном файл�
 """
 import math
 import os
+import re
 import types
 from typing import Dict, Mapping, NamedTuple, Optional, Tuple
 
 from .gitlabclient import GitlabHost
 from .vex import VexSettings, parse_rhel
+from .vmaas import VmaasSettings
 
 ENV_VAR = "PATCHAUDIT_CONFIG"
 
-_TOP_KEYS = {"koji", "rhel", "vex", "vex_streams", "vex_names", "gitlab"}
+_TOP_KEYS = {"koji", "rhel", "vex", "vex_streams", "vex_names", "gitlab", "vmaas"}
 _KOJI_KEYS = {"hub", "tag"}
 _VEX_KEYS = {"cache_dir", "cache_ttl", "jobs", "retries", "timeout"}
+_VMAAS_KEYS = {"arch", "cache_dir", "cache_ttl", "retries", "timeout"}
 _GITLAB_KEYS = {"hosts", "default_host", "token", "patch_dir", "jobs", "retries", "timeout"}
 # web не используется: допускается, чтобы блок хостов можно было взять из
 # конфига dashboard как есть
@@ -54,6 +57,7 @@ class Config(NamedTuple):
     vex_names: Mapping[str, Tuple[str, ...]] = types.MappingProxyType({})
     # None — секции gitlab нет, патчи не проверяются
     gitlab: Optional[GitlabSettings] = None
+    vmaas: VmaasSettings = VmaasSettings()
 
     def stream_for(self, component: str, rhel: str) -> Optional[str]:
         """Стрим VEX для компонента — только из набора ровно этой версии RHEL.
@@ -99,6 +103,23 @@ def load_config(path: Optional[str]) -> Config:
         vex_streams=_streams(raw.get("vex_streams"), path),
         vex_names=_names(raw.get("vex_names"), path, "vex_names"),
         gitlab=_gitlab(_section(raw, "gitlab", path), path),
+        vmaas=_vmaas(_section(raw, "vmaas", path), path),
+    )
+
+
+def _vmaas(section, path):
+    _check_keys(section, _VMAAS_KEYS, "vmaas.", path)
+    defaults = VmaasSettings()
+    arch = _string(section, "arch", "vmaas.arch", path) or defaults.arch
+    if not re.fullmatch(r"[A-Za-z0-9_]+", arch):
+        raise ConfigError("%s: vmaas.arch — нужно имя архитектуры, например x86_64" % path)
+    cache_dir = _string(section, "cache_dir", "vmaas.cache_dir", path)
+    return VmaasSettings(
+        cache_dir=os.path.expanduser(cache_dir) if cache_dir else None,
+        cache_ttl=_integer(section, "cache_ttl", "vmaas.cache_ttl", path, 0, defaults.cache_ttl),
+        arch=arch,
+        retries=_integer(section, "retries", "vmaas.retries", path, 1, defaults.retries),
+        timeout=_timeout(section, "vmaas.timeout", path, defaults.timeout),
     )
 
 
