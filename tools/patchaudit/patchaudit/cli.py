@@ -32,7 +32,7 @@ def _parser():
     parser.add_argument("--koji-url", help="URL kojihub")
     parser.add_argument("--tag", help="Koji-тег с последним билдом пакета")
     parser.add_argument("--rhel", help="точная версия RHEL: 9, 9.2 и т. п.")
-    parser.add_argument("--gitlab-url", help="адрес GitLab или его API v4; токен в $GITLAB_TOKEN")
+    parser.add_argument("--gitlab-url", help="адрес GitLab или его API v4; токен в gitlab.token YAML-конфига")
     parser.add_argument("--patch-dir", help="каталог патчей, по умолчанию PATCH")
     parser.add_argument("--stream", help="стрим VEX, например nginx:1.26")
     parser.add_argument("--vex-name", action="append", help="другое имя пакета в VEX; можно повторять")
@@ -96,7 +96,7 @@ def main(argv=None):
         cache_base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
         cache = vex.prepare_cache(cfg.vex.cache_dir or os.path.join(cache_base, "patchaudit"))
         settings = cfg.vex._replace(cache_dir=cache)
-        token = (os.environ.get(gitlab.token_env) or "").strip() or None
+        token = gitlab.token
         client = GitlabClient(dict(gitlab.hosts), token=token, patch_dir=gitlab.patch_dir,
                               transport=httpclient.UrllibTransport(timeout=gitlab.timeout),
                               retries=gitlab.retries, default_host=gitlab.default_host)

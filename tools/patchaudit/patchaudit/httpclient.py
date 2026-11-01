@@ -24,9 +24,6 @@ RETRY_STATUSES = (429, 500, 502, 503, 504)
 
 _BODY_LIMIT = 200
 
-# порог, ниже которого строка не считается токеном и не вычищается
-_MIN_TOKEN_LEN = 8
-
 
 class UrllibTransport:
     """GET на urllib: так же, как VEX, без зависимости от requests.
@@ -92,16 +89,14 @@ class HttpClient:
         """
         text = str(text)
         token = self._token or ""
-        # ниже порога чистить опаснее, чем не чистить: настоящий PAT GitLab
-        # длиной около 26 символов, а слепая замена короткого «токена»
-        # превратит «connection reset by peer» в «connec***ion rese*** by
-        # peer» — и этот испорченный текст уедет в журнал. Восемь символов —
-        # заведомо не секрет.
-        if len(token.strip()) < _MIN_TOKEN_LEN:
+        if not token.strip():
             return text
         variants = {token, token.strip()}
-        variants |= {v.encode("unicode_escape").decode("ascii")
-                     for v in list(variants)}
+        for variant in tuple(variants):
+            escaped = variant.encode("unicode_escape").decode("ascii")
+            variants.update((escaped, repr(variant)[1:-1],
+                             repr(variant.encode("utf-8"))[2:-1],
+                             escaped.replace("'", "\\'"), escaped.replace('"', '\\"')))
         # длинные варианты первыми: иначе обрезанный съел бы начало полного
         for variant in sorted(variants, key=len, reverse=True):
             text = text.replace(variant, "***")
@@ -148,7 +143,7 @@ class HttpClient:
             if response.status >= 400:
                 logger.debug("GET %s%s → %s за %.2f с: %s", url,
                              params_note(params), response.status, elapsed,
-                             body_note(response))
+                             body_note(response, self.scrub))
             else:
                 logger.debug("GET %s%s → %s за %.2f с", url,
                              params_note(params), response.status, elapsed)
@@ -164,7 +159,7 @@ class HttpClient:
                                params_note(params), response.status, delay,
                                attempt + 1, self._retries)
                 self._sleep(delay)
-                last = "gitlab: %s %s" % (response.status, server_message(response))
+                last = self.scrub("gitlab: %s %s" % (response.status, server_message(response)))
                 continue
             return response
         return last or "gitlab: запрос не удался"
@@ -199,9 +194,9 @@ def params_note(params) -> str:
     return " " + note if note else ""
 
 
-def body_note(response) -> str:
+def body_note(response, scrub=str) -> str:
     body = getattr(response, "body", None)
     if body is None:
         return "пустое тело"
-    text = str(body)
+    text = scrub(str(body))
     return text if len(text) <= _BODY_LIMIT else text[:_BODY_LIMIT] + "…"

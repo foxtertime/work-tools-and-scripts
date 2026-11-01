@@ -150,8 +150,8 @@ class GitlabClient:
             response = self._http.get(url, headers, params)
             if isinstance(response, str):
                 return _tree_problem(response)
+            note = self._http.scrub(server_message(response))
             if response.status == 404:
-                note = server_message(response)
                 if "project not found" in note.lower():
                     return _tree_problem("gitlab: %s" % note)
                 # Остальные 404 неоднозначны: «в ветке нет каталога» и «нет
@@ -162,7 +162,7 @@ class GitlabClient:
                 return self._resolve_missing_tree(cfg, project, ref, headers)
             if response.status >= 400:
                 return _tree_problem("gitlab: %s %s" % (response.status,
-                                                        server_message(response)))
+                                                        note))
             for item in response.body or []:
                 if item.get("type") == "blob":
                     paths.append(item["path"])
@@ -197,9 +197,10 @@ class GitlabClient:
                          "ошибка, патчей у билда просто нет",
                          project, ref, self._patch_dir)
             return TreeResult(False, [], None, {})
+        note = self._http.scrub(server_message(response))
         logger.debug("%s: ветка %s — не удалось выяснить, есть ли она: %s %s",
-                     project, ref, response.status, server_message(response))
-        return _tree_problem("gitlab: %s %s" % (response.status, server_message(response)))
+                     project, ref, response.status, note)
+        return _tree_problem("gitlab: %s %s" % (response.status, note))
 
     # -- сравнение коммитов -----------------------------------------------
     def compare(self, host, project, from_sha, to_ref) -> CompareResult:
@@ -237,9 +238,9 @@ class GitlabClient:
         if isinstance(response, str):
             return CompareResult(None, None, response)
         if response.status >= 400:
+            note = self._http.scrub(server_message(response))
             return CompareResult(None, None,
-                                 "gitlab: %s %s" % (response.status,
-                                                    server_message(response)))
+                                 "gitlab: %s %s" % (response.status, note))
         body = response.body or {}
         head = (body.get("commit") or {}).get("id")
         # compare_timeout значит «список коммитов усечён»: показывать по

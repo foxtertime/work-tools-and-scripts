@@ -301,14 +301,6 @@ def _settings(args):
     return cfg, rhel, hub, tag
 
 
-def _gitlab_token(settings) -> Optional[str]:
-    """Токен GitLab из окружения; файл или копипаста приносят перевод строки —
-    срезаем."""
-    if settings is None:
-        return None
-    return (os.environ.get(settings.token_env) or "").strip() or None
-
-
 def _patches(session, nvrs, settings, token):
     """Патчи под CVE в каталоге PATCH билда, по компонентам с найденным
     билдом; без секции gitlab ничего не спрашивается."""
@@ -371,16 +363,15 @@ def _header(args, cfg, run) -> None:
     else:
         hosts = ", ".join("%s (по умолчанию)" % host if host == gitlab.default_host else host
                           for host in gitlab.hosts)
-        token = ("токен из $%s" % gitlab.token_env if run.token else
-                 "без токена ($%s пуст) — видны только публичные проекты" % gitlab.token_env)
+        token = ("токен из gitlab.token" if run.token else
+                 "без токена — видны только публичные проекты")
         logger.info("GitLab: %s, каталог %s, %s, потоков %d", hosts, gitlab.patch_dir, token,
                     gitlab.jobs)
     if cfg.ranges is None:
         logger.info("диапазоны: не заданы в конфиге — колонка D не сверяется")
     else:
-        env = cfg.ranges.nvd_key_env
-        key = ("NVD с ключом из $%s" % env if run.nvd_key else
-               "NVD без ключа ($%s пуст, запрос раз в %g с)" % (env, ranges.PAUSE))
+        key = ("NVD с ключом из ranges.nvd_key" if run.nvd_key else
+               "NVD без ключа (запрос раз в %g с)" % ranges.PAUSE)
         logger.info("диапазоны: %s, CVE.org, кэш %s (живёт %d с), потоков %d", key,
                     _ranges_cache(cfg), cfg.ranges.cache_ttl, cfg.ranges.jobs)
     if run.ai is None:
@@ -520,10 +511,8 @@ def _run(args) -> int:
     packages = list(dict.fromkeys(component for _, component in unique))
     streams = {name: cfg.stream_for(name, rhel) for name in packages}
     aliases = {name: cfg.names_for(name) for name in packages}
-    token = _gitlab_token(cfg.gitlab)
-    # ключ NVD, как и токен GitLab, срезаем: файл и копипаста приносят перевод строки
-    nvd_key = ((os.environ.get(cfg.ranges.nvd_key_env) or "").strip() or None
-               if cfg.ranges is not None else None)
+    token = cfg.gitlab.token if cfg.gitlab is not None else None
+    nvd_key = cfg.ranges.nvd_key if cfg.ranges is not None else None
     _header(args, cfg, _Run(rhel, hub, tag, records, tasks, rejects, wanted, cves, packages,
                             streams, aliases, token, nvd_key, verdicts_ai))
     _warn_rejects(rejects)

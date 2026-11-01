@@ -85,12 +85,9 @@ class ScrubTest(unittest.TestCase):
         self.assertEqual(self.scrub(token, "хвост %s хвост" % SECRET),
                          "хвост *** хвост")
 
-    def test_short_token_is_not_scrubbed(self):
-        # настоящий PAT GitLab — около 26 символов; слепая замена короткого
-        # «токена» испортила бы обычный текст ошибки, а он идёт в журнал
-        text = "connection reset by peer"
-        self.assertEqual(self.scrub("t", text), text)
-        self.assertEqual(self.scrub("connect", text), text)
+    def test_short_configured_tokens_are_scrubbed(self):
+        self.assertEqual(self.scrub("t", "header t"), "header ***")
+        self.assertEqual(self.scrub("connect", "connection reset"), "***ion reset")
 
     def test_token_at_the_threshold_is_scrubbed(self):
         self.assertEqual(self.scrub("abcdefgh", "x abcdefgh y"), "x *** y")
@@ -108,6 +105,21 @@ class ScrubTest(unittest.TestCase):
         self.assertEqual(self.scrub(SECRET, ValueError("ой %s" % SECRET)),
                          "ой ***")
 
+    def test_quote_escaped_secret_is_redacted(self):
+        token = "a'b\"c"
+        message = ValueError("bad token %r" % token)
+        self.assertEqual(self.scrub(token, message), "bad token '***'")
+
+    def test_quote_escaped_secret_is_redacted_from_debug_body(self):
+        token = "a'b\"c"
+        transport = FakeTransport({URL: Response(403, {"message": "denied " + token}, {})})
+        client = HttpClient(transport=transport, token=token)
+        with self.assertLogs("vulnsheet", "DEBUG") as caught:
+            client.get(URL, {}, {})
+        log = "\n".join(caught.output)
+        self.assertNotIn(repr(token)[1:-1], log)
+        self.assertIn("***", log)
+
 class LoggingTest(unittest.TestCase):
     """Что попадает в лог при неудачах: предупреждение обещает следующую
     попытку, поэтому после последней его быть не должно."""
@@ -115,6 +127,15 @@ class LoggingTest(unittest.TestCase):
     def failing(self, retries):
         return HttpClient(transport=_BrokenTransport(), token=TOKEN,
                           sleeper=lambda _s: None, retries=retries)
+
+    def test_error_body_scrubs_secret_before_truncating_debug_output(self):
+        transport = FakeTransport({URL: Response(500, {"message": "x" * 178 + SECRET}, {})})
+        client = HttpClient(transport=transport, token=SECRET, retries=1)
+        with self.assertLogs("vulnsheet.httpclient", level="DEBUG") as caught:
+            client.get(URL, {}, {})
+        output = "\n".join(caught.output)
+        self.assertNotIn("glpat-", output)
+        self.assertIn("***", output)
 
     def test_final_transport_failure_is_not_warned_about(self):
         # об окончательной неудаче один раз и с именем компонента напишет

@@ -19,7 +19,7 @@ ENV_VAR = "PATCHAUDIT_CONFIG"
 _TOP_KEYS = {"koji", "rhel", "vex", "vex_streams", "vex_names", "gitlab"}
 _KOJI_KEYS = {"hub", "tag"}
 _VEX_KEYS = {"cache_dir", "cache_ttl", "jobs", "retries", "timeout"}
-_GITLAB_KEYS = {"hosts", "default_host", "token_env", "patch_dir", "jobs", "retries", "timeout"}
+_GITLAB_KEYS = {"hosts", "default_host", "token", "patch_dir", "jobs", "retries", "timeout"}
 # web не используется: допускается, чтобы блок хостов можно было взять из
 # конфига dashboard как есть
 _HOST_KEYS = {"api", "web"}
@@ -30,10 +30,10 @@ class ConfigError(Exception):
 
 
 class GitlabSettings(NamedTuple):
-    """Где искать каталог патчей. Токен — в переменной token_env, не в файле."""
+    """Где искать каталог патчей; токен читается из gitlab.token."""
     hosts: Mapping[str, GitlabHost]
     default_host: Optional[str] = None
-    token_env: str = "GITLAB_TOKEN"
+    token: Optional[str] = None
     patch_dir: str = "PATCH"
     jobs: int = 8
     retries: int = 3
@@ -128,9 +128,14 @@ def _read_yaml(path):
                 if key_node.tag == "tag:yaml.org,2002:merge":
                     continue
                 key = self.construct_object(key_node, deep=True)
-                if key in seen:
-                    raise ConfigError("%s: ключ %r указан дважды (строка %d)" % (
-                        path, key, key_node.start_mark.line + 1))
+                try:
+                    duplicate = key in seen
+                except TypeError:
+                    raise yaml.constructor.ConstructorError(
+                        None, None, "недопустимый ключ YAML", key_node.start_mark) from None
+                if duplicate:
+                    raise ConfigError("%s: ключ указан дважды (строка %d, столбец %d)" % (
+                        path, key_node.start_mark.line + 1, key_node.start_mark.column + 1))
                 seen.add(key)
             return super().construct_mapping(node, deep=deep)
 
@@ -140,7 +145,9 @@ def _read_yaml(path):
     except OSError as exc:
         raise ConfigError("%s: не читается: %s" % (path, exc))
     except (yaml.YAMLError, ValueError) as exc:  # ValueError — не UTF-8
-        raise ConfigError("%s: ошибка YAML: %s" % (path, exc))
+        mark = getattr(exc, "problem_mark", None)
+        location = " (строка %d, столбец %d)" % (mark.line + 1, mark.column + 1) if mark else ""
+        raise ConfigError("%s: ошибка YAML%s" % (path, location)) from None
 
 
 def _check_keys(section, allowed, prefix, path):
@@ -166,6 +173,15 @@ def _string(section, key, name, path):
     if not isinstance(value, str) or not value.strip():
         raise ConfigError("%s: %s должен быть непустой строкой" % (path, name))
     return value.strip()
+
+
+def _secret(section, key, name, path):
+    value = section.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigError("%s: %s должен быть строкой или null" % (path, name))
+    return value.strip() or None
 
 
 def _integer(section, key, name, path, minimum, default):
@@ -194,6 +210,8 @@ def _gitlab(section, path) -> Optional[GitlabSettings]:
     """Секция gitlab; пустая или отсутствующая — проверка патчей выключена."""
     if not section:
         return None
+    if "token_env" in section:
+        raise ConfigError("%s: gitlab.token_env больше не поддерживается; задайте токен в gitlab.token" % path)
     _check_keys(section, _GITLAB_KEYS, "gitlab.", path)
     raw_hosts = section.get("hosts")
     if not isinstance(raw_hosts, dict) or not raw_hosts:
@@ -217,7 +235,7 @@ def _gitlab(section, path) -> Optional[GitlabSettings]:
     return GitlabSettings(
         hosts=types.MappingProxyType(hosts),
         default_host=default_host,
-        token_env=_string(section, "token_env", "gitlab.token_env", path) or defaults.token_env,
+        token=_secret(section, "token", "gitlab.token", path),
         patch_dir=_string(section, "patch_dir", "gitlab.patch_dir", path) or defaults.patch_dir,
         jobs=_integer(section, "jobs", "gitlab.jobs", path, 1, defaults.jobs),
         retries=_integer(section, "retries", "gitlab.retries", path, 1, defaults.retries),
