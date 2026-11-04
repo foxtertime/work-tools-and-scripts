@@ -1,12 +1,12 @@
 /* Layout: a dark "terminal" hero band with the headline counts, then a two-column report grid; severity reads as a warm sequential ramp everywhere. */
 :root{
   /* статусы задач (st), основания «можно закрыть» (rs), ступени мер (m) */
-  --st-done:#2E7D4F;--st-work:#2E7FB0;--st-review:#6250d6;--st-pause:#B7791F;--st-bad:#B42318;--st-idle:#A9B6C2;
+  --st-removed:#45515F;--st-done:#2E7D4F;--st-work:#2E7FB0;--st-review:#6250d6;--st-pause:#B7791F;--st-bad:#B42318;--st-idle:#A9B6C2;
   --rs-fixed:#8CC6E3;--rs-patch:#4FA6D3;--rs-range:#22709A;--rs-dup:#7F88C9;--rs-none:#E0693F;
   --m1:var(--accent);--m2:color-mix(in srgb,var(--accent) 86%,var(--panel));--m3:color-mix(in srgb,var(--accent) 74%,var(--panel));--m4:color-mix(in srgb,var(--accent) 63%,var(--panel));--m5:color-mix(in srgb,var(--accent) 53%,var(--panel));--m6:color-mix(in srgb,var(--accent) 44%,var(--panel));--m7:color-mix(in srgb,var(--accent) 36%,var(--panel));--m8:color-mix(in srgb,var(--accent) 29%,var(--panel));--m9:color-mix(in srgb,var(--accent) 23%,var(--panel));--m10:color-mix(in srgb,var(--accent) 18%,var(--panel));
   --c1:#2a78d6;--c2:#eb6834;--c3:#1baf7a;--c4:#eda100;--c5:#e87ba4;--c6:#008300;--c7:#6250d6;--c8:#e34948;
   --bg:#F5F7F9; --panel:#FFFFFF; --fg:#14202B; --muted:#5A6B7A; --line:#DCE3EA; --grid:#E9EEF2;
-  --accent:#1D6A8A; --accent-soft:#E2EFF5; --weekend:rgba(20,32,43,.05); --hatch:rgba(0,0,0,.22);
+  --accent:#1D6A8A; --accent-soft:#E2EFF5; --weekend:rgba(20,32,43,.05); --hatch:rgba(0,0,0,.22); --personal-hatch:rgba(124,58,237,.27);
   --hero-bg:#0F1D29; --hero-fg:#E8F0F6; --hero-muted:#8FA6B8; --hero-line:#25394A;
   --sev-crit:#9E2A16; --sev-imp:#D0582E; --sev-mod:#E8955F; --sev-low:#F1C9A6; --sev-none:#C3CDD6;
   --ok:#2E7D4F; --warn:#B7791F; --bad:#B42318;
@@ -15,20 +15,20 @@
   --f-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#9085e9;--st-pause:#E3A846;--st-bad:#F27063;--st-idle:#4A5B6A;
+  --st-removed:#45515F;--st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#9085e9;--st-pause:#E3A846;--st-bad:#F27063;--st-idle:#4A5B6A;
   --rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B;
   --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;--c6:#008300;--c7:#9085e9;--c8:#e66767;
   --bg:#0C141B; --panel:#121D27; --fg:#E4ECF2; --muted:#93A6B5; --line:#223241; --grid:#1A2834;
-  --accent:#5DB3D6; --accent-soft:#16303D; --weekend:rgba(228,236,242,.045); --hatch:rgba(255,255,255,.16);
+  --accent:#5DB3D6; --accent-soft:#16303D; --weekend:rgba(228,236,242,.045); --hatch:rgba(255,255,255,.16); --personal-hatch:rgba(184,144,255,.32);
   --hero-bg:#070D13; --hero-fg:#E8F0F6; --hero-muted:#8FA6B8; --hero-line:#1D2E3C;
   --sev-crit:#FF8A6B; --sev-imp:#E0693F; --sev-mod:#A65A33; --sev-low:#6A4532; --sev-none:#3A4A58;
   --ok:#5CC48A; --warn:#E3A846; --bad:#F27063; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#9085e9;--st-pause:#E3A846;--st-bad:#F27063;--st-idle:#4A5B6A;
+  --st-removed:#45515F;--st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#9085e9;--st-pause:#E3A846;--st-bad:#F27063;--st-idle:#4A5B6A;
   --rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B;
   --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;--c6:#008300;--c7:#9085e9;--c8:#e66767;
   --bg:#0C141B; --panel:#121D27; --fg:#E4ECF2; --muted:#93A6B5; --line:#223241; --grid:#1A2834;
-  --accent:#5DB3D6; --accent-soft:#16303D; --weekend:rgba(228,236,242,.045); --hatch:rgba(255,255,255,.16);
+  --accent:#5DB3D6; --accent-soft:#16303D; --weekend:rgba(228,236,242,.045); --hatch:rgba(255,255,255,.16); --personal-hatch:rgba(184,144,255,.32);
   --hero-bg:#070D13; --hero-fg:#E8F0F6; --hero-muted:#8FA6B8; --hero-line:#1D2E3C;
   --sev-crit:#FF8A6B; --sev-imp:#E0693F; --sev-mod:#A65A33; --sev-low:#6A4532; --sev-none:#3A4A58;
   --ok:#5CC48A; --warn:#E3A846; --bad:#F27063; color-scheme:dark}
@@ -56,7 +56,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .src.err{color:#FF8A6B}
 
 /* шапка всегда тёмная — в ней всегда тёмные значения палитры */
-.hero{--st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#9085e9;--st-pause:#E3A846;--st-bad:#FF8A6B;--st-idle:#4A5B6A;--rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B}
+.hero{--st-removed:#45515F;--st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#9085e9;--st-pause:#E3A846;--st-bad:#FF8A6B;--st-idle:#4A5B6A;--rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B}
 .hero-total{text-align:right}
 .hero-total .n{font:700 clamp(48px,7vw,72px)/1 var(--f-display);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
 .hero-total .s{font-size:13px;color:var(--hero-muted)}
@@ -156,7 +156,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 /* Тёмные диагональные полосы только на растриаженной доле сегмента шапки.
    Псевдоэлемент сохраняется при fitLabels и рисуется под подписью. */
 #hero-bar > span{position:relative;isolation:isolate}
-#hero-bar > span::before{content:"";position:absolute;inset:0 auto 0 0;width:var(--triaged,0%);background:repeating-linear-gradient(135deg,transparent 0 4px,rgba(0,0,0,.22) 4px 8px);pointer-events:none;z-index:-1}
+#hero-bar > span::before{content:"";position:absolute;inset:0 auto 0 0;width:var(--triaged,0%);background:repeating-linear-gradient(135deg,transparent 0 4px,var(--triage-hatch,rgba(0,0,0,.22)) 4px 8px);pointer-events:none;z-index:-1}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 
 /* липкая строка разделов: якоря по центру колонки; не помещаются — строка
@@ -311,6 +311,9 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 #plan-ready-l{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 #pace.plan .pace-ctl .chk{flex-direction:row;align-items:center;gap:8px;align-self:end;height:32px;font:500 12.5px/1.2 var(--f-body);letter-spacing:0;text-transform:none;color:var(--fg);white-space:normal;cursor:pointer}
 .pace-ctl .chk input{width:auto;height:auto;margin:0;padding:0;flex:none;accent-color:var(--accent)}
+.pace-ctl .plan-auto{grid-column:1/-1;justify-self:end;margin-top:8px;padding:4px 8px;font:500 12px var(--f-body);color:var(--accent);background:transparent;border:1px solid var(--line);border-radius:6px;cursor:pointer}
+.pace-ctl .plan-auto:disabled{opacity:.5;cursor:default}
+.pace-ctl .plan-auto:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* тексты обоих режимов лежат в одной ячейке, невидимый держит место:
    высота — по большему, и при переключении блок не прыгает */
@@ -465,3 +468,11 @@ img{max-width:100%}
 .drill-dialog button:disabled{opacity:.4;cursor:default}
 .drill-dialog :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(max-width:640px){.drill-dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:10px}.drill-top{padding:18px 16px 12px;gap:10px}.drill-top h2{font-size:17px}.drill-toolbar{padding:0 16px 12px;flex-wrap:wrap;gap:10px}.drill-search{flex-basis:100%}.drill-export{margin-left:0}.drill-count,.drill-footer{padding:10px 16px}.drill-tablewrap{max-height:52dvh}}
+
+/* Убранные задачи: отдельный графитовый сегмент и светлый триаж поверх него. */
+#hero-bar > [data-segment="removed"]{color:#fff;--triage-hatch:rgba(255,255,255,.24)}
+.pbar > [data-segment="removed"]{color:#fff}
+.removed-subset{display:block;font-size:11px;font-weight:400;line-height:1.5;color:var(--muted)}
+.hero .removed-subset{color:var(--hero-muted)}
+.dev .dstat > div:has(.removed-subset){flex-wrap:wrap}
+.dev .dstat .removed-subset{flex-basis:100%;margin-left:14px}

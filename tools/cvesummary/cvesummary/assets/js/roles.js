@@ -11,7 +11,7 @@
   'use strict';
 
   const norm = s => String(s == null ? '' : s).trim().replace(/\s+/g, ' ').toLowerCase();
-  const DONE = 'готов', REVIEW = 'ожидает ревью', PAUSED = 'на паузе';
+  const DONE = 'готов', REVIEW = 'ожидает ревью', PAUSED = 'на паузе', REMOVED = 'убрано из эпика';
   const ATTENTION = ['есть проблема', 'нужна доработка'];
   const SEVERITIES = ['Critical', 'Important', 'Moderate', 'Low'];
   const MEASURES = ['Патч из апстрима', 'Импорт новой версии', 'Тег свежего билда',
@@ -22,7 +22,20 @@
 
   const devOf = r => String(r.dev == null ? '' : r.dev).trim().replace(/\s+/g, ' ');
   const isTaken = r => devOf(r) !== '';
-  const isDone = r => norm(r.status) === DONE;
+  const isRemoved = r => norm(r.status) === REMOVED;
+  // Только распознанные календарные даты подтверждают завершение убранной задачи.
+  const hasDate = (r, key) => {
+    const value = r[key];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '') || (r.bad || []).includes(key)) return false;
+    const date = new Date(value + 'T00:00:00Z');
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  };
+  const isDone = r => norm(r.status) === DONE || (isRemoved(r) &&
+    (norm(r.dev) === 'secops' || (isTaken(r) && hasDate(r, 'start') && hasDate(r, 'end'))));
+  /* Дата события, а не исходный текст ячейки: убранный SecOps закрыт даже
+     с ошибочной End, но такое значение не доказывает датированное закрытие.
+     Правила дат ранее существовавших статусов здесь не меняются. */
+  const endOf = r => isRemoved(r) && !hasDate(r, 'end') ? '' : r.end;
   const isOpen = r => !isDone(r);
   const isWorking = r => isTaken(r) && !isDone(r);
   const isReview = r => norm(r.status) === REVIEW;
@@ -37,7 +50,7 @@
     if (norm(r.rstate) === 'fixed') out.push('fixed');
     if (String(r.p || '').trim() === '+') out.push('patch');
     if (String(r.d || '').trim() === '+') out.push('range');
-    if (dup) out.push('dup');
+    if (dup && !isRemoved(r)) out.push('dup');
     return out;
   }
 
@@ -74,6 +87,7 @@
     });
     const groups = new Map();
     rows.forEach((r, i) => {
+      if (isRemoved(r)) return;
       const key = taskKey(r);
       if (key === null) return;
       if (!groups.has(key)) groups.set(key, []);
@@ -109,7 +123,7 @@
   const sevOrder = values => order(values, SEVERITIES, NO_SEVERITY);
   const measureOrder = values => order(values, MEASURES, NO_MEASURE);
 
-  return { norm, devOf, isTaken, isDone, isOpen, isWorking, isReview, isPaused,
+  return { norm, devOf, endOf, isTaken, isRemoved, isDone, isOpen, isWorking, isReview, isPaused,
     needsAttention, isTriaged, closeReasons, taskKey, uniques, duplicates, sevOf, sevOrder, measureOf, measureOrder,
     SEVERITIES, MEASURES, NO_SEVERITY, NO_MEASURE };
 }));

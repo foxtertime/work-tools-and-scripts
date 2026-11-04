@@ -3,7 +3,7 @@
    hours, pace, timeline, nav, strips; здесь только DOM. */
 (function () {
   'use strict';
-  const { dates, roles, hours: Hm, pace, timeline, nav, strips, ai, links } = window.CS;
+  const { dates, roles, segments, hours: Hm, pace, activity, timeline, nav, strips, ai, links } = window.CS;
   const DATA = JSON.parse(document.getElementById('data').textContent);
   const AS_OF = dates.dayOf(DATA.meta.as_of);
   const NS = 'http://www.w3.org/2000/svg';
@@ -69,7 +69,7 @@
     done: roles.isDone(r), open: roles.isOpen(r), taken: roles.isTaken(r), working: roles.isWorking(r),
     review: roles.isReview(r), paused: roles.isPaused(r), attention: roles.needsAttention(r),
     reasons: roles.closeReasons(r, DUP[i] !== null), dupOf: DUP[i], cvssN: parseFloat(String(r.cvss).replace(',', '.')) || 0,
-    tdateD: dates.dayOf(r.tdate), startD: dates.dayOf(r.start), endD: dates.dayOf(r.end), hours: H.hours[i],
+    tdateD: dates.dayOf(r.tdate), startD: dates.dayOf(r.start), endD: dates.dayOf(roles.endOf(r)), hours: H.hours[i],
   }));
   const closedWithHours = list => list.filter(r => r.done && r.endD !== null && r.hours !== null).map(r => r.hours);
   const SEV_KEYS = roles.sevOrder(recs.map(r => r.sevN));
@@ -81,20 +81,24 @@
   const measColor = k => (k === roles.NO_MEASURE ? '--sev-none' : MEAS_PALETTE[MEAS_KEYS.filter(x => x !== roles.NO_MEASURE).indexOf(k) % MEAS_PALETTE.length]);
   /* начало работы — первая Start date у взятых задач: окно темпа не
      уходит раньше него */
-  const START = pace.workStart(recs, AS_OF);
+  const ACTIVITY = activity.compute(recs, AS_OF, H);
+  const START = ACTIVITY.since;
   /* дни работы команды — рабочие дни разработчиков из часов (на ком-то
      висит задача; выходной — если брали или закрывали), кроме SecOps: это
      не наша команда. Пять и больше рабочих дней подряд без них — перерыв:
      из темпа закрытия он выпадает, на графиках по времени заштрихован */
-  const ACTIVE = new Set();
-  H.workdays.forEach((list, dev) => { if (roles.norm(dev) !== 'secops') list.forEach(d => ACTIVE.add(d)); });
-  const BREAKS = pace.breaks(ACTIVE, START, AS_OF);
+  const BREAKS = ACTIVITY.breaks;
   const breakTip = (from, to) => (BREAKS.some(b => b.from <= to && b.to >= from) ? ' · перерыв в работе — в темп закрытия не идёт' : '');
   const cutText = R => (R.cut ? ` и ${wdays(R.cut)} перерыва — они в темп не идут` : '');
+  const rateSpan = R => R.calendarRate ? `${R.rateDays} календарных дней` : wdays(R.rateDays);
+  const noPeriod = 'Выбранный период не пересекается с рабочим периодом. Выберите даты начиная с начала работы.';
+  const windowForecast = (R, rate, stop, target, n = R.open, start) => R.days
+    ? pace.forecast(n, R.inR, rate, AS_OF, stop, target, start)
+    : { days: null, remaining: null, margin: null, state: 'no-period' };
   const allDays = recs.flatMap(r => [r.tdateD, r.startD, r.endD]).filter(d => d !== null && d <= AS_OF);
   const FIRST = allDays.length ? minOf(allDays, Infinity) : null;
   const statusKey = r => String(r.status || '').trim() || (r.taken ? 'Без статуса' : 'Не взята');
-  const roleColor = r => r.done ? '--st-done' : r.attention ? '--st-bad' : r.paused ? '--st-pause' : r.review ? '--st-review' : r.taken ? '--st-work' : '--st-idle';
+  const roleColor = r => roles.isRemoved(r) ? '--st-removed' : r.done ? '--st-done' : r.attention ? '--st-bad' : r.paused ? '--st-pause' : r.review ? '--st-review' : r.taken ? '--st-work' : '--st-idle';
   const hoursText = r => (r.hours === null ? '—' : f1(r.hours));
 
   /* ---------- графики по времени ---------- */
@@ -168,20 +172,23 @@
      центру — подпись «перерыв», если влезает. dayX — левый край дня, dayW
      — ширина дня. Подписи возвращаются — их кладут поверх данных. */
   const BREAK_LEG = ['перерыв в работе', 'background:repeating-linear-gradient(135deg,transparent 0 4px,var(--hatch) 4px 8px);height:10px;vertical-align:-1px'];
+  const PERSONAL_BREAK_LEG = ['личный перерыв', 'background:repeating-linear-gradient(45deg,transparent 0 4px,var(--personal-hatch) 4px 6px);height:10px;vertical-align:-1px'];
   let hatchN = 0;
-  function breakHatch(F, dayX, dayW, top, bottom) {
-    if (!BREAKS.length) return [];
-    const id = 'brk' + (++hatchN), g = mk('g', { class: 'brk' }), labels = [];
-    const pat = mk('pattern', { id, width: 8, height: 8, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' });
-    pat.append(mk('rect', { width: 4, height: 8, fill: 'var(--hatch)' }));
+  function breakHatch(F, dayX, dayW, top, bottom, gaps = BREAKS, personal = false) {
+    if (!gaps.length) return [];
+    const id = 'brk' + (++hatchN), g = mk('g', { class: 'brk ' + (personal ? 'personal-brk' : 'common-brk') }), labels = [];
+    const size = personal ? 6 : 8;
+    const pat = mk('pattern', { id, width: size, height: size, patternUnits: 'userSpaceOnUse', patternTransform: personal ? 'rotate(-45)' : 'rotate(45)' });
+    pat.append(mk('rect', { width: personal ? 2 : 4, height: size, fill: personal ? 'var(--personal-hatch)' : 'var(--hatch)' }));
     const defs = mk('defs'); defs.append(pat); g.append(defs);
-    for (const b of BREAKS) {
+    for (const b of gaps) {
       const x0 = Math.max(0, dayX(b.from)), x1 = Math.min(F.width, dayX(b.to) + dayW);
       if (x1 <= x0) continue;
-      g.append(mk('rect', { x: x0, y: top, width: x1 - x0, height: bottom - top, fill: `url(#${id})` }));
+      g.append(mk('rect', { x: x0, y: top, width: x1 - x0, height: bottom - top, fill: `url(#${id})`, 'data-from': b.from, 'data-to': b.to }));
       if (x1 - x0 < 64) continue;
-      const t = mk('text', { x: (x0 + x1) / 2, y: (top + bottom) / 2 + 4, 'text-anchor': 'middle', class: 'vlab brk-lab' });
-      t.textContent = 'перерыв'; labels.push(t);
+      const overlapsCommon = personal && BREAKS.some(gap => gap.from <= b.to && gap.to >= b.from);
+      const t = mk('text', { x: (x0 + x1) / 2, y: overlapsCommon ? top + 14 : (top + bottom) / 2 + 4, 'text-anchor': 'middle', class: 'vlab brk-lab' });
+      t.textContent = personal ? 'личный перерыв' : 'перерыв'; labels.push(t);
     }
     F.plot.insertBefore(g, F.plot.querySelector('.gl'));
     return labels;
@@ -305,7 +312,7 @@
     if (FIRST === null) { host.replaceChildren(el('div', 'empty', 'Нет дат в Task date и End date')); return; }
     const { R, stop, target } = paceCtx;
     const hist = pace.cumulative(recs, FIRST, AS_OF), last = hist[hist.length - 1];
-    const proj = plan ? plan.proj : pace.project(last.open, R.inR, R.outR, AS_OF, stop !== null ? stop : undefined, BURN_HORIZON);
+    const proj = plan ? plan.proj : R.days ? pace.project(last.open, R.inR, R.outR, AS_OF, stop !== null ? stop : undefined, BURN_HORIZON) : [];
     if (proj.length && proj[proj.length - 1].day >= AS_OF + BURN_HORIZON) legendFor(`${word} — показан год`);
     /* цель и сканфриз — в пределах двух лет, чтобы идеальная линия дошла до нуля */
     const end = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, nearDay(stop), nearDay(target), plan ? plan.end : AS_OF);
@@ -402,6 +409,8 @@
     }
     if (byDay) weekends(F, weeks[0].t, weeks.length, 16, H2 - 24);
     const pauses = breakHatch(F, d => F.step * (d - t0) / span, F.step / span, 16, H2 - 24);
+    const personal = opts.personalBreaks || [];
+    pauses.push(...breakHatch(F, d => F.step * (d - t0) / span, F.step / span, 16, H2 - 24, personal, true));
     F.plot.classList.add('hlg');
     weeks.forEach((w, i) => {
       /* неделя — одна группа: под курсором она яркая, остальные приглушены */
@@ -418,7 +427,8 @@
         else col.append(mk('rect', { x, y: top, width: barW, height: h, fill: css(s.c) }));
       });
       const hit = mk('rect', { x: i * F.step, y: 16, width: F.step, height: H2 - 40, fill: 'transparent' });
-      hit.dataset.tip = `${byDay ? fmt(w.t) : 'Неделя с ' + fmt(w.t)}: ${what} ${w.all}` + (w.all ? ' · ' + cats.filter(s => w[s.k]).map(s => `${s.k} ${w[s.k]}`).join(', ') : '') + breakTip(w.t, w.t + span - 1);
+      hit.dataset.tip = `${byDay ? fmt(w.t) : 'Неделя с ' + fmt(w.t)}: ${what} ${w.all}` + (w.all ? ' · ' + cats.filter(s => w[s.k]).map(s => `${s.k} ${w[s.k]}`).join(', ') : '') + breakTip(w.t, w.t + span - 1)
+        + (personal.some(b => b.from <= w.t + span - 1 && b.to >= w.t) ? ' · личный перерыв — в скорость не идёт' : '');
       col.append(hit);
       if (w.all && F.step >= 26) { const t = mk('text', { x: x + barW / 2, y: F.y(w.all) - 5, 'text-anchor': 'middle' }); t.textContent = w.all; t.style.fill = 'var(--fg)'; col.append(t); }
       const every = Math.ceil(44 / F.step);
@@ -465,6 +475,18 @@
   }
   if (document.fonts) document.fonts.ready.then(fitLabels);
 
+  function removedTip(rows) {
+    if (!rows.length || !rows.every(roles.isRemoved)) return '';
+    const closed = rows.filter(roles.isDone).length;
+    return ` · закрыто ${closed}, открыто ${rows.length - closed}`;
+  }
+  function appendRemovedSubset(node, rows) {
+    const n = rows.filter(roles.isRemoved).length;
+    if (!n) return;
+    const note = el('small', 'removed-subset', `из них убрано из эпика: ${n}`);
+    node.append(note);
+  }
+
   function renderHead() {
     const N = recs.length, pct = n => (N ? Math.round(n / N * 100) : 0);
     const tds = recs.map(r => r.tdateD).filter(d => d !== null).sort((a, b) => a - b);
@@ -483,28 +505,12 @@
     $('k-cve').textContent = u.tasks;
     $('k-comp').textContent = u.comps;
 
-    /* общая полоса: готово | без решения | можно закрыть; каждая задача — в
-       одном сегменте, по первому основанию (fixed, patch, range, dup).
-       Над полосой — скобки трёх групп в том же порядке, под ней — легенда
-       оснований */
-    const parts = [
-      { k: 'Готово', c: 'var(--st-done)', f: r => r.done, g: 'done' },
-      { k: 'Без решения', c: 'var(--rs-none)', f: r => r.open && !r.reasons.length, g: 'none' },
-      { k: 'Фикс в RHEL', l: 'фикс в RHEL', c: 'var(--rs-fixed)', f: r => r.open && r.reasons[0] === 'fixed', g: 'ready' },
-      { k: 'Устранено ранее', l: 'устранено ранее', c: 'var(--rs-patch)', f: r => r.open && r.reasons[0] === 'patch', g: 'ready' },
-      { k: 'Вне диапазона', l: 'вне диапазона', c: 'var(--rs-range)', f: r => r.open && r.reasons[0] === 'range', g: 'ready' },
-      { k: 'Дубликат', l: 'дубликат', c: 'var(--rs-dup)', f: r => r.open && r.reasons[0] === 'dup', g: 'ready' },
-    ].map(x => {
-      const members = recs.filter(x.f);
-      return { ...x, n: members.length, triaged: members.filter(roles.isTriaged).length };
-    });
-    const sum = g => parts.filter(x => x.g === g).reduce((a, x) => a + x.n, 0);
+    /* Полоса и блок «Состояние» выделяют убранные в отдельную категорию.
+       Те же выборки использует drilldown. */
+    const parts = segments.hero(recs).map(x => ({ ...x, k: x.label, l: x.label.toLowerCase(),
+      c: css(x.color), g: x.group, n: x.rows.length, triaged: x.rows.filter(roles.isTriaged).length }));
     const triageText = (n, t) => `растриажено ${t} из ${n} (${Math.round(t / n * 100)}%)`;
-    const G = [
-      { g: 'done', n: sum('done'), l: 'готово' },
-      { g: 'none', n: sum('none'), l: 'без решения' },
-      { g: 'ready', n: sum('ready'), l: 'можно закрыть' },
-    ];
+    const G = segments.groups(parts).map(x => ({ g: x.key, n: x.rows.length, l: x.label.toLowerCase() }));
     /* скобки и полоса — на одной сетке: колонка на сегмент, ширина — по
        числу задач; скобка занимает колонки сегментов своей группы и встаёт
        ровно на их границы */
@@ -518,21 +524,21 @@
     for (const x of G) {
       if (!x.n) continue;
       const mine = shown.filter(p => p.g === x.g), span = mine.length;
-      const d = el('div'); d.style.gridColumn = `span ${span}`; d.dataset.parts = span;
+      const d = el('div'); d.style.gridColumn = `span ${span}`; d.dataset.parts = span; d.dataset.group = x.g;
       const triaged = mine.reduce((a, p) => a + p.triaged, 0);
       const cap = el('div', 'cap'); cap.append(el('b', null, String(x.n)), el('span', null, x.l)); cap.dataset.tip = `${x.l}: всего ${x.n} (${pct(x.n)}% от всех задач) · ${triageText(x.n, triaged)}`;
       d.append(cap, el('div', 'br')); gb.append(d);
-      const li = el('span'); li.hidden = true;
+      const li = el('span'); li.hidden = true; li.dataset.group = x.g;
       if (span === 1) { const sw = el('i', 'sw'); sw.style.background = mine[0].c; li.append(sw); }
       li.append(`${x.l} `, el('b', null, String(x.n))); lg.append(li);
       heroCaps.push([cap, li, x.l]);
     }
     for (const x of shown) {
       const lab = x.g === 'ready' ? String(x.n) : pct(x.n) + '%';
-      const sp = el('span', null, lab); sp.dataset.label = lab; sp.style.background = x.c;
+      const sp = el('span', null, lab); sp.dataset.label = lab; sp.dataset.segment = x.key; sp.dataset.count = x.n; sp.style.background = x.c;
       sp.style.setProperty('--triaged', (x.triaged / x.n * 100) + '%');
-      sp.dataset.tip = `${x.k}: всего ${x.n} (${pct(x.n)}% от всех задач) · ${triageText(x.n, x.triaged)}`; mb.append(sp);
-      if (x.g === 'ready') { const li = el('span'); const sw = el('i', 'sw'); sw.style.background = x.c; li.append(sw, `${x.l} `, el('b', null, String(x.n))); lg.append(li); }
+      sp.dataset.tip = `${x.k}: всего ${x.n} (${pct(x.n)}% от всех задач) · ${triageText(x.n, x.triaged)}` + removedTip(x.rows); mb.append(sp);
+      if (x.g === 'ready') { const li = el('span'); li.dataset.segment = x.key; const sw = el('i', 'sw'); sw.style.background = x.c; li.append(sw, `${x.l} `, el('b', null, String(x.n))); lg.append(li); }
     }
     const extra = ready.filter(r => r.reasons.length > 1).length;
     if (extra) { const li = el('span'); li.textContent = `· у ${extra} ${plural(extra, 'задачи', 'задач', 'задач')} несколько оснований, в полосе — по первому`; lg.append(li); }
@@ -542,24 +548,26 @@
       const d = el('div', cls || null); const k = el('span', 'k', label);
       if (dot) { const i = el('i'); i.style.background = css(dot); k.prepend(i); }
       if (note) { k.append(' '); k.append(el('small', null, '· ' + note)); }
-      d.append(k, el('b', null, String(val))); if (tip) d.dataset.tip = tip; box.append(d);
+      d.append(k, el('b', null, String(val))); if (tip) d.dataset.tip = tip; box.append(d); return d;
     };
     const review = working.filter(r => r.review).length, paused = working.filter(r => r.paused).length;
     const st = $('hero-state'); st.replaceChildren();
-    row(st, 'Готов', '', sum('done'), null, '', '--st-done');
-    row(st, 'В работе', `ревью ${review} · пауза ${paused}`, working.length, null, `в работе ${working.length}, из них на ревью ${review}, на паузе ${paused}`, '--st-work');
-    row(st, 'Не взято', 'без разработчика', recs.filter(r => !r.taken && !r.done).length, null, '', '--st-idle');
+    for (const part of segments.heroState(recs)) {
+      const note = part.key === 'work' ? `ревью ${review} · пауза ${paused}` : part.key === 'none' ? 'без разработчика' : '';
+      const node = row(st, part.label, note, part.rows.length, null, removedTip(part.rows), part.color);
+      node.dataset.role = part.key;
+    }
     const rk = $('hero-risk'); rk.replaceChildren();
     const problem = recs.filter(r => roles.norm(r.status) === 'есть проблема').length, rework = recs.filter(r => roles.norm(r.status) === 'нужна доработка').length;
     row(rk, 'Есть проблема / нужна доработка', `${problem} + ${rework}`, recs.filter(r => r.attention).length);
     const s = Hm.summary(closedWithHours(recs));
     row(rk, 'Часов на задачу', s.n ? `медиана ${f1(s.median)}` : 'закрытых с датами нет', s.n ? f1(s.mean) : '—', null, s.n ? `по\u00a0${s.n} ${plural(s.n, 'закрытой задаче', 'закрытым задачам', 'закрытым задачам')} за всё время` : '');
-    /* темп закрытия команды, как в «Темпе и прогнозе»: закрытые «Готов» по
+    /* темп закрытия команды, как в «Темпе и прогнозе»: расчётно закрытые по
        End date на рабочий день — за всё время с начала работы и за период
        темпа (он уже посчитан: renderPace идёт раньше) */
-    const all = pace.rates(recs, AS_OF, Infinity, START, undefined, BREAKS), win = paceCtx.R, closedAll = all.closed;
-    row(rk, 'Задач в день', `за период темпа ${f1(win.outR)}`, closedAll ? f1(all.outR) : '—', null,
-      `Закрыто в рабочий день: за всё время ${f1(all.outR)} (${closedAll} ${plural(closedAll, 'задача', 'задачи', 'задач')} за ${wdays(all.work)}${all.cut ? `, без ${wdays(all.cut)} перерывов в работе` : ''}), за период темпа ${fmt(paceCtx.WINDOW.from)} — ${fmt(paceCtx.WINDOW.to)} — ${f1(win.outR)}`);
+    const all = pace.rates(recs, AS_OF, Infinity, START, undefined, BREAKS), win = paceCtx.historical, closedAll = all.closed;
+    row(rk, 'Задач в день', `за период темпа ${win.rateDays ? f1(win.outR) : '—'}${win.calendarRate ? ' за календ. день' : ''}`, START !== null && all.rateDays ? f1(all.outR) : '—', null,
+      `За всё время ${f1(all.outR)} (${closedAll} ${plural(closedAll, 'задача', 'задачи', 'задач')} за ${rateSpan(all)}${all.cut ? `, без ${wdays(all.cut)} перерывов в работе` : ''}); за период темпа ${win.rateDays ? f1(win.outR) : '—'} за ${rateSpan(win)}`);
 
   }
 
@@ -748,10 +756,10 @@
   function forecastText(F) {
     if (F.days === 0) return 'завершено';
     if (F.days !== null) return fmt(AS_OF + F.days);
-    return F.state === 'open-ended' ? 'срок не определён' : F.state === 'stalled' ? 'нет закрытий' : 'за горизонтом';
+    return F.state === 'no-period' ? '—' : F.state === 'open-ended' ? 'срок не определён' : F.state === 'stalled' ? 'нет закрытий' : 'за горизонтом';
   }
   function forecastNote(F) {
-    return F.state === 'open-ended' ? 'Новые задачи продолжают поступать. Задайте сканфриз для даты завершения всего объёма.'
+    return F.state === 'no-period' ? noPeriod : F.state === 'open-ended' ? 'Новые задачи продолжают поступать. Задайте сканфриз для даты завершения всего объёма.'
       : F.state === 'stalled' ? 'При текущем темпе задачи не закрываются.'
         : F.state === 'horizon' ? 'Завершение не найдено в пределах 10 лет.'
           : 'Учтены все ожидаемые поступления до сканфриза; временный ноль не означает завершение.';
@@ -773,9 +781,9 @@
     if (!nd.left) return out('d bad', 'нет рабочих дней', `До ${fmt(target)} не осталось рабочих дней.`);
     if (!isFinite(nd.perDay)) return out('d bad', 'недостижимо', 'После последнего рабочего дня ещё поступят задачи. Сдвиньте сканфриз или целевую дату.');
     const ratio = R.outR ? nd.perDay / R.outR : Infinity;
-    const now = !R.outR ? ' Сейчас задачи не закрываются.'
-      : ratio <= 1 ? ` Сейчас закрываем ${f1(R.outR)} — темпа хватает.`
-        : ` Сейчас закрываем ${f1(R.outR)} — нужно на ${Math.ceil((ratio - 1) * 100)}% быстрее.`;
+    const now = !R.outR ? ' Расчётная скорость активной команды равна нулю.'
+      : ratio <= 1 ? ` Активная команда: ${f1(R.outR)} — темпа хватает.`
+        : ` Активная команда: ${f1(R.outR)} — нужно на ${Math.ceil((ratio - 1) * 100)}% быстрее.`;
     return out('d', `${nd.perDay < 0.05 ? '< 0,1' : f1(nd.perDay)}/день`,
       `Для нулевого остатка к цели: ${R.open} текущих и ≈ ${coming} новых задач за ${wdays(nd.left)}. Свободная мощность не переносится на будущие дни.` + now);
   }
@@ -783,12 +791,12 @@
   function renderTarget(F, target, plan) {
     const box = $('forecast-target'); box.replaceChildren();
     const valid = F.remaining !== null;
-    const why = target === null ? 'Укажите целевую дату.' : target > AS_OF + pace.HORIZON ? 'Цель дальше чем через 10 лет.' : 'Целевая дата раньше даты отчёта.';
+    const why = F.state === 'no-period' ? noPeriod : target === null ? 'Укажите целевую дату.' : target > AS_OF + pace.HORIZON ? 'Цель дальше чем через 10 лет.' : 'Целевая дата раньше даты отчёта.';
     const cell = (title, value, note, cls) => {
       const c = el('div', 'target-cell'); c.append(el('div', 'e', title), el('div', 'd' + (cls ? ' ' + cls : ''), value), el('div', 's', note)); box.append(c);
     };
     cell(`Остаток к ${target === null ? 'целевой дате' : fmt(target)}`, valid ? (F.remaining === 0 ? '0' : F.remaining < 0.1 ? '< 0,1' : '≈ ' + f1(F.remaining)) : '—',
-      valid ? (plan ? 'По плановому темпу, если начать завтра.' : 'По темпу выбранного периода.') + ' С учётом новых задач до цели.' : why,
+      valid ? (plan ? 'По плановому темпу, если начать завтра.' : 'По скорости активных разработчиков за выбранный период.') + ' С учётом новых задач до цели.' : why,
       valid ? F.remaining > 0 ? 'bad' : 'ok' : '');
     cell('Запас до цели', marginText(F, target), valid ? (F.margin === null ? forecastNote(F) : 'В рабочих днях, Пн–Пт, без праздников.') : why,
       F.margin !== null ? AS_OF + F.days > target ? 'bad' : 'ok' : '');
@@ -799,10 +807,14 @@
     const body = $('scenario-body'); body.replaceChildren();
     if (plan) return;
     for (const x of pace.scenarios(recs, AS_OF, START, stop, target, end, BREAKS)) {
-      const R = x.rates, F = x.forecast, tr = el('tr');
-      const window = el('td'); window.append(el('b', null, `${x.window} дней`), el('small', null, `${fmt(x.from)} — ${fmt(x.to)}`),
-        el('small', null, `Закрыто ${x.closed} за ${wdays(R.work)}` + (R.cut ? `, перерыв ${wdays(R.cut)}` : '')));
-      tr.append(window, el('td', 'num', f1(R.inR)), el('td', 'num', f1(R.outR)), el('td', null, forecastText(F)),
+      const R = x.rates, capacity = activity.team(ACTIVITY, x.from, x.to);
+      const F = windowForecast(R, capacity.outR, stop, target), tr = el('tr');
+      const window = el('td'); window.append(el('b', null, `${x.window} дней`), el('small', null, R.days ? `${fmt(x.from)} — ${fmt(x.to)}` : 'Окно не пересекается с рабочим периодом'),
+        el('small', null, `Закрыто ${x.closed} за ${rateSpan(R)}` + (R.cut ? `, перерыв ${wdays(R.cut)}` : '')),
+        el('small', null, `В прогнозе: ${capacity.active} из ${capacity.total} разработчиков, ${f1(capacity.outR)} задач/день`));
+      const outCell = el('td', 'num', R.rateDays ? f1(R.outR) : '—');
+      if (R.rateDays) outCell.append(el('small', null, R.calendarRate ? 'за календ. день' : 'за рабочий день'));
+      tr.append(window, el('td', 'num', R.days ? f1(R.inR) : '—'), outCell, el('td', null, forecastText(F)),
         el('td', 'num', F.remaining === null ? '—' : F.remaining === 0 ? '0' : F.remaining < 0.1 ? '< 0,1' : '≈ ' + f1(F.remaining)), el('td', null, marginText(F, target)));
       body.append(tr);
     }
@@ -812,20 +824,31 @@
      заданное: разработчиков × задач в рабочий день на одного, со дня
      старта; до старта задачи только копятся. Остальная страница — по факту. */
   let paceMode = LS.get('cve.paceMode') === 'plan' ? 'plan' : 'fact', paceInitialized = false;
-  function renderPlan(R, WINDOW, stop, target, shown) {
-    /* по умолчанию — сколько людей закрывали задачи в период темпа и их
-       средний темп; никто не закрывал — 1 человек по 1 задаче */
-    const active = new Set(recs.filter(r => r.done && r.devKey && r.endD !== null && r.endD >= WINDOW.from && r.endD <= WINDOW.to).map(r => r.devKey)).size;
+  // Старые ключи сохраняли и автоматические, и ручные значения без различия.
+  // Только новая запись после явного ввода доказывает ручную настройку.
+  let planOverrides = {};
+  const planDrafts = new Set();
+  try {
+    const saved = JSON.parse(LS.get('cve.planOverrides') || '{}');
+    if (saved && typeof saved === 'object') {
+      if (Number.isFinite(saved.devs) && saved.devs >= 1) planOverrides.devs = Math.round(saved.devs);
+      if (Number.isFinite(saved.rate) && saved.rate > 0) planOverrides.rate = saved.rate;
+    }
+  } catch (e) { /* повреждённая настройка — автоматические значения */ }
+  function renderPlan(R, WINDOW, stop, target, shown, capacity) {
+    /* План допускает гипотетический состав: активные люди и их средний
+       темп по умолчанию; нет людей — один, нет оценки темпа — одна задача. */
+    const active = capacity.active;
     const devs0 = active || 1, rate0 = active && R.outR ? Math.max(0.01, Math.round(R.outR / active * 100) / 100) : 1;
     const pdI = $('plan-devs'), prI = $('plan-rate');
-    if (!pdI.value) pdI.value = LS.get('cve.planDevs') || devs0;
-    if (!prI.value) prI.value = LS.get('cve.planRate') || rate0;
-    /* мусор в полях — значение по умолчанию; очищенное пишется обратно,
-       чтобы поле показывало то, по чему считаем */
-    let devs = Math.round(+pdI.value); if (!isFinite(devs) || devs < 1) devs = devs0;
-    let rate = +String(prI.value).replace(',', '.'); if (!isFinite(rate) || rate <= 0) rate = rate0;
-    pdI.value = devs; prI.value = rate;
-    LS.set('cve.planDevs', String(devs)); LS.set('cve.planRate', String(rate));
+    const devs = planOverrides.devs ?? devs0, rate = planOverrides.rate ?? rate0;
+    // Resize перерисовывает страницу и не должен стирать ввод до change.
+    for (const [input, value] of [[pdI, devs], [prI, rate]]) {
+      if (!planDrafts.has(input.id) || document.activeElement !== input) input.value = value;
+    }
+    const manual = Object.keys(planOverrides).length > 0;
+    $('plan-auto').disabled = !manual;
+    const source = manual ? 'ручные значения; остальные параметры по текущим данным' : 'параметры по текущим данным';
     const P = devs * rate, inflow = stop === null ? undefined : stop;
     const people = `${devs} ${plural(devs, 'разработчик', 'разработчика', 'разработчиков')}`;
     /* галка «без задач с готовым решением»: их закрываем сразу, считаем
@@ -838,14 +861,14 @@
     $('plan-ready').closest('label').dataset.tip = `Без задач с готовым решением (${readyN}): их закрываем сразу и в расчёт не берём`;
     const f2 = x => String(Math.round(x * 100) / 100).replace('.', ',');  // темп — до сотых, как в поле
 
-    $('pace-sub-plan').textContent = `На ${fmt(AS_OF)} · симуляция: ${people} по ${f2(rate)} — ${f2(P)} в рабочий день; поступление — по факту с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}`;
+    $('pace-sub-plan').textContent = `На ${fmt(AS_OF)} · симуляция: ${people} по ${f2(rate)} — ${f2(P)} в рабочий день; ${source}; ` + (R.days ? `поступление — по факту с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}` : noPeriod);
     $('pace-note-plan').textContent = `Симуляция на дату отчёта ${fmt(AS_OF)}: до старта задачи только поступают, со старта закрываем заданным темпом по рабочим дням, Пн–Пт, без учёта праздников. Новые приходят каждый календарный день в темпе периода с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)} (если задан сканфриз — до него). «Начать не позднее» — самый поздний день старта, при котором всё закрывается к цели. Разработчики и остальные блоки страницы считаются по фактическим данным.`;
     if (shown) {
       $('p-out').textContent = f2(P); $('p-out-l').textContent = 'по плану в рабочий день';
       $('p-out').parentElement.dataset.tip = `${people} × ${f2(rate)} в рабочий день`;
-      const week = pace.project(N, R.inR, P, AS_OF, stop, 7, AS_OF + 1);
+      const week = R.days ? pace.project(N, R.inR, P, AS_OF, stop, 7, AS_OF + 1) : [];
       const wk = Math.round((week.length ? week[week.length - 1].open : N) - R.open), pn = $('p-net');
-      pn.textContent = (wk > 0 ? '+' : wk < 0 ? '−' : '') + Math.abs(wk); pn.className = 'v ' + (wk < 0 ? 'ok' : wk > 0 ? 'bad' : '');
+      pn.textContent = R.days ? (wk > 0 ? '+' : wk < 0 ? '−' : '') + Math.abs(wk) : '—'; pn.className = 'v ' + (R.days && wk < 0 ? 'ok' : R.days && wk > 0 ? 'bad' : '');
       $('p-net-l').textContent = 'бэклог за неделю по плану';  // знак и цвет — куда
       pn.parentElement.dataset.tip = 'Изменение очереди за следующие 7 дней, если начать завтра; с учётом сканфриза и задач с готовым решением';
     }
@@ -859,13 +882,14 @@
     const noTarget = target === null || target <= AS_OF || far;
     const askTarget = target === null ? 'Укажите дату «Хотим закончить к» — от неё считается старт.'
       : far ? 'Цель дальше чем через 10 лет — выберите дату ближе.' : `Выберите дату «Хотим закончить к» позже ${fmt(AS_OF)}.`;
-    const F = pace.forecast(N, R.inR, P, AS_OF, stop, target, AS_OF + 1);
+    const F = windowForecast(R, P, stop, target, N, AS_OF + 1);
     const empty = F.days === 0, openEnded = F.state === 'open-ended';
     const afterTarget = !noTarget && R.inR > 0 && stop !== null && stop - 1 > target;
-    const S = empty || noTarget || openEnded || afterTarget ? null : pace.latestStart(N, R.inR, P, AS_OF, stop, target);
+    const S = !R.days || empty || noTarget || openEnded || afterTarget ? null : pace.latestStart(N, R.inR, P, AS_OF, stop, target);
 
     const T1 = 'Начать не позднее';
-    if (empty) line(T1, 'd ok', 'не нужно', none);
+    if (!R.days) line(T1, 'd', '—', noPeriod);
+    else if (empty) line(T1, 'd ok', 'не нужно', none);
     else if (noTarget) line(T1, 'd bad', target === null ? 'нет цели' : far ? 'слишком далеко' : 'дата прошла', askTarget);
     else if (openEnded) line(T1, 'd', 'срок не определён', forecastNote(F));
     else if (afterTarget) line(T1, 'd bad', 'не успеть', 'Новые задачи продолжат поступать после целевой даты. Сдвиньте сканфриз или цель.');
@@ -880,7 +904,8 @@
       F.days === 0 ? none : F.days === null ? forecastNote(F) : `≈ ${wd(AS_OF + 1, AS_OF + F.days)}.` + (noTarget ? '' : ` ${marginText(F, target)}.`));
 
     const T3 = 'Разработчиков нужно';
-    if (empty) line(T3, 'd ok', '0', none);
+    if (!R.days) line(T3, 'd', '—', noPeriod);
+    else if (empty) line(T3, 'd ok', '0', none);
     else if (noTarget) line(T3, 'd', '—', askTarget);
     else if (openEnded) line(T3, 'd', '—', forecastNote(F));
     else if (afterTarget) line(T3, 'd bad', 'не успеть', 'Никакое число людей не завершит весь объём до последних ожидаемых поступлений.');
@@ -891,12 +916,12 @@
     }
 
     const start = S !== null ? S : AS_OF + 1;
-    const proj = pace.project(N, R.inR, P, AS_OF, stop, start - AS_OF + BURN_HORIZON, start);
+    const proj = R.days ? pace.project(N, R.inR, P, AS_OF, stop, start - AS_OF + BURN_HORIZON, start) : [];
     // Мгновенное исключение готовых задач должно быть видно и тогда,
     // когда оставшаяся очередь пуста и прогнозу больше нечего рисовать.
-    if (skip && !proj.length) proj.push({ day: AS_OF + 1, inc: 0, out: 0, open: 0 });
+    if (R.days && skip && !proj.length) proj.push({ day: AS_OF + 1, inc: 0, out: 0, open: 0 });
     const pend = Math.max(proj.length ? proj[proj.length - 1].day : AS_OF, noTarget ? AS_OF : target);
-    return { P, start: empty ? null : start, proj, end: pend, pre: skip ? readyN : 0, forecast: F };
+    return { P, start: empty || !R.days ? null : start, proj, end: pend, pre: skip ? readyN : 0, forecast: F };
   }
 
   function renderPace() {
@@ -911,24 +936,28 @@
     if (wa > wb) [wa, wb] = [wb, wa];
     const R = pace.rates(recs, AS_OF, wb - wa + 1, START, wb, BREAKS);
     const WINDOW = { from: wb - R.days + 1, to: wb };
+    const capacity = activity.team(ACTIVITY, WINDOW.from, WINDOW.to);
+    const future = Object.assign({}, R, { outR: capacity.outR });
     $('pace').classList.toggle('plan', paceMode === 'plan');
     for (const b of $('pace-mode').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === paceMode));
-    $('p-out-l').textContent = 'закрывается в рабочий день';
+    $('p-out-l').textContent = R.calendarRate ? 'закрывается в календарный день' : 'закрывается в рабочий день';
     const ready = recs.filter(r => r.open && r.reasons.length).length;
     const fc = $('forecast'); fc.replaceChildren();
     $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}: ${days(R.days)}, из них ${wdays(R.work)}${cutText(R)}` + (WINDOW.from > wa ? ` — начало прижато к началу работы` : '');
-    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Закрытая задача — со статусом «Готов» и заполненным End date. Сканфриз — первый день без новых задач. До него новые задачи приходят каждый календарный день, закрываем по рабочим дням, Пн–Пт, без учёта праздников. Свободная мощность не накапливается. Завершение — после последних поступлений, а не при первом нуле в очереди. Перерыв в работе — ${pace.BREAK_WORKDAYS} и больше рабочих дней подряд, когда ни на ком из разработчиков (кроме SecOps) не висело задач: его рабочие дни и закрытое в нём в темп закрытия не идут, на графиках он заштрихован.`;
+    $('pace-sub').textContent += ` · прогноз: ${capacity.active} из ${capacity.total} разработчиков, ${f1(capacity.outR)} задач/день`;
+    if (!R.days) $('pace-sub').textContent = noPeriod;
+    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Закрытие по дате — расчётно закрытая задача («Готов» или «Убрано из эпика» по разработчику и датам) с заполненным End date. SecOps с «Убрано из эпика» без End date уменьшает остаток, но не добавляет закрытие в скорость. Сканфриз — первый день без новых задач. До него новые задачи приходят каждый календарный день, закрываем по рабочим дням, Пн–Пт, без учёта праздников. Свободная мощность не накапливается. Завершение — после последних поступлений, а не при первом нуле в очереди. Перерыв в работе — ${pace.BREAK_WORKDAYS} и больше рабочих дней подряд, когда ни на ком из разработчиков (кроме SecOps) не висело задач: его рабочие дни и закрытое в нём в темп закрытия не идут, на графиках он заштрихован.`;
     /* средние — за период, в подсказке — сколько это задач; баланс — сколько
        реально пришло минус закрыто за выбранный период */
     const inN = Math.round(R.inR * R.days), outN = R.closed, bal = inN - R.closedTotal;
-    $('p-in').textContent = f1(R.inR);
-    $('p-in').parentElement.dataset.tip = `За период поступило ${inN} за ${days(R.days)}`;
-    $('p-out').textContent = f1(R.outR);
-    $('p-out').parentElement.dataset.tip = `За период закрыто ${outN} за ${wdays(R.work)}` + (R.cut ? `; перерыв в работе (${wdays(R.cut)}) не учтён` : '');
-    const pn = $('p-net'); pn.textContent = (bal > 0 ? '+' : bal < 0 ? '−' : '') + Math.abs(bal); pn.className = 'v ' + (bal < 0 ? 'ok' : bal > 0 ? 'bad' : '');
+    $('p-in').textContent = R.days ? f1(R.inR) : '—';
+    $('p-in').parentElement.dataset.tip = R.days ? `За период поступило ${inN} за ${days(R.days)}` : noPeriod;
+    $('p-out').textContent = R.rateDays ? f1(R.outR) : '—';
+    $('p-out').parentElement.dataset.tip = R.days ? `За период закрыто ${outN} за ${rateSpan(R)}` + (R.cut ? `; перерыв в работе (${wdays(R.cut)}) не учтён` : '') : noPeriod;
+    const pn = $('p-net'); pn.textContent = R.days ? (bal > 0 ? '+' : bal < 0 ? '−' : '') + Math.abs(bal) : '—'; pn.className = 'v ' + (R.days && bal < 0 ? 'ok' : R.days && bal > 0 ? 'bad' : '');
     const span = `за ${days(R.days)}`;
-    $('p-net-l').textContent = bal > 0 ? `бэклог вырос ${span}` : bal < 0 ? `бэклог сократился ${span}` : `бэклог не изменился ${span}`;
-    pn.parentElement.dataset.tip = `Поступило ${inN}, закрыто ${R.closedTotal}`;
+    $('p-net-l').textContent = !R.days ? 'нет данных за период' : bal > 0 ? `бэклог вырос ${span}` : bal < 0 ? `бэклог сократился ${span}` : `бэклог не изменился ${span}`;
+    pn.parentElement.dataset.tip = R.days ? `Поступило ${inN}, закрыто ${R.closedTotal}` : noPeriod;
     $('p-open').textContent = R.open;
     const sd = $('stop-date'), td = $('target-date');
     if (!paceInitialized) {
@@ -937,26 +966,28 @@
       paceInitialized = true;
     }
     const stop = dates.dayOf(sd.value), target = dates.dayOf(td.value);
-    const F = pace.forecast(R.open, R.inR, R.outR, AS_OF, stop, target);
+    $('pace-note').textContent += ` Скорость прогноза — сумма личных скоростей участников без текущего перерыва (кроме SecOps). Личный перерыв: ${activity.PERSONAL_BREAK_WORKDAYS} рабочих дней подряд без начатых задач; при достижении порога исключается весь простой. Исторические закрытия и остаток сохраняются.`;
+    const F = windowForecast(R, future.outR, stop, target);
     const row = (title, result, note) => {
       const r = el('div', 'fc-cell');
       r.append(el('div', 'e', title), el('div', result.days === 0 ? 'd ok' : 'd', forecastText(result)), el('div', 's', note)); fc.append(r);
     };
     row('Расчётная дата завершения', F, forecastNote(F));
-    const rest = R.open - ready, withoutReady = pace.forecast(rest, R.inR, R.outR, AS_OF, stop, target);
+    const rest = R.open - ready, withoutReady = windowForecast(R, future.outR, stop, target, rest);
     row('Без задач с готовым решением', withoutReady,
       `Если сразу закрыть ${tasks(ready)}, останется ${rest}. Будущие поступления учитываются по той же модели. ` + (withoutReady.days === null ? forecastNote(withoutReady) : ''));
     const r = el('div', 'fc-cell'); r.append(el('div', 'e', `Нулевой остаток к ${target === null ? 'цели' : fmt(target)}`));
-    if (target === null) r.append(el('div', 'd', '—'), el('div', 's', 'Укажите целевую дату.'));
-    else r.append(...needText(pace.need(R.open, R.inR, AS_OF, stop, target), R, stop, target));
+    if (!R.days) r.append(el('div', 'd', '—'), el('div', 's', noPeriod));
+    else if (target === null) r.append(el('div', 'd', '—'), el('div', 's', 'Укажите целевую дату.'));
+    else r.append(...needText(pace.need(R.open, R.inR, AS_OF, stop, target), future, stop, target));
     fc.append(r);
     /* оба режима собираются всегда — видимый один, другой держит место */
-    const plan = paceMode === 'plan', pctx = renderPlan(R, WINDOW, stop, target, plan);
+    const plan = paceMode === 'plan', pctx = renderPlan(future, WINDOW, stop, target, plan, capacity);
     [['pace-sub', !plan], ['pace-sub-plan', plan], ['forecast', !plan], ['forecast-plan', plan], ['pace-note', !plan], ['pace-note-plan', plan]]
       .forEach(([id, on]) => { $(id).classList.toggle('off', !on); $(id).setAttribute('aria-hidden', String(!on)); });
     renderTarget(plan ? pctx.forecast : F, target, plan);
     renderScenarios(stop, target, wb, plan);
-    paceCtx = { R, stop, target, WINDOW, plan: plan ? pctx : null };
+    paceCtx = { R: future, historical: R, stop, target, WINDOW, plan: plan ? pctx : null };
     drawPaceChart();
     return WINDOW;
   }
@@ -974,22 +1005,27 @@
     };
     for (const [d, n] of devs) {
       const mine = recs.filter(r => r.devKey === d), done = mine.filter(r => r.done), col = devColor.get(d);
+      const person = ACTIVITY.people.get(d);
+      const personalBreaks = person.breaks;
       const card = el('article', 'dev'); card.style.setProperty('--dc', css(col));
       const c1 = el('div');
       const h = el('h3'); const sw = el('i'); sw.style.background = css(col); h.append(sw, d); c1.append(h);
       const big = el('div', 'big', String(n)); big.append(el('small', null, 'задач назначено')); c1.append(big);
-      const cnt = { g: done.length, rv: mine.filter(r => r.working && r.review).length, u: mine.filter(r => r.working && r.paused).length, p: mine.filter(r => r.working && r.attention).length };
-      cnt.w = mine.filter(r => r.working).length - cnt.rv - cnt.u - cnt.p;
       const bar = el('div', 'pbar');
-      [[cnt.g, '--st-done', 'Готово'], [cnt.w, '--st-work', 'В работе'], [cnt.rv, '--st-review', 'Ожидает ревью'], [cnt.u, '--st-pause', 'На паузе'], [cnt.p, '--st-bad', 'Проблемы']].forEach(([k, c, s]) => { if (!k) return; const sp = el('span'); sp.style.flexGrow = k; sp.style.background = css(c); sp.dataset.tip = `${d} · ${s}: ${k}`; bar.append(sp); });
+      for (const part of segments.person(mine)) {
+        const sp = el('span'); sp.style.flexGrow = part.rows.length; sp.style.background = css(part.color);
+        sp.dataset.segment = part.key; sp.dataset.tip = `${d} · ${part.label}: ${part.rows.length}` + removedTip(part.rows); bar.append(sp);
+      }
       c1.append(bar);
-      /* статусы — сеткой: метка цвета сегмента полосы, название, число;
-         нулевые бледнее, но на месте, чтобы карточки не прыгали */
+      /* Счётчики включают убранные по роли; сегменты показывают их отдельно. */
       const stat = el('div', 'dstat');
-      [[cnt.g, '--st-done', 'готово'], [cnt.w, '--st-work', 'в работе'], [cnt.rv, '--st-review', 'ревью'], [cnt.u, '--st-pause', 'пауза'], [cnt.p, '--st-bad', 'проблемы']].forEach(([k, c, s]) => {
-        const row = el('div', k ? null : 'zero'); const i = el('i'); i.style.background = css(c);
-        row.append(i, el('span', null, s), el('b', null, String(k))); stat.append(row);
-      });
+      const names = { done: 'готово', work: 'в работе', review: 'ревью', pause: 'пауза', bad: 'проблемы' };
+      for (const part of segments.personCounts(mine)) {
+        const k = part.rows.length, row = el('div', k ? null : 'zero'); row.dataset.role = part.key;
+        const i = el('i'); i.style.background = css(part.color);
+        row.append(i, el('span', null, names[part.key]), el('b', null, String(k)));
+        appendRemovedSubset(row, part.rows); stat.append(row);
+      }
       c1.append(stat);
       /* нагрузка: сколько задач висит на нём в дату отчёта и сколько часов
          его дня достаётся каждой (8 ч делятся поровну) */
@@ -1001,7 +1037,9 @@
         now.append('Сейчас на нём ', el('b', null, String(hanging)), ` ${plural(hanging, 'задача', 'задачи', 'задач')} — по `, el('b', null, perTask(Hm.HOURS_PER_DAY / hanging)), ' в день на каждую');
         const today = mine.filter(r => r.done && r.endD === AS_OF).length;
         now.dataset.tip = `Его ${Hm.HOURS_PER_DAY}-часовой рабочий день делится поровну между задачами, которые на нём висят` + (today ? `; включая закрытые сегодня: ${today}` : '');
-      } else now.append('Сейчас задач на нём нет');
+      } else if (pace.inBreak(person.breaks, AS_OF)) now.append('Сейчас личный перерыв');
+      else if (pace.inBreak(BREAKS, AS_OF)) now.append('Сейчас общий перерыв в работе');
+      else now.append('Сейчас задач на нём нет');
       c1.append(now);
       card.append(c1);
 
@@ -1021,18 +1059,17 @@
 
       const c4 = el('div'); c4.append(el('div', 'cap', 'Скорость'));
       const s = Hm.summary(closedWithHours(mine));
-      const closedDays = done.map(r => r.endD).filter(x => x !== null && x <= AS_OF);
-      const work = H.workdays.get(d) || new Set();
-      const recent = Hm.rate(closedDays, work, W.from, W.to);
-      const overall = Hm.rate(closedDays, work, -Infinity, AS_OF);
+      const recent = activity.stats(person, W.from, W.to, BREAKS);
+      const overall = activity.stats(person, START, AS_OF, BREAKS);
       const sp = el('div', 'speed');
       const sv = (v, l, t) => { const x = el('div'); x.append(el('span', 'v', v), el('span', 'l', l)); if (t) x.dataset.tip = t; sp.append(x); };
       sv(s.n ? f1(s.mean) : '—', s.n ? `ч на задачу, медиана ${f1(s.median)}` : 'ч на задачу', `По ${s.n} закрытым задачам`);
-      sv(recent === null ? '—' : f1(recent), `задач за рабочий день, ${days(W.to - W.from + 1)}`, `Закрыто с ${fmt(W.from)} по ${fmt(W.to)} / рабочих дней разработчика за этот период`);
-      sv(overall === null ? '—' : f1(overall), 'задач за рабочий день, всего', `${closedDays.length} задач за ${work.size} рабочих дней`);
+      const rateTip = v => `${v.closed} задач за ${v.work} рабочих дней периода; исключено ${v.cut} рабочих дней общих и личных перерывов` + (!v.work ? '; активных рабочих дней нет' : '');
+      sv(recent.rate === null ? '—' : f1(recent.rate), `задач за рабочий день, ${days(W.to - W.from + 1)}`, `С ${fmt(W.from)} по ${fmt(W.to)}: ${rateTip(recent)}`);
+      sv(overall.rate === null ? '—' : f1(overall.rate), 'задач за рабочий день, всего', rateTip(overall));
       c4.append(sp);
       const starts = mine.map(r => r.startD).filter(x => x !== null && x <= AS_OF);
-      if (starts.length) {
+      if (START !== null || starts.length) {
         /* закрытия по дням, столбики разбиты по принятой мере в её цветах —
            как график поступления, только меньше */
         const sh = el('div', 'tl dev-tl'); sh.setAttribute('aria-label', `Закрытые задачи: ${d}, по дням`); c4.append(sh);
@@ -1041,7 +1078,13 @@
            день стоял на одной вертикали; прокрутка связана (см. ниже) */
         const first = START !== null ? START : minOf(starts, Infinity);
         const mcats = measKeys.map(k => ({ k, c: measColor(k) }));
-        stackChart(sh, daysOf(done.map(r => [r.endD, r.measureN]), mcats, first), mcats, 'закрыто', true, { height: 130, key: 'dev:all', window: W });
+        stackChart(sh, daysOf(done.map(r => [r.endD, r.measureN]), mcats, first), mcats, 'закрыто', true, { height: 130, key: 'dev:all', window: W, personalBreaks });
+        const leg = el('div', 'pace-leg dev-break-legend');
+        for (const [name, style] of [...(BREAKS.length ? [BREAK_LEG] : []), ...(personalBreaks.length ? [PERSONAL_BREAK_LEG] : [])]) {
+          const item = el('span'), swatch = el('i'); swatch.setAttribute('style', style);
+          item.append(swatch, name); leg.append(item);
+        }
+        c4.append(leg);
         continue;
       }
       card.append(c4); ppl.append(card);
@@ -1293,11 +1336,25 @@
     renderPace();
   });
   $('plan-ready').checked = LS.get('cve.planReady') === '1';
-  ['plan-devs', 'plan-rate', 'plan-ready'].forEach(id => $(id).addEventListener('change', () => {
-    LS.set('cve.planDevs', $('plan-devs').value); LS.set('cve.planRate', $('plan-rate').value);
+  ['plan-devs', 'plan-rate'].forEach(id => {
+    $(id).addEventListener('input', () => planDrafts.add(id));
+    $(id).addEventListener('change', () => {
+      planDrafts.delete(id);
+      const key = id === 'plan-devs' ? 'devs' : 'rate', text = $(id).value.trim();
+      const value = key === 'devs' ? Math.round(+text) : +text;
+      if (text && Number.isFinite(value) && value > 0) planOverrides[key] = value;
+      else delete planOverrides[key];
+      LS.set('cve.planOverrides', JSON.stringify(planOverrides));
+      renderPace();
+    });
+  });
+  $('plan-auto').addEventListener('click', () => {
+    planDrafts.clear(); planOverrides = {}; LS.set('cve.planOverrides', '{}'); renderPace();
+  });
+  $('plan-ready').addEventListener('change', () => {
     LS.set('cve.planReady', $('plan-ready').checked ? '1' : '0');
     renderPace();
-  }));
+  });
   $('pace-by').addEventListener('click', e => {
     const b = e.target.closest('button[data-by]');
     if (!b || b.dataset.by === paceBy) return;
