@@ -119,6 +119,7 @@
               <label for="plan-rate" title="Задач в рабочий день на одного разработчика"><span class="cap">На одного</span><input type="number" id="plan-rate" min="0.01" step="any" inputmode="decimal"></label>
             </div>
             <label for="plan-ready" class="plan chk"><input type="checkbox" id="plan-ready"><span id="plan-ready-l">Без задач с готовым решением</span></label>
+            <button type="button" id="plan-auto" class="plan plan-auto">По текущим данным</button>
           </div>
           <div class="fc fc-stack"><div class="fc-set" id="forecast"></div><div class="fc-set off" id="forecast-plan" aria-hidden="true"></div></div>
         </div>
@@ -129,7 +130,7 @@
         <p class="sub">Окна 7 / 14 / 30 дней до выбранной даты «по», ограниченные началом работы. Это сравнение темпов, не доверительный интервал.</p>
         <div class="tablewrap">
           <table class="tight">
-            <thead><tr><th>Окно темпа</th><th>Поступает / день</th><th>Закрывается / раб. день</th><th>Завершение</th><th>Остаток к цели</th><th>Запас / опоздание</th></tr></thead>
+            <thead><tr><th>Окно темпа</th><th>Поступает / день</th><th>Темп закрытия</th><th>Завершение</th><th>Остаток к цели</th><th>Запас / опоздание</th></tr></thead>
             <tbody id="scenario-body"></tbody>
           </table>
         </div>
