@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-05
+
 ### Добавлено
 
 - `cvesummary` (1.26.0): статус «Убрано из эпика» с графитовым сегментом
@@ -555,7 +557,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.31.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.32.0...HEAD
+[0.32.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.28.0...v0.29.0
