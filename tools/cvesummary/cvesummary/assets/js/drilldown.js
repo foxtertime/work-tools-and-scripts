@@ -49,7 +49,7 @@
     return [...groups.values()];
   }
   function mount(CS) {
-    const { roles, hours, dates, ai, strips, links } = CS;
+    const { roles, segments, hours, dates, ai, strips, links } = CS;
     const $ = id => document.getElementById(id);
     const data = JSON.parse($('data').textContent), asOf = dates.dayOf(data.meta.as_of);
     const H = hours.compute(data.rows, asOf), dup = roles.duplicates(data.rows);
@@ -221,7 +221,7 @@
         for (const r of rows) {
           if (field === 'end' && (!r.done || !r.taken)) continue;
           if (dev !== null && r.devKey !== dev) continue;
-          const day = dates.dayOf(r[field]);
+          const day = dates.dayOf(field === 'end' ? roles.endOf(r) : r[field]);
           if (day === null || day > asOf) continue;
           const period = span === 1 ? day : dates.mondayOf(day);
           if (!groups.has(period)) groups.set(period, []);
@@ -234,7 +234,7 @@
         const from = Number(col.dataset.chartDay), to = Math.min(from + span - 1, asOf);
         const when = span === 1 ? dates.ruOf(from) : 'неделя с ' + dates.ruOf(from);
         const event = field === 'tdate' ? 'Поступление задач' : dev === null ? 'Закрыто командой' : 'Закрыто · ' + dev;
-        const note = field === 'tdate' ? 'Поступившие задачи по Task date.' : 'Задачи со статусом «Готов» и назначенным разработчиком, по End date.';
+        const note = field === 'tdate' ? 'Поступившие задачи по Task date.' : 'Расчётно закрытые задачи с назначенным разработчиком, по End date.';
         bind(col, `${event} · ${when}`, groups.get(from) || [],
           `${note} Период: ${dates.ruOf(from)} — ${dates.ruOf(to)}, включительно.`);
       }
@@ -242,16 +242,24 @@
     function connect() {
       bind($('k-total'), 'Все задачи', rows);
       bind($('k-comp'), 'Все компоненты', rows, `${roles.uniques(rows).comps} компонентов. В списке — все строки этих компонентов, включая строки без компонента.`);
-      const taskGroups = new Map(); for (const r of rows) { const k = roles.taskKey(r) ?? '\u0001' + r.i; if (!taskGroups.has(k) || r.done && !taskGroups.get(k).done) taskGroups.set(k, r); }
-      for (const r of rows) if (dup[r.i] !== null) taskGroups.set(roles.taskKey(r), rows[dup[r.i]]);
-      bind($('k-cve'), 'Уникальные пары CVE + компонент', [...taskGroups.values()], 'Этот счётчик учитывает пары CVE + компонент. Для повторов показана основная строка.');
+      bind($('k-cve'), 'Уникальные пары CVE + компонент', segments.uniqueRows(rows, dup),
+        'Этот счётчик учитывает пары CVE + компонент. Для повторов показана основная строка; убранная — только если обычных строк пары нет.');
       const openRows = rows.filter(r => r.open), ready = openRows.filter(r => r.reasons.length);
-      const heroParts = [rows.filter(r=>r.done), openRows.filter(r=>!r.reasons.length), ...['fixed','patch','range','dup'].map(k=>openRows.filter(r=>r.reasons[0]===k))].filter(g=>g.length);
-      [...$('hero-bar').children].forEach((node,i)=>bind(node,(node.dataset.tip || '').split(': всего')[0],heroParts[i] || [],'Состав выбранного сегмента: задачи с несколькими основаниями учтены по первому основанию.'));
-      const heroGroups = [rows.filter(r=>r.done),openRows.filter(r=>!r.reasons.length),ready].filter(g=>g.length);
-      [...$('hero-groups').children].forEach((node,i)=>bind(node.querySelector('.cap'),['Готово','Без решения','Можно закрыть'].filter((_,j)=>[rows.filter(r=>r.done),openRows.filter(r=>!r.reasons.length),ready][j].length)[i],heroGroups[i]));
-      const states = [...$('hero-state').children];
-      bind(states[0], 'Готово', rows.filter(r=>r.done)); bind(states[1], 'В работе', rows.filter(roles.isWorking)); bind(states[2], 'Не взято', openRows.filter(r=>!r.taken));
+      const heroParts = segments.hero(rows), heroGroups = segments.groups(heroParts);
+      const segmentNote = 'Состав выбранного сегмента: убранные показаны отдельно; задачи с несколькими основаниями учтены по первому основанию.';
+      for (const node of $('hero-bar').children) {
+        const part = heroParts.find(p => p.key === node.dataset.segment);
+        if (part) bind(node, part.label, part.rows, segmentNote);
+      }
+      for (const node of $('hero-groups').children) {
+        const group = heroGroups.find(g => g.key === node.dataset.group);
+        if (group) bind(node.querySelector('.cap'), group.label, group.rows, segmentNote);
+      }
+      const stateGroups = segments.heroState(rows);
+      for (const node of $('hero-state').children) {
+        const part = stateGroups.find(p => p.key === node.dataset.role);
+        if (part) bind(node, part.label, part.rows);
+      }
       bind($('hero-risk').firstElementChild, 'Есть проблема / нужна доработка', rows.filter(roles.needsAttention));
       bind($('p-open'), 'Открыто сейчас', openRows); bind($('att-sub').querySelector('b'), 'Требует внимания', rows.filter(roles.needsAttention));
       bind($('close-sub').querySelector('b'), 'Можно закрыть', ready);
@@ -290,21 +298,23 @@
         const dev=card.querySelector('h3').textContent.trim(), mine=rows.filter(r=>r.devKey===dev);
         chart(card.querySelector('.dev-tl'), 'end', dev);
         bind(card.querySelector('.big'), 'Разработчик: '+dev, mine);
-        const predicates=[r=>r.done,r=>roles.isWorking(r)&&!roles.isReview(r)&&!roles.isPaused(r)&&!roles.needsAttention(r),
-          r=>roles.isWorking(r)&&roles.isReview(r),r=>roles.isWorking(r)&&roles.isPaused(r),r=>roles.isWorking(r)&&roles.needsAttention(r)];
-        const names=['готово','в работе','ревью','пауза','проблемы'];
-        [...card.querySelector('.dstat').children].forEach((node,i)=>bind(node,dev+' · '+names[i],mine.filter(predicates[i])));
-        const barItems=predicates.map((f,i)=>({f,i,n:mine.filter(f).length})).filter(x=>x.n);
-        [...card.querySelector('.pbar').children].forEach((node,i)=>bind(node,dev+' · '+names[barItems[i].i],mine.filter(barItems[i].f)));
+        const counts = segments.personCounts(mine), parts = segments.person(mine);
+        for (const node of card.querySelector('.dstat').children) {
+          const part = counts.find(p => p.key === node.dataset.role);
+          bind(node, dev + ' · ' + part.label, part.rows);
+          bind(node.querySelector('.removed-subset'), dev + ' · ' + part.label + ' · из них убрано из эпика', part.rows.filter(roles.isRemoved));
+        }
+        for (const node of card.querySelector('.pbar').children) {
+          const part = parts.find(p => p.key === node.dataset.segment);
+          if (part) bind(node, dev + ' · ' + part.label, part.rows);
+        }
       }
       const anomalyNumbers=new Set([...$('anom-body').querySelectorAll('tr')].map(tr=>Number(tr.firstElementChild.textContent)).filter(Number.isFinite));
       bind($('anom-n'), 'Аномалии', rows.filter(r=>anomalyNumbers.has(r.row)));
-      const heroLegendGroups={'готово':rows.filter(r=>r.done),'без решения':openRows.filter(r=>!r.reasons.length),'можно закрыть':ready,
-        ...Object.fromEntries(Object.entries(reasonNames).map(([k,name])=>[norm(name),openRows.filter(r=>r.reasons[0]===k)]))};
-      for(const node of $('hero-leg').children) {
-        const name=norm(node.textContent).replace(/\s+\d+$/,'');
-        if(heroLegendGroups[name]) bind(node,node.textContent.replace(/\s+\d+$/,''),heroLegendGroups[name],
-          'Состав сегмента общей полосы: учитывается первое основание закрытия.');
+      for (const node of $('hero-leg').children) {
+        const part = node.dataset.segment ? heroParts.find(p => p.key === node.dataset.segment)
+          : heroGroups.find(g => g.key === node.dataset.group);
+        if (part) bind(node, part.label, part.rows, segmentNote);
       }
       const S = ai.summary(rows);
       // Select by the source entries, not their translated display labels.

@@ -152,3 +152,35 @@ test('счётчики шапки: уникальные пары CVE + комп�
   var rows = [task('CVE-1', 'bash'), task('cve-1 ', 'BASH'), task('CVE-1', 'curl'), task('CVE-2', ''), task('CVE-2', '')];
   assert.deepStrictEqual(roles.uniques(rows), { tasks: 4, comps: 2 });
 });
+
+test('убрано из эпика: SecOps закрывает без дат, разработчику нужны Start и End', () => {
+  for (const dev of ['SecOps', ' secops ', 'SECOPS']) {
+    assert.equal(roles.isDone(row(dev, ' УБРАНО  ИЗ ЭПИКА ')), true);
+  }
+  const removed = extra => row('X', 'Убрано из эпика', extra);
+  assert.equal(roles.isDone(removed({ start: '2026-11-02', end: '2026-11-05' })), true);
+  assert.equal(roles.isWorking(removed({ start: '2026-11-02' })), true);
+  assert.equal(roles.isWorking(removed()), true);
+  assert.equal(roles.isDone(row('', 'Убрано из эпика', { start: '2026-11-02', end: '2026-11-05' })), false);
+});
+
+test('ошибочные и неразобранные даты не закрывают убранную задачу разработчика', () => {
+  for (const extra of [
+    { start: '2026-11-02', end: '05.11.2026' },
+    { start: '2026-02-30', end: '2026-11-05' },
+    { start: '2026-11-02', end: '2026-11-05', bad: ['start'] },
+    { start: '2026-11-02', end: '2026-11-05', bad: ['end'] },
+    { end: '2026-11-05' },
+  ]) assert.equal(roles.isDone(row('X', 'Убрано из эпика', extra)), false);
+});
+
+test('убранные строки не участвуют в выборе дубликатов ни в какой роли', () => {
+  const removed = task('CVE-1', 'bash', 'SecOps', 'Убрано из эпика');
+  const normal = task('CVE-1', 'bash', 'X', 'В работе');
+  assert.deepEqual(roles.duplicates([removed, normal]), [null, null]);
+  assert.deepEqual(roles.duplicates([removed, removed]), [null, null]);
+  assert.deepEqual(roles.duplicates([removed, normal, normal]), [null, null, 1]);
+  assert.deepEqual(roles.duplicates([normal, removed, task('CVE-1', 'bash', 'Y', 'Готов')]), [2, null, null]);
+  assert.deepEqual(roles.closeReasons({ ...removed, dev: 'X', p: '+' }, true), ['patch']);
+  assert.deepEqual(roles.uniques([removed, normal]), { tasks: 1, comps: 1 });
+});

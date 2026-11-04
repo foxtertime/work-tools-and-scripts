@@ -21,7 +21,7 @@ test('rates: поступление на календарный день, зак
 
 test('rates без закрытых и без дат — нули, не NaN', function () {
   var got = pace.rates([{ tdate: '', status: '', end: '' }], D, 14);
-  assert.deepStrictEqual(got, { inR: 0, outR: 0, net: 0, open: 1, days: 14, work: 10, cut: 0, closed: 0, closedTotal: 0 });
+  assert.deepStrictEqual(got, { inR: 0, outR: 0, net: 0, open: 1, days: 14, work: 10, cut: 0, closed: 0, closedTotal: 0, rateDays: 10, calendarRate: false });
 });
 
 /* дни работы: D (Пн) … D + 4 (Пт), потом две недели пусто, с D + 21 (Пн) снова */
@@ -304,5 +304,30 @@ test('scenarios: число закрытых сохраняется и в окн
   var rows = [r(D + 5, 'Готов', D + 6)];
   var got = pace.scenarios(rows, D + 7, D + 5, null, D + 14, D + 6);
   assert.deepStrictEqual(got.map(x => [x.closed, x.rates.work, x.rates.outR]),
-    [[1, 0, 0], [1, 0, 0], [1, 0, 0]]);
+    [[1, 0, 0.5], [1, 0, 0.5], [1, 0, 0.5]]);
+});
+
+test('rates: weekend-only window uses calendar days, including zero closures', function () {
+  var got = pace.rates([r(D + 5, 'Готов', D + 5)], D + 6, 2, D + 5);
+  assert.deepStrictEqual([got.days, got.work, got.rateDays, got.calendarRate, got.outR], [2, 0, 2, true, 0.5]);
+  assert.strictEqual(got.net, 0); // calendar-rate balance scales both flows by seven
+  var empty = pace.rates([], D + 6, 2, D + 5);
+  assert.strictEqual(empty.rateDays, 2);
+  assert.strictEqual(empty.outR, 0);
+  assert.ok(Number.isFinite(empty.net));
+});
+
+test('rates: whole common break remains unknown, not calendar fallback', function () {
+  var got = pace.rates([r(D + 5, 'Готов', D + 5)], D + 6, 2, D,
+                       undefined, [{ from: D + 1, to: D + 8 }]);
+  assert.deepStrictEqual([got.work, got.rateDays, got.closed, got.closedTotal], [0, 0, 0, 1]);
+  assert.strictEqual(got.calendarRate, false);
+});
+
+test('rates: period entirely before work is a genuinely empty intersection', function () {
+  var got = pace.rates([r(D - 2, 'Готов', D - 2), r(D)], D + 3, 7, D, D - 2);
+  assert.deepStrictEqual([got.days, got.work, got.rateDays, got.closed, got.closedTotal], [0, 0, 0, 0, 0]);
+  assert.deepStrictEqual([got.inR, got.outR, got.net, got.open], [0, 0, 0, 1]);
+  var scenarios = pace.scenarios([r(D)], D + 3, D, null, D + 9, D - 2);
+  assert.ok(scenarios.every(x => x.rates.days === 0 && x.from === x.to + 1));
 });

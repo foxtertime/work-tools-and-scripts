@@ -20,7 +20,7 @@
   const BREAK_WORKDAYS = 5;
 
   const inDay = r => dates.dayOf(r.tdate);
-  const outDay = r => (roles.isDone(r) ? dates.dayOf(r.end) : null);
+  const outDay = r => (roles.isDone(r) ? dates.dayOf(roles.endOf(r)) : null);
 
   /* Начало работы — самая ранняя Start date у взятой задачи, не позже даты
      отчёта; нет такой — null */
@@ -39,7 +39,7 @@
      команды висела задача) и рабочих дней подряд не меньше
      BREAK_WORKDAYS; хвост перед датой отчёта — тоже. Короткий простой —
      обычные дни. Дней работы нет вовсе — сравнивать не с чем, перерывов нет. */
-  function breaks(active, since, asOf) {
+  function breaks(active, since, asOf, threshold = BREAK_WORKDAYS) {
     const out = [];
     if (since == null || !active.size) return out;
     let from = null;
@@ -48,7 +48,7 @@
       if (idle && from === null) from = d;
       if (!idle && from !== null) {
         const work = dates.workdays(from, d - 1);
-        if (work >= BREAK_WORKDAYS) out.push({ from, to: d - 1, work });
+        if (work >= threshold) out.push({ from, to: d - 1, work });
         from = null;
       }
     }
@@ -62,7 +62,9 @@
      календарных дней в окне, work — рабочих за вычетом перерывов gaps
      (сколько вычтено — cut), closed — закрытых в окне вне перерывов, на
      них темп; closedTotal — всех закрытых в окне, для баланса очереди.
-     Поступление перерывы не трогают. Открытые — на дату отчёта. */
+     Поступление перерывы не трогают. Открытые — на дату отчёта.
+     rateDays — знаменатель закрытия: будни или, если их нет, календарные
+     дни вне перерывов (calendarRate). Пустое пересечение даёт days=0. */
   function rates(rows, asOf, win, since, end, gaps = []) {
     end = end === undefined || end === null ? asOf : Math.min(end, asOf);
     let from = end - win;
@@ -71,14 +73,16 @@
       const seen = rows.flatMap(r => [inDay(r), outDay(r)]).filter(d => d !== null && d <= end);
       from = seen.reduce((a, d) => Math.min(a, d), end) - 1;
     }
-    from = Math.min(from, end - 1);
     const within = d => d !== null && d > from && d <= end;
     const cut = gaps.reduce((a, g) => a + dates.workdays(Math.max(g.from, from + 1), Math.min(g.to, end)), 0);
-    const days = end - from, work = dates.workdays(from + 1, end) - cut;
+    const days = Math.max(0, end - from), work = dates.workdays(from + 1, end) - cut;
     const shut = rows.map(outDay).filter(within), closed = shut.filter(d => !inBreak(gaps, d)).length;
-    const inR = rows.map(inDay).filter(within).length / days;
-    const outR = work ? closed / work : 0;
-    return { inR, outR, net: outR * 5 - inR * 7, open: rows.filter(roles.isOpen).length, days, work, cut, closed, closedTotal: shut.length };
+    const inR = days ? rows.map(inDay).filter(within).length / days : 0;
+    const calendarCut = gaps.reduce((a, g) => a + Math.max(0, Math.min(g.to, end) - Math.max(g.from, from + 1) + 1), 0);
+    const rateDays = work || Math.max(0, days - calendarCut), calendarRate = work === 0 && rateDays > 0;
+    const outR = rateDays ? closed / rateDays : 0;
+    return { inR, outR, net: outR * (calendarRate ? 7 : 5) - inR * 7, open: rows.filter(roles.isOpen).length,
+      days, work, cut, closed, closedTotal: shut.length, rateDays, calendarRate };
   }
 
   // null и undefined одинаково означают отсутствие сканфриза.
