@@ -43,6 +43,23 @@ class ReadTest(unittest.TestCase):
         data = ("﻿" + HEADER + "\r\n" + LINE + "\r\n").encode("utf-8")
         self.assertEqual(read(self.write(data=data)), [Record(2, ROW)])
 
+    def test_optional_trailing_separator(self):
+        for header_end in ("", ";"):
+            for row_end in ("", ";"):
+                with self.subTest(header_end=header_end, row_end=row_end):
+                    text = "﻿" + HEADER + header_end + "\r\n;\r\n" + LINE + row_end + "\r\n"
+                    self.assertEqual(read(self.write(text)), [Record(3, ROW)])
+
+    def test_trailing_separator_preserves_last_cell(self):
+        for comment in ("", "  ", "ждём; апстрим;\nи RHSA;"):
+            for trailing in ([], [""]):
+                with self.subTest(comment=comment, trailing=trailing):
+                    cells = ROW[:-1] + [comment]
+                    buffer = io.StringIO()
+                    csv.writer(buffer, delimiter=";", lineterminator="\n").writerow(cells + trailing)
+                    rows = read(self.write(HEADER + ";\n" + buffer.getvalue()))
+                    self.assertEqual(rows, [Record(2, cells)])
+
     def test_quoted_cell_with_separator_and_newline_is_kept(self):
         cells = list(ROW)
         cells[-1] = "ждём; апстрим\nи RHSA"
@@ -56,14 +73,19 @@ class ReadTest(unittest.TestCase):
 
     def test_header_only_is_an_empty_table(self):
         self.assertEqual(read(self.write(HEADER + "\n")), [])
+        self.assertEqual(read(self.write(HEADER + ";\n")), [])
 
     def test_bad_tables(self):
         cases = [
             ("", "нет заголовка"),
             ("\n \n", "нет заголовка"),
             (HEADER.replace("Task ID", "Task") + "\n", "заголовок"),
+            (HEADER + ";x\n", "заголовок"),
+            (HEADER + ";;\n", "заголовок"),
             (HEADER + "\n" + ";".join(ROW[:26]) + "\n", "запись 2: ячеек 26, ожидается 27"),
             (HEADER + "\n" + LINE + ";x\n", "запись 2: ячеек 28"),
+            (HEADER + ";\n" + LINE + ";x\n", "запись 2: ячеек 28"),
+            (HEADER + ";\n" + LINE + ";;\n", "запись 2: ячеек 29"),
             (HEADER_2 + "\n" + LINE + "\n", "запись 2: ячеек 27, ожидается 22"),
         ]
         for text, needle in cases:
@@ -72,6 +94,10 @@ class ReadTest(unittest.TestCase):
 
     def test_table_of_vulnsheet_2_gets_empty_ai_columns(self):
         rows = read(self.write(HEADER_2 + "\n" + ";".join(ROW_2) + "\n"))
+        self.assertEqual(rows, [Record(2, ROW_2[:21] + ["-"] * 5 + ROW_2[21:])])
+
+    def test_trailing_separator_in_vulnsheet_2_table(self):
+        rows = read(self.write(HEADER_2 + ";\n" + ";".join(ROW_2) + ";\n"))
         self.assertEqual(rows, [Record(2, ROW_2[:21] + ["-"] * 5 + ROW_2[21:])])
 
     def test_table_of_vulnsheet_1_is_rejected_with_a_hint(self):
