@@ -65,18 +65,21 @@
      Поступление перерывы не трогают. Открытые — на дату отчёта.
      rateDays — знаменатель закрытия: будни или, если их нет, календарные
      дни вне перерывов (calendarRate). Пустое пересечение даёт days=0. */
-  function rates(rows, asOf, win, since, end, gaps = []) {
+  function rates(rows, asOf, win, since, end, gaps = [], history = rows) {
     end = end === undefined || end === null ? asOf : Math.min(end, asOf);
     let from = end - win;
     if (since !== undefined && since !== null) from = Math.max(from, since - 1);
     if (!isFinite(from)) {
-      const seen = rows.flatMap(r => [inDay(r), outDay(r)]).filter(d => d !== null && d <= end);
+      const seen = rows.flatMap(r => [inDay(r), outDay(r)]).concat(history.map(outDay)).filter(d => d !== null && d <= end);
       from = seen.reduce((a, d) => Math.min(a, d), end) - 1;
     }
     const within = d => d !== null && d > from && d <= end;
     const cut = gaps.reduce((a, g) => a + dates.workdays(Math.max(g.from, from + 1), Math.min(g.to, end)), 0);
     const days = Math.max(0, end - from), work = dates.workdays(from + 1, end) - cut;
-    const shut = rows.map(outDay).filter(within), closed = shut.filter(d => !inBreak(gaps, d)).length;
+    const shut = rows.map(outDay).filter(within);
+    // История скорости может включать завершённые убранные задачи, но их
+    // закрытие не уменьшает баланс пула (closedTotal).
+    const closed = history.map(outDay).filter(d => within(d) && !inBreak(gaps, d)).length;
     const inR = days ? rows.map(inDay).filter(within).length / days : 0;
     const calendarCut = gaps.reduce((a, g) => a + Math.max(0, Math.min(g.to, end) - Math.max(g.from, from + 1) + 1), 0);
     const rateDays = work || Math.max(0, days - calendarCut), calendarRate = work === 0 && rateDays > 0;
@@ -195,10 +198,10 @@
     return { days, remaining, margin, state };
   }
 
-  function scenarios(rows, asOf, since, stop, target, end, gaps = []) {
+  function scenarios(rows, asOf, since, stop, target, end, gaps = [], history = rows) {
     const to = end == null ? asOf : Math.min(end, asOf);
     return [7, 14, 30].map(window => {
-      const R = rates(rows, asOf, window, since, to, gaps);
+      const R = rates(rows, asOf, window, since, to, gaps, history);
       const from = to - R.days + 1;
       return { window, from, to, closed: R.closed, rates: R,
         forecast: forecast(R.open, R.inR, R.outR, asOf, stop, target) };
