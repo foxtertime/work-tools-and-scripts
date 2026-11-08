@@ -363,7 +363,7 @@ assert.equal(fixture.status, 0, fixture.stderr);
       await p.locator('#burn-by [data-by="day"]').click();
       const col = p.locator('#burn [data-chart-day]').filter({ has: p.locator('[data-tip^="02.03.2026:"]') });
       assert.match(await col.getAttribute('aria-label'), /0 строк/);
-      assert.match(await col.locator('[data-tip]').getAttribute('data-tip'), /закрыто 0/);
+      assert.match(await col.locator('[data-tip]').getAttribute('data-tip'), /выполнено 0/);
       await col.click();
       assert.match(await p.locator('#drill-count').innerText(), /^0 строк/);
       await p.locator('.drill-close').click();

@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-09
+
+### Добавлено
+
+- `cvesummary` (1.37.0): ревью с корректной End date на общем и личных
+  таймлайнах разработчиков, с точечным узором поверх цветов разработчиков
+  и мер, пояснениями и отдельными списками по клику.
+
+### Изменено
+
+- `cvesummary` (1.36.0): задачи «Ожидает ревью» с корректной End date
+  учитываются в общей и личной скорости как выполненная работа;
+  статус ревью и открытый остаток сохраняются. Пустые, ошибочные
+  и будущие End date не добавляют выполненные задачи в скорость.
+
 ## [0.34.0] - 2026-11-09
 
 ### Добавлено
@@ -619,7 +634,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.35.0...HEAD
+[0.35.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.32.1...v0.33.0
 [0.32.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.32.0...v0.32.1
