@@ -26,6 +26,36 @@ let checks=0;
  const count=async()=>Number((await page.locator('#drill-count').innerText()).match(/\d+/)[0]);
  const rownums=()=>page.locator('#drill-body tr[data-row]').evaluateAll(nodes=>nodes.map(n=>Number(n.dataset.row)).sort((a,b)=>a-b));
  try {
+  await load('header-done');
+  for(const [width,theme] of [[1440,'light'],[390,'dark']]) {
+   await page.setViewportSize({width,height:1000});
+   await page.emulateMedia({colorScheme:theme});
+   await page.waitForTimeout(300);
+   assert.deepEqual(await page.locator('#hero-bar > span').evaluateAll(nodes=>nodes.map(n=>[n.dataset.segment,Number(n.dataset.count)])),
+    [['done-secops',2],['done-dev',3],['review',1],['work',1],['none',1]]);
+   assert.equal(await page.locator('#k-total').innerText(),'8');
+   assert.equal(await page.locator('#hero-groups [data-group="done"] b').innerText(),'5');
+   assert.match(await page.locator('#hero-groups [data-group="done"] .cap').getAttribute('data-tip'),/готово/i);
+   const colors=await page.locator('#hero-bar > span').evaluateAll(nodes=>nodes.slice(0,2).map(n=>getComputedStyle(n).backgroundColor));
+   assert.notEqual(colors[0],colors[1]);
+   const cap=await page.locator('#hero-groups [data-group="done"]').boundingBox();
+   const first=await page.locator('#hero-bar [data-segment="done-secops"]').boundingBox();
+   const last=await page.locator('#hero-bar [data-segment="done-dev"]').boundingBox();
+   assert.ok(Math.abs(cap.x-first.x)<1 && Math.abs(cap.x+cap.width-last.x-last.width)<1);
+   for(const [key,label,expected] of [['done-secops','SecOps',[2,3]],['done-dev','Разработчики',[4,5,6]]]) {
+    const legend=page.locator(`#hero-leg [data-segment="${key}"]`);
+    assert.ok(await legend.isVisible()); assert.match(await legend.innerText(),new RegExp(label));
+    for(const selector of [`#hero-bar [data-segment="${key}"]`,`#hero-leg [data-segment="${key}"]`]) {
+     await page.locator(selector).focus(); await page.keyboard.press('Enter');
+     assert.deepEqual(await rownums(),expected); assert.match(await page.locator('#drill-title').innerText(),/Готово/);
+     await close(); checks++;
+    }
+   }
+   await page.locator('#hero-groups [data-group="done"] .cap').click();
+   assert.deepEqual(await rownums(),[2,3,4,5,6]); await close(); checks++;
+   await page.locator('.hero').screenshot({path:path.join(base,`header-done-${width}.png`)});
+  }
+  await page.setViewportSize({width:1440,height:1000}); await page.emulateMedia({colorScheme:'light'});
   const values=[{row:1,cvss:'9,8',comp:'OpenSSL'},{row:2,cvss:'',comp:'curl'},{row:3,cvss:'7.5',comp:'openssl'}];
   assert.deepEqual(D.select(values,'OPENSSL').map(r=>r.row),[1,3]); checks++;
   assert.deepEqual(D.select(values,'','cvss','asc').map(r=>r.row),[3,1,2]); checks++;
@@ -39,7 +69,7 @@ let checks=0;
   const workRows=poolRows.filter(r=>String(r.dev||'').trim() && !['Готов','Ожидает ревью'].includes(r.status)).map(r=>r.row).sort((a,b)=>a-b);
   assert.ok(reviewRows.length>0);
   assert.ok(workRows.length>0);
-  assert.deepEqual(await page.locator('#hero-bar > span').evaluateAll(nodes=>nodes.slice(0,4).map(n=>n.dataset.segment)),['done','review','work','none']);
+  assert.deepEqual(await page.locator('#hero-bar > span').evaluateAll(nodes=>nodes.slice(0,4).map(n=>n.dataset.segment)),['done-dev','review','work','none']);
   assert.equal(await page.locator('#hero-bar > span').evaluateAll(nodes=>nodes.reduce((n,s)=>n+Number(s.dataset.count),0)),100);
   for(const [key,expected] of [['review',reviewRows],['work',workRows]]) {
    for(const selector of [`#hero-bar [data-segment="${key}"]`,`#hero-groups [data-group="${key}"] .cap`]) {
