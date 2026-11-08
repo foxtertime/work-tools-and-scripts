@@ -15,6 +15,8 @@
   const $ = id => document.getElementById(id);
   const css = t => `var(${t})`;
   const REMOVED_HATCH_STYLE = 'background:repeating-linear-gradient(135deg,#ffffff66 0 2px,transparent 2px 8px),var(--st-removed)';
+  const REVIEW_PATTERN_STYLE = 'background:radial-gradient(circle,#fff 0 1px,#0006 1px 1.5px,transparent 1.5px),var(--st-review);background-size:6px 6px';
+  const REVIEW_LEG = ['ожидает ревью', REVIEW_PATTERN_STYLE];
   const f1 = x => (Math.round(x * 10) / 10).toString().replace('.', ',');
   const fmt = d => (d === null || d === undefined ? '—' : dates.ruOf(d));
   const mk = (t, a) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
@@ -421,9 +423,11 @@
     const fills = new Map();
     for (const s of cats.filter(s => s.hatch)) {
       const id = 'stack-hatch-' + (++hatchN), defs = mk('defs');
-      const pattern = mk('pattern', { id, width: 8, height: 8, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' });
-      pattern.append(mk('rect', { width: 8, height: 8, fill: css(s.c) }),
-        mk('rect', { width: 2, height: 8, fill: '#fff', 'fill-opacity': 0.4 }));
+      const dots = s.hatch === 'dots', size = dots ? 6 : 8;
+      const pattern = mk('pattern', { id, width: size, height: size, patternUnits: 'userSpaceOnUse', patternTransform: dots ? 'rotate(0)' : 'rotate(45)' });
+      pattern.append(mk('rect', { width: size, height: size, fill: css(s.c) }), dots
+        ? mk('circle', { cx: 3, cy: 3, r: 1.2, fill: '#fff', stroke: '#000', 'stroke-opacity': 0.4, 'stroke-width': 0.6 })
+        : mk('rect', { width: 2, height: 8, fill: '#fff', 'fill-opacity': 0.4 }));
       defs.append(pattern); F.plot.prepend(defs); fills.set(s.k, `url(#${id})`);
     }
     F.plot.classList.add('hlg');
@@ -432,7 +436,7 @@
       const col = mk('g', { class: 'hl', 'data-chart-day': w.t }); F.plot.append(col);
       const x = i * F.step + (F.step - barW) / 2;
       const segs = cats.filter(s => w[s.k] > 0);
-      const when = byDay ? fmt(w.t) : 'Неделя с ' + fmt(w.t), infoShapes = [];
+      const when = byDay ? fmt(w.t) : 'Неделя с ' + fmt(w.t), segmentShapes = [];
       const info = segs.filter(s => s.info).reduce((n, s) => n + w[s.k], 0), primary = w.all - info;
       let acc = 0;
       segs.forEach((s, j) => {
@@ -444,18 +448,23 @@
         let shape;
         if (j === segs.length - 1 && h > 4) { const r = Math.min(3, barW / 2); shape = mk('path', { d: `M${x},${y0}V${top + r}Q${x},${top} ${x + r},${top}H${x + barW - r}Q${x + barW},${top} ${x + barW},${top + r}V${y0}Z`, fill }); }
         else shape = mk('rect', { x, y: top, width: barW, height: h, fill });
-        if (s.info) {
+        if (s.info || s.review) {
           shape.dataset.chartSegment = s.segment; shape.dataset.chartCount = String(n);
-          shape.dataset.tip = `${when}: ${s.label || s.k} ${n} · вне пула`;
-          infoShapes.push(shape);
+          shape.dataset.tip = `${when}: ${s.label || s.k} ${n}` + (s.info ? ' · вне пула' : '');
+          if (s.review) {
+            shape.dataset.chartKey = s.reviewKey;
+            if (s.devs) shape.dataset.chartDevelopers = JSON.stringify(s.devs);
+            if (s.measure !== undefined) shape.dataset.chartMeasure = s.measure;
+          }
+          segmentShapes.push(shape);
         } else col.append(shape);
       });
       const hit = mk('rect', { x: i * F.step, y: 16, width: F.step, height: H2 - 40, fill: 'transparent' });
       hit.dataset.tip = `${when}: ${what} ${primary}` + (w.all ? ' · ' + segs.map(s => `${s.label || s.k} ${w[s.k]}`).join(', ') : '') + breakTip(w.t, w.t + span - 1)
         + (personal.some(b => b.from <= w.t + span - 1 && b.to >= w.t) ? ' · личный перерыв — в скорость не идёт' : '');
       col.append(hit);
-      // Штрихованный сегмент поверх зоны клика периода открывает свою выборку.
-      infoShapes.forEach(shape => col.append(shape));
+      // Сегмент с паттерном поверх зоны клика периода открывает свою выборку.
+      segmentShapes.forEach(shape => col.append(shape));
       if (w.all && F.step >= 26) { const t = mk('text', { x: x + barW / 2, y: F.y(w.all) - 5, 'text-anchor': 'middle' }); t.textContent = info ? `${primary} + ${info}` : w.all; t.style.fill = 'var(--fg)'; col.append(t); }
       const every = Math.ceil(44 / F.step);
       if ((weeks.length - 1 - i) % every === 0) {
@@ -1034,6 +1043,7 @@
     $('pace-sub').textContent += ` · прогноз: ${capacity.active} из ${capacity.total} разработчиков, ${f1(capacity.outR)} задач/день`;
     if (!R.days) $('pace-sub').textContent = noPeriod;
     $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Убрано из эпика не входит в пул: остаток, поступление, баланс, графики и часы считаются без этих задач. Только скорость в задачах за день дополнительно учитывает убранные задачи, завершённые разработчиком, кроме SecOps: нужны корректные Start date и End date, конец не раньше начала и не позже даты отчёта. Незавершённые убранные задачи не влияют на рабочие дни и перерывы. Сканфриз — первый день без новых задач. До него новые задачи приходят каждый календарный день, закрываем по рабочим дням, Пн–Пт, без учёта праздников. Свободная мощность не накапливается. Завершение — после последних поступлений, а не при первом нуле в очереди. Перерыв в работе — ${pace.BREAK_WORKDAYS} и больше рабочих дней подряд, когда ни на ком из разработчиков (кроме SecOps) не висело задач: его рабочие дни и закрытое в нём в темп закрытия не идут, на графиках он заштрихован.`;
+    $('pace-note').textContent += ' В общей и личной скорости «Ожидает ревью» считается выполненной работой по корректной End date, если она попадает в период и не позже даты отчёта. Без End date задача не добавляет выполненную работу в скорость. Статус ревью, остаток и фактический баланс закрытия сохраняются; правила рабочих дней и перерывов не меняются.';
     /* средние — за период, в подсказке — сколько это задач; баланс — сколько
        реально пришло минус закрыто за выбранный период */
     const inN = Math.round(R.inR * R.days), outN = R.closed, bal = inN - R.closedTotal;
@@ -1079,6 +1089,18 @@
     return WINDOW;
   }
 
+  // Ревью сохраняет цвет разработчика/меры, паттерн выделяет его часть.
+  function completionSeries(rows, cats, keyOf) {
+    const reviewKey = k => '\u0003review:' + k;
+    const reviews = new Set(rows.filter(r => r.review).map(keyOf));
+    return {
+      hasReview: reviews.size > 0,
+      cats: cats.flatMap(c => reviews.has(c.k) ? [c, { ...c, k: reviewKey(c.k),
+        label: (c.label || c.k) + ' · ожидает ревью', hatch: 'dots', segment: 'review', review: true, reviewKey: c.k }] : [c]),
+      items: rows.map(r => [r.endD, r.review ? reviewKey(keyOf(r)) : keyOf(r)]),
+    };
+  }
+
   function renderPeople(W) {
     const devs = count(recs, r => r.devKey);
     const assigned = new Set(devs.map(([name]) => name));
@@ -1098,6 +1120,9 @@
     }
     const doneKeys = recs.filter(r => r.taken && r.done);
     const measKeys = roles.measureOrder(doneKeys.map(r => r.measureN));
+    const completed = recs.filter(r => r.taken && roles.isSpeedDone(r) && r.endD !== null && r.endD <= AS_OF);
+    const chartMeasKeys = roles.measureOrder(completed.map(r => r.measureN));
+    const chartStart = START ?? (completed.length ? minOf(completed.map(r => r.endD), Infinity) : null);
     const ppl = $('people'); ppl.replaceChildren();
     const kvRow = (box, label, n, max, color, tipText) => {
       box.append(el('span', 'k', label));
@@ -1185,18 +1210,19 @@
       sv(overall.rate === null ? '—' : f1(overall.rate), 'задач за рабочий день, всего', rateTip(overall));
       c4.append(sp);
       const starts = mine.map(r => r.startD).filter(x => x !== null && x <= AS_OF);
-      if (START !== null || starts.length) {
-        /* закрытия по дням, столбики разбиты по принятой мере в её цветах —
+      if (chartStart !== null || starts.length) {
+        /* выполненная работа по дням, столбики разбиты по принятой мере —
            как график поступления, только меньше */
-        const sh = el('div', 'tl dev-tl'); sh.setAttribute('aria-label', `Закрытые задачи: ${d}, по дням`); c4.append(sh);
+        const sh = el('div', 'tl dev-tl'); sh.setAttribute('aria-label', `Выполненные задачи, включая ревью: ${d}, по дням`); c4.append(sh);
         card.append(c4); ppl.append(card);
         /* ось у всех личных графиков общая — от начала работы, чтобы один
            день стоял на одной вертикали; прокрутка связана (см. ниже) */
-        const first = START !== null ? START : minOf(starts, Infinity);
-        const mcats = measKeys.map(k => ({ k, c: measColor(k) }));
-        stackChart(sh, daysOf(done.map(r => [r.endD, r.measureN]), mcats, first), mcats, 'закрыто', true, { height: 130, key: 'dev:all', window: W, personalBreaks });
+        const first = chartStart !== null ? chartStart : minOf(starts, Infinity);
+        const mcats = chartMeasKeys.map(k => ({ k, c: measColor(k), measure: k }));
+        const series = completionSeries(completed.filter(r => r.devKey === d), mcats, r => r.measureN);
+        stackChart(sh, daysOf(series.items, series.cats, first), series.cats, 'выполнено', true, { height: 130, key: 'dev:all', window: W, personalBreaks });
         const leg = el('div', 'pace-leg dev-break-legend');
-        for (const [name, style] of [...(BREAKS.length ? [BREAK_LEG] : []), ...(personalBreaks.length ? [PERSONAL_BREAK_LEG] : [])]) {
+        for (const [name, style] of [...(series.hasReview ? [REVIEW_LEG] : []), ...(BREAKS.length ? [BREAK_LEG] : []), ...(personalBreaks.length ? [PERSONAL_BREAK_LEG] : [])]) {
           const item = el('span'), swatch = el('i'); swatch.setAttribute('style', style);
           item.append(swatch, name); leg.append(item);
         }
@@ -1215,10 +1241,12 @@
       syncing = false;
     }, { passive: true }));
     const names = chartNames;
-    const cats = names.slice(0, 8).map(k => ({ k, c: devColor.get(k) }));
-    if (names.length > 8) cats.push({ k: 'Другие', c: '--sev-none' });
-    legend('burnleg', cats.concat([{ k: 'окно темпа', c: '--accent-soft' }], BREAKS.length ? [BREAK_CAT] : []));
-    burnData = { cats, window: W, items: recs.filter(r => r.done && r.taken).map(r => [r.endD, names.indexOf(r.devKey) < 8 ? r.devKey : 'Другие']) };
+    const cats = names.slice(0, 8).map(k => ({ k, c: devColor.get(k), devs: [k] }));
+    if (names.length > 8) cats.push({ k: 'Другие', c: '--sev-none', devs: names.slice(8) });
+    const series = completionSeries(completed, cats, r => names.indexOf(r.devKey) < 8 ? r.devKey : 'Другие');
+    legend('burnleg', cats.concat(series.hasReview ? [{ k: REVIEW_LEG[0], style: REVIEW_LEG[1] }] : [],
+      [{ k: 'окно темпа', c: '--accent-soft' }], BREAKS.length ? [BREAK_CAT] : []));
+    burnData = { ...series, window: W };
     renderBurn();
   }
 
@@ -1227,9 +1255,9 @@
   function renderBurn() {
     if (!burnData) return;
     const byDay = burnBy === 'day', { cats, items, window } = burnData;
-    $('burn').setAttribute('aria-label', `Закрытые задачи по ${byDay ? 'дням' : 'неделям'} и разработчикам`);
+    $('burn').setAttribute('aria-label', `Выполненные задачи, включая ревью, по ${byDay ? 'дням' : 'неделям'} и разработчикам`);
     for (const b of $('burn-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === burnBy));
-    stackChart($('burn'), byDay ? daysOf(items, cats) : weeksOf(items, cats), cats, 'закрыто', byDay, { window });
+    stackChart($('burn'), byDay ? daysOf(items, cats) : weeksOf(items, cats), cats, 'выполнено', byDay, { window });
   }
 
   function renderAnomalies() {

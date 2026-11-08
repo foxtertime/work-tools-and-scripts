@@ -30,6 +30,29 @@ assert.equal(fixture.status, 0, fixture.stderr);
   };
   const planValues = p => p.evaluate(() => [document.getElementById('plan-devs').value, document.getElementById('plan-rate').value]);
   try {
+    await check('review End date contributes to speed without changing pool totals', 'review-no-end', async p => {
+      const poolValues = () => p.locator('#k-total, #p-open, #p-in, #p-net, #hero-state, #hero-bar').allTextContents();
+      const before = await poolValues();
+      assert.equal(await p.locator('#p-out').innerText(), '0,3');
+      await p.goto(pathToFileURL(path.join(base, 'review.html')).href);
+      assert.deepEqual(await poolValues(), before);
+      assert.equal(await p.locator('#hero-bar [data-segment="done"]').getAttribute('data-count'), '1');
+      assert.equal(await p.locator('#hero-bar [data-segment="review"]').getAttribute('data-count'), '3');
+      assert.equal(await p.locator('#p-open').innerText(), '3');
+      assert.equal(await p.locator('#p-out').innerText(), '0,5');
+      assert.equal(await p.locator('#hero-risk > div').filter({ hasText: /^Задач в день/ }).locator('b').innerText(), '0,5');
+      assert.equal(await p.locator('.speed .v').nth(1).innerText(), '0,5');
+      assert.equal(await p.locator('.speed .v').nth(2).innerText(), '0,5');
+      assert.deepEqual(await planValues(p), ['1', '0.5']);
+      assert.ok((await p.locator('#scenario-body tr').evaluateAll(rows => rows.map(r => r.children[2].textContent))).every(t => t.startsWith('0,5')));
+      assert.match(await p.locator('#p-net').locator('..').getAttribute('data-tip'), /закрыто 1/);
+      await window(p, '2026-11-04', '2026-11-04');
+      assert.equal(await p.locator('#p-out').innerText(), '1');
+      assert.equal(await p.locator('.speed .v').nth(1).innerText(), '1');
+      await window(p, '2026-11-05', '2026-11-05');
+      assert.equal(await p.locator('#p-out').innerText(), '0');
+      assert.equal(await p.locator('.speed .v').nth(1).innerText(), '0');
+    });
     await check('zero is known', 'zero', async p => {
       assert.equal(await p.locator('#hero-risk > div').filter({ hasText: /^Задач в день/ }).locator('b').innerText(), '0');
       assert.equal(await p.locator('#p-out').innerText(), '0');

@@ -74,7 +74,7 @@ assert.equal(generated.status, 0, generated.stderr);
     await page.waitForFunction(() => document.querySelector('.dev-tl [data-drill]'));
     await close();
     assert.equal(await page.evaluate(() => document.activeElement.dataset.tip || document.activeElement.querySelector('[data-tip]')?.dataset.tip),
-      '19.10.2026: закрыто 1 · Импорт новой версии 1'); checks++;
+      '19.10.2026: выполнено 1 · Импорт новой версии 1'); checks++;
     await page.locator('#pace-to').fill('2026-10-20'); await page.locator('#pace-to').dispatchEvent('change');
     await open('#burn', '19.10.2026', [5, 7]); await close();
     // Real mouse drag must scroll, without opening a selection on pointerup.
@@ -91,6 +91,46 @@ assert.equal(generated.status, 0, generated.stderr);
     await open('#weeks', '19.10.2026', [6, 7]); await close();
     await page.locator('#inflow-by [data-by="week"]').click();
     await open('#weeks', 'Неделя с 12.10.2026', [4, 5, 14]); await close();
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(pathToFileURL(path.join(base, 'review-charts.html')).href);
+    await page.locator('#burn-by [data-by="week"]').click();
+    assert.equal(await page.locator('#burn [data-chart-segment="review"]').count(), 3);
+    await open('#burn', 'Неделя с 02.11.2026', [2, 3, 4, 5, 13, 14, 15, 16, 17, 18, 19, 20], 'Enter'); await close();
+    const reviewPart = (host, key) => page.locator(host).locator(`[data-chart-segment="review"][data-chart-key="${key}"]`);
+    for (const [key, expected] of [['X', [3, 4]], ['Y', [5]], ['Другие', [19, 20]]]) {
+      await reviewPart('#burn', key).click();
+      assert.deepEqual(await numbers(), expected);
+      assert.match(await page.locator('#drill-title').innerText(), /Ожидает ревью/);
+      await close(); checks++;
+    }
+    const x = '.dev:has(h3:text-is("X")) .dev-tl';
+    for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+      await page.waitForTimeout(350);
+      await page.locator('#burn-by [data-by="day"]').click();
+      await open('#burn', '03.11.2026', [2, 3, 5, 13, 14, 15, 16, 17, 18, 19, 20], 'Enter'); await close();
+      await open(x, '03.11.2026', [2, 3], 'Enter'); await close();
+      const dot = reviewPart(x, 'Патч из апстрима');
+      assert.match(await dot.getAttribute('data-tip'), /ожидает ревью/i);
+      assert.ok(await dot.evaluate(n => {
+        const id = n.getAttribute('fill').slice(5, -1);
+        return Boolean(document.getElementById(id)?.querySelector('circle'));
+      }));
+      await dot.focus(); await page.keyboard.press('Enter');
+      assert.deepEqual(await numbers(), [3]); await close(); checks++;
+      await reviewPart(x, 'Импорт новой версии').click();
+      assert.deepEqual(await numbers(), [4]); await close(); checks++;
+      assert.match(await page.locator('#burnleg').innerText(), /ожидает ревью/i);
+      assert.match(await page.locator('.dev:has(h3:text-is("X")) .dev-break-legend').innerText(), /ожидает ревью/i);
+      await page.locator('#burn').screenshot({ path: path.join(base, 'review-burn-' + width + '.png') });
+      await page.locator('.dev:has(h3:text-is("X"))').screenshot({ path: path.join(base, 'review-person-' + width + '.png') });
+    }
+    await page.goto(pathToFileURL(path.join(base, 'review-only-chart.html')).href);
+    assert.equal(await page.locator('#burn [data-chart-segment="review"]').count(), 1);
+    await reviewPart(x, 'Импорт новой версии').click();
+    assert.deepEqual(await numbers(), [4]); await close(); checks++;
     assert.deepEqual(errors, []); checks++;
     const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
     await mobile.route('**/fonts.googleapis.com/**', r => r.abort());
