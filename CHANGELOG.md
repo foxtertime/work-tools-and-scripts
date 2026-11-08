@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-09
+
 ### Добавлено
 
 - `cvesummary` (1.33.0): справочные сегменты и счётчики убранных задач
@@ -600,7 +602,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.32.1...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.33.0...HEAD
+[0.33.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.32.1...v0.33.0
 [0.32.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.30.0...v0.31.0
