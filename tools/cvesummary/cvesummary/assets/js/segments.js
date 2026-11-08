@@ -1,11 +1,34 @@
 /* Единые непересекающиеся сегменты для полос и их выборок по клику.
-   Расчётная роль убранной задачи не меняет её визуальный сегмент. */
+   В отдельном блоке убранных завершённая работа разбивается по мерам,
+   оставшиеся задачи — по группам AI-вердикта исходной строки. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./roles.js'));
-  else { root.CS = root.CS || {}; root.CS.segments = factory(root.CS.roles); }
-}(typeof globalThis !== 'undefined' ? globalThis : this, function (roles) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./roles.js'), require('./scope.js'), require('./ai.js'));
+  else { root.CS = root.CS || {}; root.CS.segments = factory(root.CS.roles, root.CS.scope, root.CS.ai); }
+}(typeof globalThis !== 'undefined' ? globalThis : this, function (roles, scope, ai) {
   'use strict';
   const removedPart = { key: 'removed', label: 'Убрано из эпика', color: '--st-removed', group: 'removed', test: roles.isRemoved };
+  function removed(rows, asOf) {
+    const split = scope.split(rows, asOf), completed = new Set(split.speed);
+    const done = split.removed.filter(r => completed.has(r)), measures = new Map();
+    for (const r of done) {
+      const measure = roles.measureOf(r);
+      if (!measures.has(measure)) measures.set(measure, []);
+      measures.get(measure).push(r);
+    }
+    const rest = split.removed.filter(r => !completed.has(r));
+    const aiLabels = { maybe: 'Возможно затронуто', no: 'Не затронуто', none: 'Не прогнано' };
+    return [
+      { key: 'done', label: 'Готово', color: '--st-done', rows: done,
+        parts: roles.measureOrder([...measures.keys()]).map((measure, i) => ({
+          key: 'done-measure-' + i, label: measure, measure, group: 'done', rows: measures.get(measure),
+        })) },
+      { key: 'removed', label: 'Убрано', color: '--st-removed', rows: rest,
+        parts: ai.GROUPS.map(aiGroup => ({
+          key: 'removed-ai-' + aiGroup, label: aiLabels[aiGroup], aiGroup, group: 'removed',
+          rows: rest.filter(r => ai.groupOf(r.ai_verdict) === aiGroup),
+        })).filter(p => p.rows.length) },
+    ];
+  }
   function partition(rows, definitions, qualify = true) {
     const hasRemoved = qualify && rows.some(roles.isRemoved);
     return [removedPart, ...definitions].map(p => ({
@@ -15,7 +38,7 @@
     })).filter(p => p.rows.length);
   }
   function hero(rows) {
-    return partition(rows, [
+    return partition(rows.filter(r => !roles.isRemoved(r)), [
       { key: 'done', label: 'Готово', color: '--st-done', group: 'done', test: roles.isDone },
       { key: 'none', label: 'Без решения', color: '--rs-none', group: 'none', test: r => roles.isOpen(r) && !r.reasons.length },
       ...[['fixed', 'Фикс в RHEL'], ['patch', 'Устранено ранее'], ['range', 'Вне диапазона'], ['dup', 'Дубликат']]
@@ -61,5 +84,5 @@
     rows.forEach((r, i) => { if (duplicates[i] !== null && duplicates[i] !== undefined) out.set(roles.taskKey(r), rows[duplicates[i]]); });
     return [...out.values()];
   }
-  return { hero, heroState, person, personCounts, groups, uniqueRows };
+  return { hero, heroState, person, personCounts, groups, uniqueRows, removed };
 }));

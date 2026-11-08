@@ -3,7 +3,7 @@
    hours, pace, timeline, nav, strips; здесь только DOM. */
 (function () {
   'use strict';
-  const { dates, roles, segments, hours: Hm, pace, activity, timeline, nav, strips, ai, links } = window.CS;
+  const { dates, roles, scope, segments, hours: Hm, pace, activity, timeline, nav, strips, ai, links } = window.CS;
   const DATA = JSON.parse(document.getElementById('data').textContent);
   const AS_OF = dates.dayOf(DATA.meta.as_of);
   const NS = 'http://www.w3.org/2000/svg';
@@ -14,6 +14,7 @@
 
   const $ = id => document.getElementById(id);
   const css = t => `var(${t})`;
+  const REMOVED_HATCH_STYLE = 'background:repeating-linear-gradient(135deg,#ffffff66 0 2px,transparent 2px 8px),var(--st-removed)';
   const f1 = x => (Math.round(x * 10) / 10).toString().replace('.', ',');
   const fmt = d => (d === null || d === undefined ? '—' : dates.ruOf(d));
   const mk = (t, a) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
@@ -59,12 +60,13 @@
       box.append(el('div', 'val num', it.valText ?? String(it.n)));
     }
   }
-  function legend(id, cats) { const leg = $(id); leg.replaceChildren(); for (const s of cats) { const li = el('span'); const sw = el('i', 'sw'); if (s.style) sw.setAttribute('style', s.style); else sw.style.background = css(s.c); li.append(sw, s.k); leg.append(li); } }
+  function legend(id, cats) { const leg = $(id); leg.replaceChildren(); for (const s of cats) { const li = el('span'); const sw = el('i', 'sw'); if (s.style) sw.setAttribute('style', s.style); else sw.style.background = css(s.c); li.append(sw, s.label || s.k); leg.append(li); } }
 
   /* ---------- данные ---------- */
-  const H = Hm.compute(DATA.rows, AS_OF);
-  const DUP = roles.duplicates(DATA.rows);
-  const recs = DATA.rows.map((r, i) => Object.assign({}, r, {
+  const SCOPES = scope.split(DATA.rows, AS_OF);
+  const H = Hm.compute(SCOPES.pool, AS_OF);
+  const DUP = roles.duplicates(SCOPES.pool);
+  const recs = SCOPES.pool.map((r, i) => Object.assign({}, r, {
     i, devKey: roles.devOf(r), sevN: roles.sevOf(r), measureN: roles.measureOf(r),
     done: roles.isDone(r), open: roles.isOpen(r), taken: roles.isTaken(r), working: roles.isWorking(r),
     review: roles.isReview(r), paused: roles.isPaused(r), attention: roles.needsAttention(r),
@@ -76,12 +78,17 @@
   const SEV = SEV_KEYS.map(k => ({ k, c: sevColor(k) }));
   /* меры — в порядке справочника, цвета общие для разреза мер и «Компонентов» */
   const MEAS_KEYS = roles.measureOrder(recs.map(r => r.measureN));
+  // Меры убранных получают цвета после мер пула, не меняя его разрезы и цвета.
+  const MEAS_COLOR_KEYS = [...MEAS_KEYS.filter(k => k !== roles.NO_MEASURE),
+    ...roles.measureOrder(SCOPES.speed.filter(roles.isRemoved).map(roles.measureOf))
+      .filter(k => k !== roles.NO_MEASURE && !MEAS_KEYS.includes(k))];
   /* 11 разных цветов — по числу мер в справочнике; чужие меры идут по кругу */
   const MEAS_PALETTE = ['--m1', '--m2', '--m3', '--m4', '--m5', '--m6', '--m7', '--m8', '--m9', '--m10'];
-  const measColor = k => (k === roles.NO_MEASURE ? '--sev-none' : MEAS_PALETTE[MEAS_KEYS.filter(x => x !== roles.NO_MEASURE).indexOf(k) % MEAS_PALETTE.length]);
+  const measColor = k => (k === roles.NO_MEASURE ? '--sev-none' : MEAS_PALETTE[MEAS_COLOR_KEYS.indexOf(k) % MEAS_PALETTE.length]);
   /* начало работы — первая Start date у взятых задач: окно темпа не
      уходит раньше него */
-  const ACTIVITY = activity.compute(recs, AS_OF, H);
+  const speedHours = Hm.compute(SCOPES.speed, AS_OF);
+  const ACTIVITY = activity.compute(SCOPES.speed, AS_OF, speedHours);
   const START = ACTIVITY.since;
   /* дни работы команды — рабочие дни разработчиков из часов (на ком-то
      висит задача; выходной — если брали или закрывали), кроме SecOps: это
@@ -373,9 +380,9 @@
     F.plot.append(mark);
   }
 
-  function weeksOf(items, cats) {
-    if (FIRST === null) return [];
-    const lo = dates.mondayOf(FIRST), hi = dates.mondayOf(AS_OF), weeks = [];
+  function weeksOf(items, cats, from = FIRST) {
+    if (from === null) return [];
+    const lo = dates.mondayOf(from), hi = dates.mondayOf(AS_OF), weeks = [];
     for (let t = lo; t <= hi; t += 7) { const w = { t, all: 0 }; cats.forEach(c => { w[c.k] = 0; }); weeks.push(w); }
     for (const [d, k] of items) { if (d === null || d > AS_OF || d < lo) continue; const w = weeks[(dates.mondayOf(d) - lo) / 7]; w.all++; w[k]++; }
     return weeks;
@@ -411,26 +418,45 @@
     const pauses = breakHatch(F, d => F.step * (d - t0) / span, F.step / span, 16, H2 - 24);
     const personal = opts.personalBreaks || [];
     pauses.push(...breakHatch(F, d => F.step * (d - t0) / span, F.step / span, 16, H2 - 24, personal, true));
+    const fills = new Map();
+    for (const s of cats.filter(s => s.hatch)) {
+      const id = 'stack-hatch-' + (++hatchN), defs = mk('defs');
+      const pattern = mk('pattern', { id, width: 8, height: 8, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' });
+      pattern.append(mk('rect', { width: 8, height: 8, fill: css(s.c) }),
+        mk('rect', { width: 2, height: 8, fill: '#fff', 'fill-opacity': 0.4 }));
+      defs.append(pattern); F.plot.prepend(defs); fills.set(s.k, `url(#${id})`);
+    }
     F.plot.classList.add('hlg');
     weeks.forEach((w, i) => {
       /* неделя — одна группа: под курсором она яркая, остальные приглушены */
       const col = mk('g', { class: 'hl', 'data-chart-day': w.t }); F.plot.append(col);
       const x = i * F.step + (F.step - barW) / 2;
       const segs = cats.filter(s => w[s.k] > 0);
+      const when = byDay ? fmt(w.t) : 'Неделя с ' + fmt(w.t), infoShapes = [];
+      const info = segs.filter(s => s.info).reduce((n, s) => n + w[s.k], 0), primary = w.all - info;
       let acc = 0;
       segs.forEach((s, j) => {
         /* сегмент стоит на верхушке нижнего (y0), зазор до следующего — сверху;
            так нижний сегмент всегда доходит до оси */
         const n = w[s.k], y0 = F.y(acc), y1 = F.y(acc + n) + (j < segs.length - 1 ? GAP : 0); acc += n;
         const h = Math.max(1, y0 - y1), top = y0 - h;
-        if (j === segs.length - 1 && h > 4) { const r = Math.min(3, barW / 2); col.append(mk('path', { d: `M${x},${y0}V${top + r}Q${x},${top} ${x + r},${top}H${x + barW - r}Q${x + barW},${top} ${x + barW},${top + r}V${y0}Z`, fill: css(s.c) })); }
-        else col.append(mk('rect', { x, y: top, width: barW, height: h, fill: css(s.c) }));
+        const fill = fills.get(s.k) || css(s.c);
+        let shape;
+        if (j === segs.length - 1 && h > 4) { const r = Math.min(3, barW / 2); shape = mk('path', { d: `M${x},${y0}V${top + r}Q${x},${top} ${x + r},${top}H${x + barW - r}Q${x + barW},${top} ${x + barW},${top + r}V${y0}Z`, fill }); }
+        else shape = mk('rect', { x, y: top, width: barW, height: h, fill });
+        if (s.info) {
+          shape.dataset.chartSegment = s.segment; shape.dataset.chartCount = String(n);
+          shape.dataset.tip = `${when}: ${s.label || s.k} ${n} · вне пула`;
+          infoShapes.push(shape);
+        } else col.append(shape);
       });
       const hit = mk('rect', { x: i * F.step, y: 16, width: F.step, height: H2 - 40, fill: 'transparent' });
-      hit.dataset.tip = `${byDay ? fmt(w.t) : 'Неделя с ' + fmt(w.t)}: ${what} ${w.all}` + (w.all ? ' · ' + cats.filter(s => w[s.k]).map(s => `${s.k} ${w[s.k]}`).join(', ') : '') + breakTip(w.t, w.t + span - 1)
+      hit.dataset.tip = `${when}: ${what} ${primary}` + (w.all ? ' · ' + segs.map(s => `${s.label || s.k} ${w[s.k]}`).join(', ') : '') + breakTip(w.t, w.t + span - 1)
         + (personal.some(b => b.from <= w.t + span - 1 && b.to >= w.t) ? ' · личный перерыв — в скорость не идёт' : '');
       col.append(hit);
-      if (w.all && F.step >= 26) { const t = mk('text', { x: x + barW / 2, y: F.y(w.all) - 5, 'text-anchor': 'middle' }); t.textContent = w.all; t.style.fill = 'var(--fg)'; col.append(t); }
+      // Штрихованный сегмент поверх зоны клика периода открывает свою выборку.
+      infoShapes.forEach(shape => col.append(shape));
+      if (w.all && F.step >= 26) { const t = mk('text', { x: x + barW / 2, y: F.y(w.all) - 5, 'text-anchor': 'middle' }); t.textContent = info ? `${primary} + ${info}` : w.all; t.style.fill = 'var(--fg)'; col.append(t); }
       const every = Math.ceil(44 / F.step);
       if ((weeks.length - 1 - i) % every === 0) {
         /* подпись у правого края не должна обрезаться — прижимаем её к краю */
@@ -468,7 +494,7 @@
       const off = clipped(cap);
       cap.classList.toggle('off', off); li.hidden = !off;
     }
-    for (const s of document.querySelectorAll('#hero-bar > span, main .sevstrip > span, .dev .pbar > span')) {
+    for (const s of document.querySelectorAll('#hero-bar > span, main .sevstrip > span, .dev .pbar > span, #removed-bar > span')) {
       s.textContent = s.dataset.label || '';
       if (s.textContent && clipped(s)) s.textContent = '';
     }
@@ -477,18 +503,12 @@
 
   function removedTip(rows) {
     if (!rows.length || !rows.every(roles.isRemoved)) return '';
-    const closed = rows.filter(roles.isDone).length;
-    return ` · закрыто ${closed}, открыто ${rows.length - closed}`;
+    const [done, rest] = segments.removed(rows, AS_OF);
+    return ` · готово разработчиками ${done.rows.length}, убрано ${rest.rows.length}`;
   }
-  function appendRemovedSubset(node, rows) {
-    const n = rows.filter(roles.isRemoved).length;
-    if (!n) return;
-    const note = el('small', 'removed-subset', `из них убрано из эпика: ${n}`);
-    node.append(note);
-  }
-
   function renderHead() {
-    const N = recs.length, pct = n => (N ? Math.round(n / N * 100) : 0);
+    const headParts = segments.hero(recs);
+    const N = headParts.reduce((n, part) => n + part.rows.length, 0), pct = n => (N ? Math.round(n / N * 100) : 0);
     const tds = recs.map(r => r.tdateD).filter(d => d !== null).sort((a, b) => a - b);
     $('period').textContent = tds.length ? `Период задач: ${fmt(tds[0])} — ${fmt(tds[tds.length - 1])}` : 'Период: даты задач не найдены';
     /* релиз из --release — перед датой отчёта и во вкладке браузера */
@@ -498,16 +518,16 @@
     const where = DATA.meta.sheet == null ? 'CSV' : `лист «${DATA.meta.sheet}»`;
     $('src').textContent = `${DATA.meta.source}, ${where}, шапка в строке ${DATA.meta.header_row}`;
     $('version').textContent = `cvesummary ${DATA.meta.version}`;
-    const open = recs.filter(r => r.open), working = recs.filter(r => r.working);
-    const ready = open.filter(r => r.reasons.length);
+    const working = recs.filter(r => r.working);
+    const ready = headParts.filter(part => part.group === 'ready').flatMap(part => part.rows);
     $('k-total').textContent = N;
     const u = roles.uniques(recs);
     $('k-cve').textContent = u.tasks;
     $('k-comp').textContent = u.comps;
 
-    /* Полоса и блок «Состояние» выделяют убранные в отдельную категорию.
-       Те же выборки использует drilldown. */
-    const parts = segments.hero(recs).map(x => ({ ...x, k: x.label, l: x.label.toLowerCase(),
+    /* Полоса и общий счётчик исключают убранные; «Состояние» ниже сохраняет
+       все строки. Те же выборки использует drilldown. */
+    const parts = headParts.map(x => ({ ...x, k: x.label, l: x.label.toLowerCase(),
       c: css(x.color), g: x.group, n: x.rows.length, triaged: x.rows.filter(roles.isTriaged).length }));
     const triageText = (n, t) => `растриажено ${t} из ${n} (${Math.round(t / n * 100)}%)`;
     const G = segments.groups(parts).map(x => ({ g: x.key, n: x.rows.length, l: x.label.toLowerCase() }));
@@ -537,12 +557,12 @@
       const lab = x.g === 'ready' ? String(x.n) : pct(x.n) + '%';
       const sp = el('span', null, lab); sp.dataset.label = lab; sp.dataset.segment = x.key; sp.dataset.count = x.n; sp.style.background = x.c;
       sp.style.setProperty('--triaged', (x.triaged / x.n * 100) + '%');
-      sp.dataset.tip = `${x.k}: всего ${x.n} (${pct(x.n)}% от всех задач) · ${triageText(x.n, x.triaged)}` + removedTip(x.rows); mb.append(sp);
+      sp.dataset.tip = `${x.k}: всего ${x.n} (${pct(x.n)}% от всех задач) · ${triageText(x.n, x.triaged)}`; mb.append(sp);
       if (x.g === 'ready') { const li = el('span'); li.dataset.segment = x.key; const sw = el('i', 'sw'); sw.style.background = x.c; li.append(sw, `${x.l} `, el('b', null, String(x.n))); lg.append(li); }
     }
     const extra = ready.filter(r => r.reasons.length > 1).length;
     if (extra) { const li = el('span'); li.textContent = `· у ${extra} ${plural(extra, 'задачи', 'задач', 'задач')} несколько оснований, в полосе — по первому`; lg.append(li); }
-    lg.append(el('span', null, '· штриховка — растриажено'));
+    if (shown.length) lg.append(el('span', null, '· штриховка — растриажено'));
 
     const row = (box, label, note, val, cls, tip, dot) => {
       const d = el('div', cls || null); const k = el('span', 'k', label);
@@ -552,7 +572,7 @@
     };
     const review = working.filter(r => r.review).length, paused = working.filter(r => r.paused).length;
     const st = $('hero-state'); st.replaceChildren();
-    for (const part of segments.heroState(recs)) {
+    for (const part of segments.heroState([...recs, ...SCOPES.removed])) {
       const note = part.key === 'work' ? `ревью ${review} · пауза ${paused}` : part.key === 'none' ? 'без разработчика' : '';
       const node = row(st, part.label, note, part.rows.length, null, removedTip(part.rows), part.color);
       node.dataset.role = part.key;
@@ -565,7 +585,7 @@
     /* темп закрытия команды, как в «Темпе и прогнозе»: расчётно закрытые по
        End date на рабочий день — за всё время с начала работы и за период
        темпа (он уже посчитан: renderPace идёт раньше) */
-    const all = pace.rates(recs, AS_OF, Infinity, START, undefined, BREAKS), win = paceCtx.historical, closedAll = all.closed;
+    const all = pace.rates(recs, AS_OF, Infinity, START, undefined, BREAKS, SCOPES.speed), win = paceCtx.historical, closedAll = all.closed;
     row(rk, 'Задач в день', `за период темпа ${win.rateDays ? f1(win.outR) : '—'}${win.calendarRate ? ' за календ. день' : ''}`, START !== null && all.rateDays ? f1(all.outR) : '—', null,
       `За всё время ${f1(all.outR)} (${closedAll} ${plural(closedAll, 'задача', 'задачи', 'задач')} за ${rateSpan(all)}${all.cut ? `, без ${wdays(all.cut)} перерывов в работе` : ''}); за период темпа ${win.rateDays ? f1(win.outR) : '—'} за ${rateSpan(win)}`);
 
@@ -606,13 +626,18 @@
     if (!groups.length) { const e = el('div', 'p', 'Нет данных'); e.style.gridColumn = '1/-1'; e.style.textAlign = 'left'; box.append(e); return; }
     for (const g of groups) {
       const n = g.recs.length, devs = new Set(g.recs.map(r => r.devKey).filter(Boolean)).size;
-      const hrs = g.recs.map(r => r.hours).filter(h => h !== null), sum = hrs.reduce((a, h) => a + h, 0);
+      const hrs = g.info ? [] : g.recs.map(r => r.hours).filter(h => h !== null), sum = hrs.reduce((a, h) => a + h, 0);
       const k = el('div', 'k'); const i = el('i'); i.style.background = css(g.c); k.append(i, g.k); k.title = g.k; k.dataset.key = g.k;
       const b = el('div', 'b'); const w = el('span'); w.style.width = (n / mx * 100) + '%';
       const c1 = el('span'); c1.style.flexGrow = 1; c1.style.background = css(g.c); w.append(c1); b.append(w);
-      b.dataset.tip = `${g.k}: ${n} из ${N}`;
-      const cells = [k, b, el('div', 'n', String(n)), el('div', 'p', (N ? Math.round(n / N * 100) : 0) + '%'), el('div', 'n', String(devs)),
+      if (g.style) { i.setAttribute('style', g.style); c1.setAttribute('style', g.style); c1.style.flexGrow = 1; }
+      b.dataset.tip = g.info ? `${g.k}: ${n} · вне пула` : `${g.k}: ${n} из ${N}`;
+      const cells = [k, b, el('div', 'n', String(n)), el('div', 'p', g.info ? '—' : (N ? Math.round(n / N * 100) : 0) + '%'), el('div', 'n', String(devs)),
         el('div', 'n', sum ? f1(sum) + ' ч' : '—'), el('div', 'n', hrs.length && sum ? f1(sum / hrs.length) + ' ч' : '—')];
+      if (g.info) {
+        cells.forEach(cell => { cell.dataset.status = 'removed'; });
+        for (const cell of [cells[3], cells[5], cells[6]]) cell.dataset.tip = 'Вне пула: доля и часы не рассчитываются';
+      }
       if (sum) { cells[5].dataset.tip = 'Часы, вложенные в задачи этого статуса по модели часов'; cells[6].dataset.tip = `В среднем на задачу, по ${hrs.length} задачам с часами`; }
       if (mob) box.append(cells[0], ...cells.slice(2), cells[1]); else cells.forEach(x => box.append(x));
     }
@@ -628,6 +653,56 @@
     statTable('measrows', 'Мера', mg, true);
     const st = $('measstrip'); st.replaceChildren(); const tot = mg.reduce((a, g) => a + g.recs.length, 0);
     for (const g of mg) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${tot ? Math.round(g.recs.length / tot * 100) : 0}%)`; sp.dataset.key = g.k; st.append(sp); }
+  }
+
+  function renderRemoved() {
+    const removed = SCOPES.removed, bar = $('removed-bar'), groups = $('removed-groups'), legend = $('removed-leg');
+    const parts = segments.removed(removed, AS_OF).map(part => ({ ...part,
+      parts: part.parts.map(p => ({ ...p, color: p.group === 'done' ? measColor(p.measure) : AI_GROUP_COLOR[p.aiGroup] })),
+    }));
+    const shown = parts.flatMap(p => p.parts), colorOf = p => p.color.startsWith('--') ? css(p.color) : p.color;
+    $('removed-count').textContent = String(removed.length);
+    for (const box of [bar, groups, legend]) box.replaceChildren();
+    groups.style.gridTemplateColumns = bar.style.gridTemplateColumns = shown.map(p => `minmax(3px,${p.rows.length}fr)`).join(' ');
+    for (const part of parts.filter(p => p.rows.length)) {
+      const n = part.rows.length, tip = `${part.label}: ${n} из ${removed.length} (${Math.round(n / removed.length * 100)}%)`
+        + (part.key === 'done' ? ' · завершено разработчиками, кроме SecOps' : '');
+      const group = el('div'), cap = el('div', 'cap');
+      group.style.gridColumn = `span ${part.parts.length}`;
+      cap.dataset.segment = part.key; cap.dataset.tip = tip;
+      cap.append(el('b', null, String(n)), el('span', null, part.label));
+      group.append(cap, el('div', 'br')); groups.append(group);
+      const fallback = el('span'); fallback.hidden = true; fallback.dataset.segment = part.key;
+      fallback.append(`${part.label} `, el('b', null, String(n))); legend.append(fallback);
+      stripCaps.push([cap, fallback]);
+    }
+    for (const part of shown) {
+      const n = part.rows.length, segment = el('span');
+      segment.dataset.segment = part.key; segment.dataset.group = part.group || part.key;
+      segment.dataset.tip = `${part.group === 'done' ? 'Готово' : 'Убрано'} · ${part.label}: ${n} из ${removed.length} (${Math.round(n / removed.length * 100)}%)`;
+      segment.style.flexGrow = n; segment.style.background = colorOf(part); bar.append(segment);
+    }
+    const rows = $('removed-rows'); rows.replaceChildren();
+    [['Категория', 'h l'], ['', 'h bar'], ['Всего', 'h'], ['% от всех', 'h']].forEach(([text, cls]) => rows.append(el('div', cls, text)));
+    const max = maxOf(parts.map(part => part.rows.length), 1), mobile = matchMedia('(max-width:560px)').matches;
+    for (const part of parts) {
+      const n = part.rows.length, label = el('div', 'k'), dot = el('i');
+      dot.style.background = css(part.color); label.append(dot, part.label); label.dataset.key = part.key;
+      label.title = part.label;
+      const mini = el('div', 'b track'), fill = el('span');
+      fill.style.width = (n / max * 100) + '%';
+      for (const sub of part.parts) {
+        const color = el('span'); color.style.flexGrow = sub.rows.length; color.style.background = colorOf(sub);
+        color.dataset.segment = sub.key; color.dataset.tip = `${sub.label}: ${sub.rows.length}`; fill.append(color);
+      }
+      mini.append(fill); mini.dataset.tip = `${part.label}: ${n} из ${removed.length}`;
+      const count = el('div', 'n', String(n));
+      count.id = part.key === 'done' ? 'removed-done-count' : 'removed-rest-count';
+      const percent = el('div', 'p', (removed.length ? Math.round(n / removed.length * 100) : 0) + '%');
+      const cells = [label, mini, count, percent];
+      cells.forEach(cell => { cell.dataset.segment = part.key; });
+      rows.append(...(mobile ? [label, count, percent, mini] : cells));
+    }
   }
 
   function pill(r) { const p = el('span', 'pill'); const i = el('i'); i.style.background = css(sevColor(r.sevN)); p.append(i, r.sevN); const td = el('td'); td.append(p); return td; }
@@ -726,13 +801,23 @@
   }
 
   /* поступление: по неделям или по дням; выбор помнится */
+  const REMOVED_INFLOW = { k: '\u0002removed', label: 'Убрано из эпика', c: '--st-removed',
+    info: true, hatch: true, segment: 'removed',
+    style: REMOVED_HATCH_STYLE };
   let inflowBy = LS.get('cve.inflowBy') === 'day' ? 'day' : 'week';
   function renderInflow() {
-    const byDay = inflowBy === 'day', items = recs.map(r => [r.tdateD, r.sevN]);
-    $('weeks-sub').textContent = `По полю Task date${byDay ? '' : ', неделя начинается в понедельник'}, с разбивкой по критичности (RHEL severity)`;
+    const byDay = inflowBy === 'day';
+    const removed = SCOPES.removed.filter(r => !(r.bad || []).includes('tdate'))
+      .map(r => [dates.dayOf(r.tdate), REMOVED_INFLOW.k]).filter(([d]) => d !== null && d <= AS_OF);
+    const items = recs.map(r => [r.tdateD, r.sevN]).concat(removed), cats = removed.length ? SEV.concat([REMOVED_INFLOW]) : SEV;
+    // Начало истории убранных расширяет только этот график, не период расчётов.
+    const from = removed.length ? minOf(removed.map(([d]) => d), FIRST ?? Infinity) : FIRST;
+    $('weeks-sub').textContent = `По полю Task date${byDay ? '' : ', неделя начинается в понедельник'}, с разбивкой по критичности (RHEL severity)`
+      + (removed.length ? ' · штриховка и + в подписях — убрано из эпика, вне пула' : '');
     $('weeks').setAttribute('aria-label', `Количество задач по ${byDay ? 'дням' : 'неделям'}`);
     for (const b of $('inflow-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === inflowBy));
-    stackChart($('weeks'), byDay ? daysOf(items, SEV) : weeksOf(items, SEV), SEV, 'поступило', byDay);
+    legend('weekleg', BREAKS.length ? cats.concat([BREAK_CAT]) : cats);
+    stackChart($('weeks'), byDay ? daysOf(items, cats, from) : weeksOf(items, cats, from), cats, 'поступило', byDay);
   }
 
   function renderBars() {
@@ -748,8 +833,10 @@
     strip('rhelstrip', rg); statTable('rhel', 'Состояние', rg);
     const dsColor = k => roleColor(recs.find(r => statusKey(r) === k));
     const dg = count(recs, statusKey).map(([k]) => ({ k, c: dsColor(k), recs: recs.filter(r => statusKey(r) === k) }));
+    if (SCOPES.removed.length) dg.push({ k: 'Убрано из эпика', c: '--st-removed', info: true, style: REMOVED_HATCH_STYLE,
+      recs: SCOPES.removed.map(r => ({ ...r, devKey: roles.devOf(r) })) });
+    $('devstatus-sub').textContent = 'статус у разработчика' + (SCOPES.removed.length ? ' · «Убрано из эпика» показано справочно, вне пула' : '');
     statusTable('devstatus', 'Статус', dg);
-    legend('weekleg', BREAKS.length ? SEV.concat([BREAK_CAT]) : SEV);
     renderInflow();
   }
 
@@ -806,7 +893,7 @@
     $('pace-scenarios').hidden = plan;
     const body = $('scenario-body'); body.replaceChildren();
     if (plan) return;
-    for (const x of pace.scenarios(recs, AS_OF, START, stop, target, end, BREAKS)) {
+    for (const x of pace.scenarios(recs, AS_OF, START, stop, target, end, BREAKS, SCOPES.speed)) {
       const R = x.rates, capacity = activity.team(ACTIVITY, x.from, x.to);
       const F = windowForecast(R, capacity.outR, stop, target), tr = el('tr');
       const window = el('td'); window.append(el('b', null, `${x.window} дней`), el('small', null, R.days ? `${fmt(x.from)} — ${fmt(x.to)}` : 'Окно не пересекается с рабочим периодом'),
@@ -934,7 +1021,7 @@
     if (wb === null || wb > AS_OF) wb = AS_OF;
     if (wa === null) wa = wb - 13;
     if (wa > wb) [wa, wb] = [wb, wa];
-    const R = pace.rates(recs, AS_OF, wb - wa + 1, START, wb, BREAKS);
+    const R = pace.rates(recs, AS_OF, wb - wa + 1, START, wb, BREAKS, SCOPES.speed);
     const WINDOW = { from: wb - R.days + 1, to: wb };
     const capacity = activity.team(ACTIVITY, WINDOW.from, WINDOW.to);
     const future = Object.assign({}, R, { outR: capacity.outR });
@@ -946,7 +1033,7 @@
     $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}: ${days(R.days)}, из них ${wdays(R.work)}${cutText(R)}` + (WINDOW.from > wa ? ` — начало прижато к началу работы` : '');
     $('pace-sub').textContent += ` · прогноз: ${capacity.active} из ${capacity.total} разработчиков, ${f1(capacity.outR)} задач/день`;
     if (!R.days) $('pace-sub').textContent = noPeriod;
-    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Закрытие по дате — расчётно закрытая задача («Готов» или «Убрано из эпика» по разработчику и датам) с заполненным End date. SecOps с «Убрано из эпика» без End date уменьшает остаток, но не добавляет закрытие в скорость. Сканфриз — первый день без новых задач. До него новые задачи приходят каждый календарный день, закрываем по рабочим дням, Пн–Пт, без учёта праздников. Свободная мощность не накапливается. Завершение — после последних поступлений, а не при первом нуле в очереди. Перерыв в работе — ${pace.BREAK_WORKDAYS} и больше рабочих дней подряд, когда ни на ком из разработчиков (кроме SecOps) не висело задач: его рабочие дни и закрытое в нём в темп закрытия не идут, на графиках он заштрихован.`;
+    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Убрано из эпика не входит в пул: остаток, поступление, баланс, графики и часы считаются без этих задач. Только скорость в задачах за день дополнительно учитывает убранные задачи, завершённые разработчиком, кроме SecOps: нужны корректные Start date и End date, конец не раньше начала и не позже даты отчёта. Незавершённые убранные задачи не влияют на рабочие дни и перерывы. Сканфриз — первый день без новых задач. До него новые задачи приходят каждый календарный день, закрываем по рабочим дням, Пн–Пт, без учёта праздников. Свободная мощность не накапливается. Завершение — после последних поступлений, а не при первом нуле в очереди. Перерыв в работе — ${pace.BREAK_WORKDAYS} и больше рабочих дней подряд, когда ни на ком из разработчиков (кроме SecOps) не висело задач: его рабочие дни и закрытое в нём в темп закрытия не идут, на графиках он заштрихован.`;
     /* средние — за период, в подсказке — сколько это задач; баланс — сколько
        реально пришло минус закрыто за выбранный период */
     const inN = Math.round(R.inR * R.days), outN = R.closed, bal = inN - R.closedTotal;
@@ -994,7 +1081,21 @@
 
   function renderPeople(W) {
     const devs = count(recs, r => r.devKey);
+    const assigned = new Set(devs.map(([name]) => name));
+    // Завершённая убранная работа сохраняет личную скорость, но не число
+    // назначенных задач, нагрузку или часы пула.
+    for (const name of ACTIVITY.people.keys()) if (!assigned.has(name)) devs.push([name, 0]);
     const devColor = new Map(devs.map(([d], i) => [d, i < 8 ? `--c${i + 1}` : '--sev-none']));
+    const chartNames = [...devColor.keys()], removedByDev = new Map();
+    for (const r of SCOPES.removed) {
+      const name = roles.devOf(r); if (!name) continue;
+      if (!removedByDev.has(name)) removedByDev.set(name, []);
+      removedByDev.get(name).push(r);
+    }
+    // Справочные карточки не добавляют людей в состав команды и график закрытий.
+    for (const name of removedByDev.keys()) if (!devColor.has(name)) {
+      devs.push([name, 0]); devColor.set(name, '--st-removed');
+    }
     const doneKeys = recs.filter(r => r.taken && r.done);
     const measKeys = roles.measureOrder(doneKeys.map(r => r.measureN));
     const ppl = $('people'); ppl.replaceChildren();
@@ -1005,28 +1106,43 @@
     };
     for (const [d, n] of devs) {
       const mine = recs.filter(r => r.devKey === d), done = mine.filter(r => r.done), col = devColor.get(d);
-      const person = ACTIVITY.people.get(d);
-      const personalBreaks = person.breaks;
-      const card = el('article', 'dev'); card.style.setProperty('--dc', css(col));
+      const person = ACTIVITY.people.get(d), removedMine = removedByDev.get(d) || [];
+      const card = el('article', person ? 'dev' : 'dev dev-info-only'); card.style.setProperty('--dc', css(col));
       const c1 = el('div');
       const h = el('h3'); const sw = el('i'); sw.style.background = css(col); h.append(sw, d); c1.append(h);
       const big = el('div', 'big', String(n)); big.append(el('small', null, 'задач назначено')); c1.append(big);
       const bar = el('div', 'pbar');
-      for (const part of segments.person(mine)) {
-        const sp = el('span'); sp.style.flexGrow = part.rows.length; sp.style.background = css(part.color);
-        sp.dataset.segment = part.key; sp.dataset.tip = `${d} · ${part.label}: ${part.rows.length}` + removedTip(part.rows); bar.append(sp);
+      const shownParts = segments.person(mine);
+      if (removedMine.length) shownParts.push({ key: 'removed', label: 'Убрано из эпика', color: '--st-removed', rows: removedMine });
+      for (const part of shownParts) {
+        const sp = el('span'); sp.style.background = css(part.color);
+        if (part.key === 'removed') sp.setAttribute('style', REMOVED_HATCH_STYLE);
+        sp.style.flexGrow = part.rows.length;
+        sp.dataset.segment = part.key; sp.dataset.tip = `${d} · ${part.label}: ${part.rows.length}`
+          + (part.key === 'removed' ? ' · вне пула' : ''); bar.append(sp);
       }
       c1.append(bar);
-      /* Счётчики включают убранные по роли; сегменты показывают их отдельно. */
+      /* Основные счётчики — пул; убранные показаны отдельно, справочно. */
       const stat = el('div', 'dstat');
       const names = { done: 'готово', work: 'в работе', review: 'ревью', pause: 'пауза', bad: 'проблемы' };
-      for (const part of segments.personCounts(mine)) {
+      for (const part of person ? segments.personCounts(mine) : []) {
         const k = part.rows.length, row = el('div', k ? null : 'zero'); row.dataset.role = part.key;
         const i = el('i'); i.style.background = css(part.color);
         row.append(i, el('span', null, names[part.key]), el('b', null, String(k)));
-        appendRemovedSubset(row, part.rows); stat.append(row);
+        stat.append(row);
+      }
+      if (removedMine.length) {
+        const row = el('div'); row.dataset.role = 'removed';
+        row.dataset.tip = `${d} · Убрано из эпика: ${removedMine.length} · вне пула`;
+        const swatch = el('i'); swatch.setAttribute('style', REMOVED_HATCH_STYLE);
+        row.append(swatch, el('span', null, 'убрано из эпика'), el('b', null, String(removedMine.length))); stat.append(row);
       }
       c1.append(stat);
+      if (!person) {
+        c1.append(el('div', 'dnow', 'Только убранные задачи · вне пула'));
+        card.append(c1); ppl.append(card); continue;
+      }
+      const personalBreaks = person.breaks;
       /* нагрузка: сколько задач висит на нём в дату отчёта и сколько часов
          его дня достаётся каждой (8 ч делятся поровну) */
       /* меньше 0,1 ч — в минутах, иначе выйдет «по 0 ч» */
@@ -1098,7 +1214,7 @@
       boxes.forEach(o => { if (o !== b && o.scrollLeft !== b.scrollLeft) { o.scrollLeft = b.scrollLeft; timeline.sync(o); } });
       syncing = false;
     }, { passive: true }));
-    const names = [...devColor.keys()];
+    const names = chartNames;
     const cats = names.slice(0, 8).map(k => ({ k, c: devColor.get(k) }));
     if (names.length > 8) cats.push({ k: 'Другие', c: '--sev-none' });
     legend('burnleg', cats.concat([{ k: 'окно темпа', c: '--accent-soft' }], BREAKS.length ? [BREAK_CAT] : []));
@@ -1138,6 +1254,7 @@
   /* AI и Remediation: что AI сказал по парам CVE + компонент и что по ним
      делать; серым — сколько ещё не прогнано (модуль ai) */
   const AI_NOTRUN = 'color-mix(in srgb, var(--muted) 30%, var(--panel))';
+  const AI_GROUP_COLOR = { maybe: '--sev-imp', no: '--st-done', none: AI_NOTRUN };
   const AI_OTHER = '--st-idle';  // незнакомое значение
   const AI_VERDICT_COLOR = { 'affected': '--sev-imp', 'not affected': '--st-done', 'unclear': '--sev-mod',
     'invalid CVE': '--rs-patch', 'rejected CVE': '--rs-range', [ai.NOT_PROCESSED]: '--sev-none' };
@@ -1243,6 +1360,8 @@
   document.addEventListener('mouseover', ev => {
     undim();
     const t = ev.target, seg = t.closest('main .sevstrip > span');
+    // Составные минибары подсвечивают отдельный сегмент, как «Компоненты».
+    if (t.closest('.removed-rows .track > span > span')) return;
     const box = t.closest('.cve-rows') || (seg && seg.closest('.cve-grid') && seg.closest('.cve-grid').querySelector('.cve-rows'));
     const strip = seg ? seg.parentNode : box && box.closest('.cve-grid') && box.closest('.cve-grid').querySelector('.sevstrip');
     const cells = box ? [...box.children] : [];
@@ -1264,15 +1383,16 @@
       parts.forEach((s, i) => { s.dataset.label = text[i]; s.style.color = strips.ink(getComputedStyle(s).backgroundColor); });
     };
     document.querySelectorAll('main .sevstrip').forEach(bar => label(bar, 'pct'));
-    document.querySelectorAll('.dev .pbar').forEach(bar => label(bar, 'n'));
+    document.querySelectorAll('.dev .pbar, #removed-bar').forEach(bar => label(bar, 'n'));
   }
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { labelStrips(); fitLabels(); });
 
   function render() {
+    stripCaps = [];
     /* темп — первым: строка «Задач в день» в шапке берёт его период */
     const W = renderPace();
-    renderHead(); renderCuts(); renderTables(); renderBars();
-    renderPeople(W); renderAnomalies(); stripCaps = []; renderAi(); renderRemediation();
+    renderHead(); renderCuts(); renderTables(); renderRemoved(); renderBars();
+    renderPeople(W); renderAnomalies(); renderAi(); renderRemediation();
     labelStrips(); fitLabels(); navSync();
   }
 
