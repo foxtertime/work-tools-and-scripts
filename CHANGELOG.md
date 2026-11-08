@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-11-08
+
 ### Исправлено
 
 - `vulnsheet` (5.0.1): `--table` читает CSV с дополнительным `;` в конце
@@ -562,7 +564,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.32.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.32.1...HEAD
+[0.32.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.29.0...v0.30.0
