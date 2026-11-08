@@ -40,9 +40,11 @@
   function hero(rows) {
     return partition(rows.filter(r => !roles.isRemoved(r)), [
       { key: 'done', label: 'Готово', color: '--st-done', group: 'done', test: roles.isDone },
-      { key: 'none', label: 'Без решения', color: '--rs-none', group: 'none', test: r => roles.isOpen(r) && !r.reasons.length },
+      { key: 'review', label: 'Ревью', color: '--st-review', group: 'review', test: roles.isReview },
+      { key: 'work', label: 'В работе', color: '--st-work', group: 'work', test: r => roles.isWorking(r) && !roles.isReview(r) },
+      { key: 'none', label: 'Не взято', color: '--rs-none', group: 'none', test: r => roles.isOpen(r) && !roles.isReview(r) && !roles.isWorking(r) && !r.reasons.length },
       ...[['fixed', 'Фикс в RHEL'], ['patch', 'Устранено ранее'], ['range', 'Вне диапазона'], ['dup', 'Дубликат']]
-        .map(([key, label]) => ({ key, label, color: '--rs-' + key, group: 'ready', test: r => roles.isOpen(r) && r.reasons[0] === key })),
+        .map(([key, label]) => ({ key, label, color: '--rs-' + key, group: 'ready', test: r => roles.isOpen(r) && !roles.isReview(r) && !roles.isWorking(r) && r.reasons[0] === key })),
     ], false);
   }
   // Категории блока «Состояние» не пересекаются; нулевые счётчики остаются.

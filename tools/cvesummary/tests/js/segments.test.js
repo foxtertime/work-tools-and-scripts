@@ -70,7 +70,7 @@ test('header excludes two removed tasks while personal segments and semantic cou
     removed({ start: '2026-11-02', end: '2026-11-05' }), removed({ dev: 'SecOps' }),
     row('В работе'), row('В работе')];
   assert.deepEqual(size(segments.person(rows)), { removed: 2, done: 6, work: 2 });
-  assert.deepEqual(size(segments.hero(rows)), { done: 6, none: 2 });
+  assert.deepEqual(size(segments.hero(rows)), { done: 6, work: 2 });
   assert.equal(rows.filter(roles.isDone).length, 8);
   for (const fn of [segments.person, segments.hero]) {
     const parts = fn(rows);
@@ -97,16 +97,35 @@ test('header state counts removed separately from ordinary done, working and una
   assert.ok(segments.groups(segments.hero(rows)).every(p => !p.label.includes('без убранных')));
 });
 
-test('header excludes every removed role and retains disjoint ordinary ready groups', () => {
+test('header excludes every removed role and retains ordinary working tasks with closure reasons', () => {
   assert.ok(segments, 'shared segments module must exist');
   const rows = [removed({ dev: 'SecOps' }), removed({ start: '2026-11-02', reasons: ['patch'] }),
     removed({ dev: '' }), row('В работе', { reasons: ['fixed', 'patch'] }), row('В работе', { reasons: ['dup'] })];
-  assert.deepEqual(size(segments.hero(rows)), { fixed: 1, dup: 1 });
-  assert.deepEqual(size(segments.groups(segments.hero(rows))), { ready: 2 });
+  assert.deepEqual(size(segments.hero(rows)), { work: 2 });
+  assert.deepEqual(size(segments.groups(segments.hero(rows))), { work: 2 });
   assert.deepEqual(size(segments.person(rows.filter(roles.isTaken))), { removed: 2, work: 2 });
   assert.equal(segments.person([row('Готов')])[0].label, 'Готово');
   assert.deepEqual(segments.hero([removed({ dev: 'SecOps' }), removed({ dev: '' })]), []);
   assert.deepEqual(segments.hero([]), []);
+});
+
+test('header moves review and working tasks out of every right-hand segment without changing pool membership', () => {
+  const reasons = [[], ['fixed', 'patch'], ['patch'], ['range'], ['dup']];
+  const reviews = reasons.map(reasons => row('Ожидает ревью', { reasons }));
+  reviews[4] = row('  ОЖИДАЕТ  ревью ', { dev: '', reasons: ['dup'] });
+  const working = reasons.map(reasons => row('В работе', { reasons })).concat(
+    ['На паузе', 'Есть проблема', 'Нужна доработка', '', 'Свой статус'].map(status => row(status)));
+  const pending = reasons.map(reasons => row('В работе', { dev: '', reasons }));
+  const rows = [row('Готов'), ...reviews, ...working, ...pending, removed({ dev: 'SecOps' })];
+  const parts = segments.hero(rows);
+  assert.deepEqual(parts.map(p => p.key), ['done', 'review', 'work', 'none', 'fixed', 'patch', 'range', 'dup']);
+  assert.deepEqual(size(parts), { done: 1, review: 5, work: 10, none: 1, fixed: 1, patch: 1, range: 1, dup: 1 });
+  assert.deepEqual(parts.find(p => p.key === 'review').rows, reviews);
+  assert.deepEqual(parts.find(p => p.key === 'work').rows, working);
+  assert.deepEqual(parts.slice(3).flatMap(p => p.rows), pending);
+  assert.equal(parts.flatMap(p => p.rows).length, 21);
+  assert.equal(new Set(parts.flatMap(p => p.rows)).size, 21);
+  assert.deepEqual(size(segments.groups(parts)), { done: 1, review: 5, work: 10, none: 1, ready: 4 });
 });
 
 test('unique representatives prefer ordinary rows but all-removed pairs remain visible', () => {

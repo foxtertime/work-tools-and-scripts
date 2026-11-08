@@ -35,6 +35,21 @@ let checks=0;
   await load('index');
   const source=JSON.parse(await page.locator('#data').textContent());
   const poolRows=source.rows.filter(r=>!R.isRemoved(r));
+  const reviewRows=poolRows.filter(r=>r.status==='Ожидает ревью').map(r=>r.row).sort((a,b)=>a-b);
+  const workRows=poolRows.filter(r=>String(r.dev||'').trim() && !['Готов','Ожидает ревью'].includes(r.status)).map(r=>r.row).sort((a,b)=>a-b);
+  assert.ok(reviewRows.length>0);
+  assert.ok(workRows.length>0);
+  assert.deepEqual(await page.locator('#hero-bar > span').evaluateAll(nodes=>nodes.slice(0,4).map(n=>n.dataset.segment)),['done','review','work','none']);
+  assert.equal(await page.locator('#hero-bar > span').evaluateAll(nodes=>nodes.reduce((n,s)=>n+Number(s.dataset.count),0)),100);
+  for(const [key,expected] of [['review',reviewRows],['work',workRows]]) {
+   for(const selector of [`#hero-bar [data-segment="${key}"]`,`#hero-groups [data-group="${key}"] .cap`]) {
+    await page.locator(selector).click(); assert.deepEqual(await rownums(),expected); await close(); checks++;
+   }
+  }
+  for(const segment of await page.locator('#hero-bar > span').all()) {
+   if(['review','work'].includes(await segment.getAttribute('data-segment'))) continue;
+   await segment.click(); assert.ok((await rownums()).every(row=>!reviewRows.includes(row)&&!workRows.includes(row))); await close(); checks++;
+  }
   await page.locator('#k-total').focus(); await page.keyboard.press('Enter');
   assert.equal(await count(),100); assert.equal(await page.locator('#drill-body tr[data-row]').count(),50); checks++;
   const taskLink=page.locator('#drill-body tr[data-row] td:nth-child(2) a').first();
