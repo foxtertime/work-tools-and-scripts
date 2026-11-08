@@ -566,8 +566,8 @@
       const lab = x.g === 'ready' ? String(x.n) : pct(x.n) + '%';
       const sp = el('span', null, lab); sp.dataset.label = lab; sp.dataset.segment = x.key; sp.dataset.count = x.n; sp.style.background = x.c;
       sp.style.setProperty('--triaged', (x.triaged / x.n * 100) + '%');
-      sp.dataset.tip = `${x.k}: всего ${x.n} (${pct(x.n)}% от всех задач) · ${triageText(x.n, x.triaged)}`; mb.append(sp);
-      if (x.g === 'ready') { const li = el('span'); li.dataset.segment = x.key; const sw = el('i', 'sw'); sw.style.background = x.c; li.append(sw, `${x.l} `, el('b', null, String(x.n))); lg.append(li); }
+      sp.dataset.tip = `${x.g === 'done' ? 'Готово · ' : ''}${x.k}: всего ${x.n} (${pct(x.n)}% от всех задач) · ${triageText(x.n, x.triaged)}`; mb.append(sp);
+      if (x.g === 'ready' || x.g === 'done') { const li = el('span'); li.dataset.segment = x.key; const sw = el('i', 'sw'); sw.style.background = x.c; li.append(sw, `${x.g === 'done' ? x.k : x.l} `, el('b', null, String(x.n))); lg.append(li); }
     }
     const extra = ready.filter(r => r.reasons.length > 1).length;
     if (extra) { const li = el('span'); li.textContent = `· у ${extra} ${plural(extra, 'задачи', 'задач', 'задач')} несколько оснований, в полосе — по первому`; lg.append(li); }

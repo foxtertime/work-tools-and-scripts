@@ -117,3 +117,16 @@ for i, (dev, status, end, measure, bad) in enumerate([
 (out / "review-charts.html").write_text(page.render(review_charts), encoding="utf-8")
 review_only = {"meta": review_charts["meta"], "rows": [dict(review_charts["rows"][2], start="")]}
 (out / "review-only-chart.html").write_text(page.render(review_only), encoding="utf-8")
+
+header_done = {"meta": dict(data["meta"], as_of="2026-11-05", missing=[]), "rows": []}
+for i, (dev, status) in enumerate([
+    ("SecOps", "Готов"), (" secOPS ", "Готов"), ("Алиса", "Готов"),
+    ("Борис", "Готов"), ("", "Готов"), ("SecOps", "Ожидает ревью"),
+    ("Алиса", "В работе"), ("SecOps", "Убрано из эпика"),
+    ("Алиса", "Убрано из эпика"), ("", ""),
+]):
+    header_done["rows"].append(dict(data["rows"][0], row=i + 2, cve="CVE-2026-%d" % (9800 + i),
+        dev=dev, status=status, start="2026-11-02" if dev else "", end="2026-11-05" if dev else "",
+        tdate="2026-11-02", measure="Закрыто SecOps" if i == 3 else "Патч из апстрима",
+        bad=[], p="", d="", rstate="Affected"))
+(out / "header-done.html").write_text(page.render(header_done), encoding="utf-8")

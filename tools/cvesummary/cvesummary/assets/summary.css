@@ -1,7 +1,7 @@
 /* Layout: a dark "terminal" hero band with the headline counts, then a two-column report grid; severity reads as a warm sequential ramp everywhere. */
 :root{
   /* статусы задач (st), основания «можно закрыть» (rs), ступени мер (m) */
-  --st-removed:#45515F;--st-done:#2E7D4F;--st-work:#2E7FB0;--st-review:#0F8F8F;--st-pause:#B7791F;--st-bad:#B42318;--st-idle:#A9B6C2;
+  --st-removed:#45515F;--st-done:#2E7D4F;--st-done-secops:#91C6A4;--st-work:#2E7FB0;--st-review:#0F8F8F;--st-pause:#B7791F;--st-bad:#B42318;--st-idle:#A9B6C2;
   --rs-fixed:#8CC6E3;--rs-patch:#4FA6D3;--rs-range:#22709A;--rs-dup:#7F88C9;--rs-none:#E0693F;
   --m1:var(--accent);--m2:color-mix(in srgb,var(--accent) 86%,var(--panel));--m3:color-mix(in srgb,var(--accent) 74%,var(--panel));--m4:color-mix(in srgb,var(--accent) 63%,var(--panel));--m5:color-mix(in srgb,var(--accent) 53%,var(--panel));--m6:color-mix(in srgb,var(--accent) 44%,var(--panel));--m7:color-mix(in srgb,var(--accent) 36%,var(--panel));--m8:color-mix(in srgb,var(--accent) 29%,var(--panel));--m9:color-mix(in srgb,var(--accent) 23%,var(--panel));--m10:color-mix(in srgb,var(--accent) 18%,var(--panel));
   --c1:#2a78d6;--c2:#eb6834;--c3:#1baf7a;--c4:#eda100;--c5:#e87ba4;--c6:#008300;--c7:#6250d6;--c8:#e34948;
@@ -15,7 +15,7 @@
   --f-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --st-removed:#45515F;--st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#5AD3C8;--st-pause:#E3A846;--st-bad:#F27063;--st-idle:#4A5B6A;
+  --st-removed:#45515F;--st-done:#5CC48A;--st-done-secops:#A2DAB5;--st-work:#5DB3D6;--st-review:#5AD3C8;--st-pause:#E3A846;--st-bad:#F27063;--st-idle:#4A5B6A;
   --rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B;
   --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;--c6:#008300;--c7:#9085e9;--c8:#e66767;
   --bg:#0C141B; --panel:#121D27; --fg:#E4ECF2; --muted:#93A6B5; --line:#223241; --grid:#1A2834;
@@ -24,7 +24,7 @@
   --sev-crit:#FF8A6B; --sev-imp:#E0693F; --sev-mod:#A65A33; --sev-low:#6A4532; --sev-none:#3A4A58;
   --ok:#5CC48A; --warn:#E3A846; --bad:#F27063; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --st-removed:#45515F;--st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#5AD3C8;--st-pause:#E3A846;--st-bad:#F27063;--st-idle:#4A5B6A;
+  --st-removed:#45515F;--st-done:#5CC48A;--st-done-secops:#A2DAB5;--st-work:#5DB3D6;--st-review:#5AD3C8;--st-pause:#E3A846;--st-bad:#F27063;--st-idle:#4A5B6A;
   --rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B;
   --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;--c6:#008300;--c7:#9085e9;--c8:#e66767;
   --bg:#0C141B; --panel:#121D27; --fg:#E4ECF2; --muted:#93A6B5; --line:#223241; --grid:#1A2834;
@@ -56,7 +56,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,52px);l
 .src.err{color:#FF8A6B}
 
 /* шапка всегда тёмная — в ней всегда тёмные значения палитры */
-.hero{--st-removed:#45515F;--st-done:#5CC48A;--st-work:#5DB3D6;--st-review:#5AD3C8;--st-pause:#E3A846;--st-bad:#FF8A6B;--st-idle:#4A5B6A;--rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B}
+.hero{--st-removed:#45515F;--st-done:#5CC48A;--st-done-secops:#A2DAB5;--st-work:#5DB3D6;--st-review:#5AD3C8;--st-pause:#E3A846;--st-bad:#FF8A6B;--st-idle:#4A5B6A;--rs-fixed:#BFE3F2;--rs-patch:#7FC6E4;--rs-range:#3E9CC4;--rs-dup:#9AA9D6;--rs-none:#FF8A6B}
 .hero-total{text-align:right}
 .hero-total .n{font:700 clamp(48px,7vw,72px)/1 var(--f-display);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
 .hero-total .s{font-size:13px;color:var(--hero-muted)}

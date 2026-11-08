@@ -36,7 +36,7 @@ assert.equal(fixture.status, 0, fixture.stderr);
       assert.equal(await p.locator('#p-out').innerText(), '0,3');
       await p.goto(pathToFileURL(path.join(base, 'review.html')).href);
       assert.deepEqual(await poolValues(), before);
-      assert.equal(await p.locator('#hero-bar [data-segment="done"]').getAttribute('data-count'), '1');
+      assert.equal(await p.locator('#hero-bar [data-segment="done-dev"]').getAttribute('data-count'), '1');
       assert.equal(await p.locator('#hero-bar [data-segment="review"]').getAttribute('data-count'), '3');
       assert.equal(await p.locator('#p-open').innerText(), '3');
       assert.equal(await p.locator('#p-out').innerText(), '0,5');
