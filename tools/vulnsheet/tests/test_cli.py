@@ -925,6 +925,13 @@ class UpdateModesTest(CliCase):
         self.assertEqual(self.run_main("--table", table, "-o", table), EXIT_OK)
         self.assertEqual(self.report_lines(), [HEADER, REFRESHED])
 
+    def test_refresh_in_place_with_trailing_separators(self):
+        table = self.path("report.csv")
+        with open(table, "w", encoding="utf-8") as handle:
+            handle.write(HEADER + ";\n" + OLD_ROW + ";\n")
+        self.assertEqual(self.run_main("--table", table, "-o", table), EXIT_OK)
+        self.assertEqual(self.report_lines(), [HEADER, REFRESHED])
+
     def test_refresh_keeps_previous_vex_on_fetch_error(self):
         self.docs[vex_url("CVE-2026-73070")] = OSError("сеть")
         code = self.run_main("--table", self.write_table(OLD_ROW), "-o", self.path("report.csv"))

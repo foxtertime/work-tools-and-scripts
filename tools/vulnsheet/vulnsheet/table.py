@@ -2,7 +2,8 @@
 
 Таблица — ровно то, что пишет report.write: UTF-8 (BOM допускается), ';',
 кавычки по правилам CSV, заголовок report.COLUMNS, в каждой записи
-столько же ячеек. Ячейки отдаются дословно: в них ручные данные людей.
+столько же ячеек. Допускается одна лишняя пустая ячейка от завершающего ';'.
+Ячейки колонок отдаются дословно: в них ручные данные людей.
 Любое отклонение — TableError: выбросить «кривую» строку нельзя. Таблица
 vulnsheet 2.x (22 колонки, без ai_*) читается: колонки ai_* вставляются в
 её строки перед комментарием, прочерками. Таблицу vulnsheet 1.x (20 колонок, без P и D) не читаем:
@@ -47,6 +48,8 @@ def read(path: str) -> List[Record]:
         raise TableError("%s: пустой файл, нет заголовка" % path)
     header, rows = records[0], records[1:]
     names = [cell.strip() for cell in header.cells]
+    if names[-1] == "":
+        names.pop()
     if names == _COLUMNS_1:
         raise TableError("%s: формат vulnsheet 1.x — нет колонок P и D; "
                          "добавьте их перед «SL NVR (latest build)» (значение «-»)"
@@ -55,6 +58,9 @@ def read(path: str) -> List[Record]:
         raise TableError("%s: запись %d: заголовок не как у vulnsheet "
                          "(разделитель ;, UTF-8?)" % (path, header.number))
     for record in rows:
+        # Убираем только лишнюю ячейку: пустой комментарий — часть таблицы.
+        if len(record.cells) == len(names) + 1 and record.cells[-1] == "":
+            record.cells.pop()
         if len(record.cells) != len(names):
             raise TableError("%s: запись %d: ячеек %d, ожидается %d"
                              % (path, record.number, len(record.cells), len(names)))
