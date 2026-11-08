@@ -1,5 +1,6 @@
 /* Темп и прогноз в задачах — как в образце сводки. Поступление — по Task
-   date, закрытие — «Готов» по End date; всё, что позже даты отчёта, ещё
+   date, закрытие — «Готов» по End date; для скорости также учитывается
+   «Ожидает ревью» с корректной End date. Всё, что позже даты отчёта, ещё
    не случилось. Новые задачи приходят каждый день, и в выходные: темп
    поступления — на календарный день. Закрывают по рабочим дням (Пн–Пт,
    без праздников): темп закрытия — на рабочий день. Баланс — за неделю:
@@ -21,6 +22,7 @@
 
   const inDay = r => dates.dayOf(r.tdate);
   const outDay = r => (roles.isDone(r) ? dates.dayOf(roles.endOf(r)) : null);
+  const speedDay = r => (roles.isSpeedDone(r) ? dates.dayOf(roles.endOf(r)) : null);
 
   /* Начало работы — самая ранняя Start date у взятой задачи, не позже даты
      отчёта; нет такой — null */
@@ -70,16 +72,16 @@
     let from = end - win;
     if (since !== undefined && since !== null) from = Math.max(from, since - 1);
     if (!isFinite(from)) {
-      const seen = rows.flatMap(r => [inDay(r), outDay(r)]).concat(history.map(outDay)).filter(d => d !== null && d <= end);
+      const seen = rows.flatMap(r => [inDay(r), outDay(r)]).concat(history.map(speedDay)).filter(d => d !== null && d <= end);
       from = seen.reduce((a, d) => Math.min(a, d), end) - 1;
     }
     const within = d => d !== null && d > from && d <= end;
     const cut = gaps.reduce((a, g) => a + dates.workdays(Math.max(g.from, from + 1), Math.min(g.to, end)), 0);
     const days = Math.max(0, end - from), work = dates.workdays(from + 1, end) - cut;
     const shut = rows.map(outDay).filter(within);
-    // История скорости может включать завершённые убранные задачи, но их
-    // закрытие не уменьшает баланс пула (closedTotal).
-    const closed = history.map(outDay).filter(d => within(d) && !inBreak(gaps, d)).length;
+    // В скорости есть завершённые убранные задачи и ревью с End date;
+    // их вклад в скорость не уменьшает баланс пула (closedTotal).
+    const closed = history.map(speedDay).filter(d => within(d) && !inBreak(gaps, d)).length;
     const inR = days ? rows.map(inDay).filter(within).length / days : 0;
     const calendarCut = gaps.reduce((a, g) => a + Math.max(0, Math.min(g.to, end) - Math.max(g.from, from + 1) + 1), 0);
     const rateDays = work || Math.max(0, days - calendarCut), calendarRate = work === 0 && rateDays > 0;

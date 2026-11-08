@@ -335,6 +335,20 @@ test('completed removed history affects speed but never pool inflow, open count 
   assert.deepStrictEqual([only.open, only.inR, only.closedTotal, only.closed, only.outR], [0, 0, 0, 1, 0.25]);
 });
 
+test('dated review contributes throughput within the window but remains open in the pool', function () {
+  const rows = [r(D, 'Готов', D + 1), r(D, ' ОЖИДАЕТ  ревью ', D + 2),
+    r(D, 'Ожидает ревью'), { ...r(D, 'Ожидает ревью'), end: '2026-02-30' },
+    r(D, 'Ожидает ревью', D + 4), { ...r(D, 'Ожидает ревью', D + 1), bad: ['end'] },
+    r(D, 'В работе', D + 2), r(D, 'Ожидает ревью', D + 3)];
+  const got = pace.rates(rows, D + 3, Infinity, D);
+  assert.deepStrictEqual([got.closed, got.outR, got.closedTotal, got.open, got.inR], [3, 0.75, 1, 7, 2]);
+  const earlier = pace.rates(rows, D + 3, 2, D, D + 1);
+  assert.deepStrictEqual([earlier.closed, earlier.outR], [1, 0.5]);
+  assert.ok(pace.scenarios(rows, D + 3, D, null, D + 10).every(x => x.closed === 3 && x.rates.closedTotal === 1));
+  const last = pace.cumulative(rows, D, D + 3).slice(-1)[0];
+  assert.deepStrictEqual([last.out, last.open], [1, 7]);
+});
+
 test('rates: period entirely before work is a genuinely empty intersection', function () {
   var got = pace.rates([r(D - 2, 'Готов', D - 2), r(D)], D + 3, 7, D, D - 2);
   assert.deepStrictEqual([got.days, got.work, got.rateDays, got.closed, got.closedTotal], [0, 0, 0, 0, 0]);

@@ -221,7 +221,7 @@
       if (!chartCache.has(key)) {
         const groups = new Map();
         for (const r of includeRemoved ? rows.concat(removed) : rows) {
-          if (field === 'end' && (!r.done || !r.taken)) continue;
+          if (field === 'end' && (!roles.isSpeedDone(r) || !r.taken)) continue;
           if (dev !== null && r.devKey !== dev) continue;
           if (roles.isRemoved(r) && (r.bad || []).includes(field)) continue;
           const day = dates.dayOf(field === 'end' ? roles.endOf(r) : r[field]);
@@ -236,11 +236,20 @@
       for (const col of host.querySelectorAll('[data-chart-day]')) {
         const from = Number(col.dataset.chartDay), to = Math.min(from + span - 1, asOf);
         const when = span === 1 ? dates.ruOf(from) : 'неделя с ' + dates.ruOf(from);
-        const event = field === 'tdate' ? 'Поступление задач' : dev === null ? 'Закрыто командой' : 'Закрыто · ' + dev;
-        const note = field === 'tdate' ? 'Поступившие задачи по Task date.' : 'Расчётно закрытые задачи с назначенным разработчиком, по End date.';
+        const event = field === 'tdate' ? 'Поступление задач' : dev === null ? 'Выполнено командой' : 'Выполнено · ' + dev;
+        const note = field === 'tdate' ? 'Поступившие задачи по Task date.' : 'Готовые задачи и ревью с корректной End date, с назначенным разработчиком, по End date.';
         const members = groups.get(from) || [];
         bind(col, `${event} · ${when}`, includeRemoved ? members.filter(r => !roles.isRemoved(r)) : members,
           `${note} Период: ${dates.ruOf(from)} — ${dates.ruOf(to)}, включительно.`);
+        if (field === 'end') {
+          for (const node of col.querySelectorAll('[data-chart-segment="review"]')) {
+            const developers = node.dataset.chartDevelopers ? JSON.parse(node.dataset.chartDevelopers) : null;
+            const selected = members.filter(r => roles.isReview(r) && (developers
+              ? developers.includes(r.devKey) : r.measureN === node.dataset.chartMeasure));
+            bind(node, `Ожидает ревью · ${dev === null ? '' : dev + ' · '}${node.dataset.chartKey} · ${when}`, selected,
+              `Выполненная работа по End date, статус ревью сохраняется. Период: ${dates.ruOf(from)} — ${dates.ruOf(to)}, включительно.`);
+          }
+        }
         if (includeRemoved) {
           for (const node of col.querySelectorAll('[data-chart-segment="removed"]')) {
             bind(node, `Поступление · Убрано из эпика · ${when}`, members.filter(roles.isRemoved),

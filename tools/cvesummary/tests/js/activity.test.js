@@ -45,6 +45,19 @@ test('removed SecOps with invalid End stays closed without an invented completio
   }
 });
 
+test('personal and forecast speeds count review only with a valid observed End date', () => {
+  const rows = [row('X', D, D + 1), row('X', D, D + 2, ' ОЖИДАЕТ  ревью '),
+    row('X', D, null, 'Ожидает ревью'), row('X', D, D + 4, 'Ожидает ревью'),
+    row('X', D, D + 1, 'Ожидает ревью', ['end']),
+    { ...row('X', D, null, 'Ожидает ревью'), end: '2026-02-30' },
+    row('X', D, D + 2, 'В работе'), row('X', null, D + 3, 'Ожидает ревью')];
+  const s = state(rows, D + 3);
+  assert.deepEqual(s.people.get('X').closedDays, [D + 1, D + 2, D + 3]);
+  assert.deepEqual(stat(s, 'X', D, D + 3), { closed: 3, work: 4, cut: 0, rate: 0.75 });
+  assert.deepEqual(activity.team(s, D, D + 3), { outR: 0.75, active: 1, total: 1 });
+  assert.equal(stat(s, 'X', D, D + 1).closed, 1);
+});
+
 test('five tasks then three idle days: speed 5/4, other people do not change it', () => {
   for (const others of [[], [steady(D + 3), row('Z', D, D + 3)]]) {
     const s = state([...five(), ...others], D + 3);

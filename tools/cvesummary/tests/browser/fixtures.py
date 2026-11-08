@@ -96,3 +96,24 @@ task_links = {"meta": dict(data["meta"]), "rows": [
          status="В работе", start="2026-10-10", end="", bad=[], task="TASKID-9002"),
 ]}
 (out / "task-links.html").write_text(page.render(task_links), encoding="utf-8")
+
+review_charts = {"meta": dict(data["meta"], as_of="2026-11-05", missing=[]), "rows": []}
+for i, (dev, status, end, measure, bad) in enumerate([
+    ("X", "Готов", "2026-11-03", "Патч из апстрима", []),
+    ("X", "Ожидает ревью", "2026-11-03", "Патч из апстрима", []),
+    ("X", "Ожидает ревью", "2026-11-04", "Импорт новой версии", []),
+    ("Y", "Ожидает ревью", "2026-11-03", "Патч из апстрима", []),
+    ("X", "Ожидает ревью", "", "Патч из апстрима", []),
+    ("X", "Ожидает ревью", "2026-11-06", "Патч из апстрима", []),
+    ("X", "Ожидает ревью", "2026-02-30", "Патч из апстрима", ["end"]),
+    ("X", "В работе", "2026-11-03", "Патч из апстрима", []),
+    ("", "Ожидает ревью", "2026-11-03", "Патч из апстрима", []),
+    ("X", "Убрано из эпика", "2026-11-03", "Патч из апстрима", []),
+    ("X", "Ожидает ревью", "2026-11-03", "Патч из апстрима", ["end"]),
+] + [("D%d" % i, "Ожидает ревью" if i >= 6 else "Готов", "2026-11-03", "Патч из апстрима", []) for i in range(8)]):
+    review_charts["rows"].append(dict(data["rows"][0], row=i + 2, cve="CVE-2026-%d" % (9500 + i),
+        dev=dev, status=status, start="2026-11-02", end=end, tdate="2026-11-02",
+        measure=measure, bad=bad, p="", d="", rstate="Affected"))
+(out / "review-charts.html").write_text(page.render(review_charts), encoding="utf-8")
+review_only = {"meta": review_charts["meta"], "rows": [dict(review_charts["rows"][2], start="")]}
+(out / "review-only-chart.html").write_text(page.render(review_only), encoding="utf-8")

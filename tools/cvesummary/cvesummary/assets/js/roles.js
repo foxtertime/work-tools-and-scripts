@@ -23,7 +23,7 @@
   const devOf = r => String(r.dev == null ? '' : r.dev).trim().replace(/\s+/g, ' ');
   const isTaken = r => devOf(r) !== '';
   const isRemoved = r => norm(r.status) === REMOVED;
-  // Только распознанные календарные даты подтверждают завершение убранной задачи.
+  // Подтверждённая дата завершения: календарная дата без ошибки разбора.
   const hasDate = (r, key) => {
     const value = r[key];
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '') || (r.bad || []).includes(key)) return false;
@@ -39,6 +39,8 @@
   const isOpen = r => !isDone(r);
   const isWorking = r => isTaken(r) && !isDone(r);
   const isReview = r => norm(r.status) === REVIEW;
+  // Сданная на ревью работа считается выполненной только для скорости.
+  const isSpeedDone = r => isDone(r) || (isReview(r) && hasDate(r, 'end'));
   const isPaused = r => norm(r.status) === PAUSED;
   const needsAttention = r => ATTENTION.includes(norm(r.status));
   const isTriaged = r => isTaken(r) || norm(r.exec) === 'уа';
@@ -123,7 +125,7 @@
   const sevOrder = values => order(values, SEVERITIES, NO_SEVERITY);
   const measureOrder = values => order(values, MEASURES, NO_MEASURE);
 
-  return { norm, devOf, endOf, isTaken, isRemoved, isDone, isOpen, isWorking, isReview, isPaused,
+  return { norm, devOf, endOf, isTaken, isRemoved, isDone, isSpeedDone, isOpen, isWorking, isReview, isPaused,
     needsAttention, isTriaged, closeReasons, taskKey, uniques, duplicates, sevOf, sevOrder, measureOf, measureOrder,
     SEVERITIES, MEASURES, NO_SEVERITY, NO_MEASURE };
 }));

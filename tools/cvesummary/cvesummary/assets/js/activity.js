@@ -23,7 +23,7 @@
         name, since, asOf, days: hours.workdays.get(name) || new Set(), closedDays: [], breaks: [], current: false,
       });
       const end = observedDay(r, 'end');
-      if (roles.isDone(r) && end !== null && end <= asOf) people.get(name).closedDays.push(end);
+      if (roles.isSpeedDone(r) && end !== null && end <= asOf) people.get(name).closedDays.push(end);
     }
     for (const person of people.values()) {
       if (roles.norm(person.name) !== 'secops') person.days.forEach(d => active.add(d));

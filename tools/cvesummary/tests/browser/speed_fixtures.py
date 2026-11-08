@@ -15,6 +15,10 @@ def task(start="2026-11-02", end="", dev="X"):
 
 
 fixtures = {
+    "review": ("2026-11-05", [task(end="2026-11-03"),
+               dict(task(end="2026-11-04"), status="Ожидает ревью"),
+               dict(task(), status="Ожидает ревью"),
+               dict(task(end="2026-11-06"), status="Ожидает ревью")]),
     "zero": ("2026-11-05", [task()]),
     "weekend": ("2026-11-08", [task("2026-11-07", "2026-11-07")]),
     "plan": ("2026-11-05", [task("2026-10-23")]
@@ -22,6 +26,9 @@ fixtures = {
     "five-day": ("2026-11-09", [task("2026-11-02", "2026-11-02") for _ in range(5)]
                  + [task(dev="Y")]),
 }
+fixtures["review-no-end"] = (fixtures["review"][0], [
+    dict(r, end="") if i == 1 else dict(r) for i, r in enumerate(fixtures["review"][1])
+])
 for name, (as_of, rows) in fixtures.items():
     for i, row in enumerate(rows):
         row.update(row=i + 2, cve="CVE-2026-%d" % (8000 + i), task="TASK-%d" % i)
