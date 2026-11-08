@@ -1,4 +1,4 @@
-"""Пример таблицы процесса на 100 строк — для ручной проверки страницы.
+"""Пример таблицы процесса на 120 строк — для ручной проверки страницы.
 
 python3 -m tests.example пример.xlsx
 python3 -m tests.example пример.csv     # то же самое в CSV через «;», как пишет vulnsheet
@@ -9,6 +9,7 @@ python3 -m tests.example пример.csv     # то же самое в CSV че
 строк повторяют пару CVE + компонент более ранних — дубликаты задач. Колонки
 ai_* — как их пишет vulnsheet --ai из results.json плагина rhel-security:
 примерно половина пар прогнана через AI, вердикты и remediation — его токены.
+Последние 20 задач имеют статус «Убрано из эпика».
 """
 import csv
 import datetime
@@ -55,7 +56,7 @@ def rows():
     rnd = random.Random(20261019)
     ai_rnd = random.Random(2026)  # свой генератор: остальные данные не сдвигаются
     out = [GROUPS, HEADER]
-    for n in range(100):
+    for n in range(120):
         pkg = rnd.choice(PACKAGES)
         cve = "CVE-2026-%05d" % (70000 + n * 37)
         tdate = AS_OF - datetime.timedelta(days=rnd.randrange(60))
@@ -76,6 +77,17 @@ def rows():
             dev, status, start, end = DEVS[0], "Готов", _d(AS_OF), "-"
         if n == 8:
             dev, status, start, end = DEVS[1], "В работе", _d(AS_OF), _d(AS_OF - datetime.timedelta(days=3))
+        if n >= 100:
+            # SecOps, завершённая, ещё в работе и без разработчика — по пять.
+            kind = n % 4
+            begin = min(AS_OF, tdate + datetime.timedelta(days=2))
+            status, measure = "Убрано из эпика", "-"
+            dev = "SecOps" if kind == 0 else "-" if kind == 3 else DEVS[n % len(DEVS)]
+            start = _d(begin) if kind in (1, 2) else "-"
+            end = _d(min(AS_OF, begin + datetime.timedelta(days=3))) if kind == 1 else "-"
+            if kind == 1:
+                measure = ["Патч из апстрима", "Импорт новой версии", "Патч из апстрима",
+                           "Обоснована неприменимость", "-"][(n - 100) // 4]
         ai = ["-"] * 5
         if ai_rnd.random() < 0.55:
             run = AS_OF + datetime.timedelta(days=ai_rnd.randrange(3))

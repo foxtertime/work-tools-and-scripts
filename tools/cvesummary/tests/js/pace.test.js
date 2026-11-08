@@ -324,6 +324,17 @@ test('rates: whole common break remains unknown, not calendar fallback', functio
   assert.strictEqual(got.calendarRate, false);
 });
 
+test('completed removed history affects speed but never pool inflow, open count or balance', function () {
+  const pool = [r(D, 'Готов', D + 3), r(D)];
+  const history = [...pool, { dev: 'X', status: 'Убрано из эпика', start: iso(D), end: iso(D + 3), tdate: iso(D) }];
+  const got = pace.rates(pool, D + 3, Infinity, D, undefined, [], history);
+  assert.deepStrictEqual([got.open, got.inR, got.closedTotal, got.closed, got.outR], [1, 0.5, 1, 2, 0.5]);
+  const scenarios = pace.scenarios(pool, D + 3, D, null, D + 9, undefined, [], history);
+  assert.ok(scenarios.every(x => x.closed === 2 && x.rates.open === 1 && x.rates.closedTotal === 1));
+  const only = pace.rates([], D + 3, Infinity, D, undefined, [], history.slice(-1));
+  assert.deepStrictEqual([only.open, only.inR, only.closedTotal, only.closed, only.outR], [0, 0, 0, 1, 0.25]);
+});
+
 test('rates: period entirely before work is a genuinely empty intersection', function () {
   var got = pace.rates([r(D - 2, 'Готов', D - 2), r(D)], D + 3, 7, D, D - 2);
   assert.deepStrictEqual([got.days, got.work, got.rateDays, got.closed, got.closedTotal], [0, 0, 0, 0, 0]);

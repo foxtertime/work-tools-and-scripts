@@ -40,6 +40,7 @@
       <a href="#pace">Темп и прогноз</a>
       <a href="#attention">Требует внимания <span class="badge bad" id="nb-att">—</span></a>
       <a href="#closable">Можно закрыть <span class="badge ok" id="nb-close">—</span></a>
+      <a href="#removed">Убрано из эпика</a>
       <a href="#comps">Компоненты</a>
       <a href="#rhel-state">Состояние в RHEL</a>
       <a href="#task-status">Статус задач</a>
@@ -162,6 +163,16 @@
       </table></div>
     </section>
 
+    <section class="card wide" id="removed">
+      <h2>Убрано из эпика <span class="cnt" id="removed-count">—</span></h2>
+      <div class="removed-mix">
+        <div class="strip-groups" id="removed-groups"></div>
+        <div class="pbar removed-bar" id="removed-bar"></div>
+        <div class="strip-leg" id="removed-leg"></div>
+      </div>
+      <div class="cve-rows removed-rows" id="removed-rows"></div>
+    </section>
+
     <section class="card wide" id="comps">
       <div class="card-h">
         <h2>Компоненты</h2>
@@ -191,7 +202,7 @@
       <div class="cve-grid">
         <div class="cve-sum">
           <h2>Статус задач</h2>
-          <p class="sub" style="margin:0">статус у разработчика</p>
+          <p class="sub" id="devstatus-sub" style="margin:0">статус у разработчика</p>
         </div>
         <div class="cve-rows" id="devstatus"></div>
       </div>

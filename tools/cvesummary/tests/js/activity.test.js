@@ -5,28 +5,31 @@ const dates = require('../../cvesummary/assets/js/dates.js');
 const hours = require('../../cvesummary/assets/js/hours.js');
 const pace = require('../../cvesummary/assets/js/pace.js');
 const activity = require('../../cvesummary/assets/js/activity.js');
+const scope = require('../../cvesummary/assets/js/scope.js');
 const D = dates.dayOf('2026-11-02'); // Monday
 const row = (dev, start, end = null, status = 'Готов', bad = []) => ({
   dev, start: start === null ? '' : dates.isoOf(start),
   end: end === null ? '' : dates.isoOf(end), status, bad,
 });
 const five = () => Array.from({ length: 5 }, () => row('X', D, D));
-const state = (rows, end) => activity.compute(rows, end, hours.compute(rows, end));
+const state = (rows, end) => {
+  const speed = scope.split(rows, end).speed;
+  return activity.compute(speed, end, hours.compute(speed, end));
+};
 const steady = end => row('Y', D, end);
 const stat = (s, name, from, to) => activity.stats(s.people.get(name), from, to, s.breaks);
 
-test('removed tasks keep dated throughput and open work; undated SecOps is closed without throughput', () => {
+test('only completed removed developer work contributes speed and workdays', () => {
   const rows = [row('X', D, D, 'Убрано из эпика'), row('X', D, null, 'Убрано из эпика'),
     row('SecOps', null, null, 'Убрано из эпика')];
-  const s = state(rows, D + 8), h = hours.compute(rows, D + 8);
+  const split = scope.split(rows, D + 8), s = state(rows, D + 8), h = hours.compute(split.speed, D + 8);
   assert.equal(stat(s, 'X', D, D + 8).closed, 1);
-  assert.equal(stat(s, 'X', D, D + 8).rate, 1 / 7);
-  assert.deepEqual(s.people.get('X').breaks, []);
-  assert.equal(h.hours[0], 4);
-  assert.equal(h.hours[2], null);
-  assert.equal(h.anomalies.some(a => a.index === 2), false);
-  const rates = pace.rates(rows, D + 8, Infinity, D);
-  assert.equal(rates.open, 1);
+  assert.equal(stat(s, 'X', D, D + 8).rate, 1);
+  assert.equal(s.people.get('X').breaks.length, 1);
+  assert.equal(s.people.has('SecOps'), false);
+  assert.deepEqual(h.hours, [8]);
+  const rates = pace.rates(split.pool, D + 8, Infinity, D, undefined, s.breaks, split.speed);
+  assert.equal(rates.open, 0);
   assert.equal(rates.closed, 1);
 });
 
@@ -34,10 +37,11 @@ test('removed SecOps with invalid End stays closed without an invented completio
   for (const [end, bad] of [['2026-02-30', ['end']], ['2026-02-30', []], ['2026-11-02', ['end']]]) {
     const rows = [row('X', D, null, 'В работе'), { dev: 'SecOps', status: 'Убрано из эпика', start: '', end, bad }];
     const s = state(rows, D + 3);
-    const rates = pace.rates(rows, D + 3, Infinity, dates.dayOf('2026-03-02'));
+    const split = scope.split(rows, D + 3);
+    const rates = pace.rates(split.pool, D + 3, Infinity, dates.dayOf('2026-03-02'), undefined, [], split.speed);
     assert.equal(rates.open, 1);
     assert.equal(rates.closed, 0, end + ' must not invent a completion');
-    assert.deepEqual(s.people.get('SecOps').closedDays, []);
+    assert.equal(s.people.has('SecOps'), false);
   }
 });
 

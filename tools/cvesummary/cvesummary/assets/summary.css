@@ -188,6 +188,11 @@ h2{font-family:var(--f-display);font-weight:500;font-size:18px;margin:0;letter-s
 .sub{color:var(--muted);font-size:13px;margin:-8px 0 0}
 
 /* horizontal bars */
+.removed-mix{display:flex;flex-direction:column;gap:4px}
+#removed-groups{margin-top:0}
+.pbar.removed-bar{display:grid}
+.cve-rows.removed-rows{grid-template-columns:230px minmax(80px,1fr) repeat(2,4.4em)}
+@media (max-width:560px){.cve-rows.removed-rows{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .hbars{display:grid;grid-template-columns:minmax(80px,max-content) minmax(0,1fr) 3.5em;gap:8px 12px;align-items:center;font-size:14px}
 .hbars .lab{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hbars .val{text-align:right;color:var(--muted)}
@@ -415,11 +420,11 @@ img{max-width:100%}
 /* подсветка того, на что указывает курсор: в составной полосе или графике
    блок под курсором остаётся ярким, соседи приглушаются; одиночная полоса
    светлеет; на линейном графике — направляющая и точки дня */
-.hl,.mixbar span,.sevstrip span,.pbar span,.hbars .track span span,.cve-rows > *,.kv .b{transition:opacity .3s ease}
+.hl,.mixbar span,.sevstrip span,.pbar span,:is(.hbars,.removed-rows) .track span span,.cve-rows > *,.kv .b{transition:opacity .3s ease}
 .hlg:has(.hl:hover) .hl:not(:hover),
 .mixbar:has(span:hover) span:not(:hover),
 .pbar:has(span:hover) span:not(:hover),
-.hbars:has(.track span span:hover) .track span span:not(:hover),
+:is(.hbars,.removed-rows):has(.track span span:hover) .track span span:not(:hover),
 .kv:has(.b:hover) .b:not(:hover){opacity:.45}
 /* строки и сегменты разрезов бледнит render.js (подсветка строки целиком) */
 .cve-rows > .dim,main .sevstrip > .dim{opacity:.3}
@@ -469,8 +474,7 @@ img{max-width:100%}
 .drill-dialog :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(max-width:640px){.drill-dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:10px}.drill-top{padding:18px 16px 12px;gap:10px}.drill-top h2{font-size:17px}.drill-toolbar{padding:0 16px 12px;flex-wrap:wrap;gap:10px}.drill-search{flex-basis:100%}.drill-export{margin-left:0}.drill-count,.drill-footer{padding:10px 16px}.drill-tablewrap{max-height:52dvh}}
 
-/* Убранные задачи: отдельный графитовый сегмент и светлый триаж поверх него. */
-#hero-bar > [data-segment="removed"]{color:#fff;--triage-hatch:rgba(255,255,255,.24)}
+/* Убранные задачи в личных полосах и подмножествах счётчиков. */
 .pbar > [data-segment="removed"]{color:#fff}
 .removed-subset{display:block;font-size:11px;font-weight:400;line-height:1.5;color:var(--muted)}
 .hero .removed-subset{color:var(--hero-muted)}

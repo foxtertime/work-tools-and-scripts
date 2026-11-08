@@ -69,7 +69,8 @@
     };
   }
 
-  const groupOf = verdict => VERDICT_GROUP[VERDICTS.find(v => roles.norm(v) === roles.norm(verdict))] || 'maybe';
+  const groupOf = verdict => !roles.norm(verdict) ? 'none'
+    : VERDICT_GROUP[VERDICTS.find(v => roles.norm(v) === roles.norm(verdict))] || 'maybe';
 
   function summary(rows) {
     const verdicts = tally(VERDICTS), remediations = tally(REMEDIATIONS);
@@ -95,5 +96,5 @@
     return s;
   }
 
-  return { GROUPS, VERDICTS, CONFIDENCE, REMEDIATIONS, NOT_PROCESSED, summary };
+  return { GROUPS, VERDICTS, CONFIDENCE, REMEDIATIONS, NOT_PROCESSED, groupOf, summary };
 }));

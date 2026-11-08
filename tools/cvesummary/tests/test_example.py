@@ -21,7 +21,9 @@ class ExampleTest(unittest.TestCase):
                 self.assertEqual(cli.main([table, "--as-of", "2026-10-19"]), cli.EXIT_OK)
             with open(os.path.join(folder, "пример.html"), encoding="utf-8") as handle:
                 data = json.loads(DATA_RE.search(handle.read()).group(1))
-        self.assertEqual(len(data["rows"]), 100)
+        self.assertEqual(len(data["rows"]), 120)
+        removed = [r for r in data["rows"] if r["status"] == "Убрано из эпика"]
+        self.assertEqual(len(removed), 20)
         self.assertEqual(data["meta"]["header_row"], 2)
         self.assertTrue(any(r["status"] == "Ожидает ревью" for r in data["rows"]))
         pairs = [(r["cve"], r["comp"]) for r in data["rows"]]
