@@ -266,9 +266,12 @@
         'Этот счётчик учитывает пары CVE + компонент в пуле эпика. Для повторов показана основная строка.');
       const openRows = rows.filter(r => r.open), ready = openRows.filter(r => r.reasons.length);
       const segmentNote = 'Состав выбранного сегмента: задачи с несколькими основаниями учтены по первому основанию.';
+      const segmentTitle = part => part.group === 'done' ? 'Готово · ' + part.label : part.label;
+      const partNote = part => part.key === 'done-secops' ? 'Готовые задачи с разработчиком SecOps.'
+        : part.key === 'done-dev' ? 'Готовые задачи с другим разработчиком или без указанного разработчика.' : segmentNote;
       for (const node of $('hero-bar').children) {
         const part = heroParts.find(p => p.key === node.dataset.segment);
-        if (part) bind(node, part.label, part.rows, segmentNote);
+        if (part) bind(node, segmentTitle(part), part.rows, partNote(part));
       }
       for (const node of $('hero-groups').children) {
         const group = heroGroups.find(g => g.key === node.dataset.group);
@@ -341,7 +344,7 @@
       for (const node of $('hero-leg').children) {
         const part = node.dataset.segment ? heroParts.find(p => p.key === node.dataset.segment)
           : heroGroups.find(g => g.key === node.dataset.group);
-        if (part) bind(node, part.label, part.rows, segmentNote);
+        if (part) bind(node, segmentTitle(part), part.rows, partNote(part));
       }
       const S = ai.summary(rows);
       // Select by the source entries, not their translated display labels.

@@ -39,7 +39,8 @@
   }
   function hero(rows) {
     return partition(rows.filter(r => !roles.isRemoved(r)), [
-      { key: 'done', label: 'Готово', color: '--st-done', group: 'done', test: roles.isDone },
+      { key: 'done-secops', label: 'SecOps', color: '--st-done-secops', group: 'done', test: r => roles.isDone(r) && roles.norm(r.dev) === 'secops' },
+      { key: 'done-dev', label: 'Разработчики', color: '--st-done', group: 'done', test: r => roles.isDone(r) && roles.norm(r.dev) !== 'secops' },
       { key: 'review', label: 'Ревью', color: '--st-review', group: 'review', test: roles.isReview },
       { key: 'work', label: 'В работе', color: '--st-work', group: 'work', test: r => roles.isWorking(r) && !roles.isReview(r) },
       { key: 'none', label: 'Не взято', color: '--rs-none', group: 'none', test: r => roles.isOpen(r) && !roles.isReview(r) && !roles.isWorking(r) && !r.reasons.length },
@@ -71,7 +72,7 @@
     const out = new Map();
     for (const p of parts) {
       if (!out.has(p.group)) out.set(p.group, { key: p.group,
-        label: p.group === 'ready' ? 'Можно закрыть' : p.label, rows: [] });
+        label: p.group === 'ready' ? 'Можно закрыть' : p.group === 'done' ? 'Готово' : p.label, rows: [] });
       out.get(p.group).rows.push(...p.rows);
     }
     return [...out.values()];

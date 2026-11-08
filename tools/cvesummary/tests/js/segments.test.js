@@ -10,6 +10,26 @@ const row = (status, extra = {}) => ({ dev: 'X', status, reasons: [], ...extra }
 const removed = extra => row('Убрано из эпика', extra);
 const size = parts => Object.fromEntries(parts.map(p => [p.key, p.rows.length]));
 
+test('header done splits by normalized developer into SecOps and remaining done rows', () => {
+  const secops = [row('Готов', { dev: 'SecOps' }), row(' ГОТОВ ', { dev: ' secOPS ' })];
+  const developers = [row('Готов'), row('Готов', { dev: '', end: '' }),
+    row('Готов', { measure: 'Закрыто SecOps' })];
+  const review = row('Ожидает ревью', { dev: 'SecOps', end: '2026-11-05' });
+  const rows = [...secops, ...developers, review, removed({ dev: 'SecOps' }),
+    removed({ start: '2026-11-02', end: '2026-11-05' })];
+  const parts = segments.hero(rows);
+  assert.deepEqual(parts.map(p => [p.key, p.label, p.group, p.rows]), [
+    ['done-secops', 'SecOps', 'done', secops], ['done-dev', 'Разработчики', 'done', developers],
+    ['review', 'Ревью', 'review', [review]],
+  ]);
+  assert.deepEqual(segments.groups(parts)[0], { key: 'done', label: 'Готово', rows: [...secops, ...developers] });
+  assert.equal(new Set(parts.flatMap(p => p.rows)).size, 6);
+  for (const [rows, key] of [[secops, 'done-secops'], [developers, 'done-dev']]) {
+    assert.deepEqual(size(segments.hero(rows)), { [key]: rows.length });
+    assert.equal(segments.groups(segments.hero(rows))[0].label, 'Готово');
+  }
+});
+
 test('removed block partitions completed developer work and the remainder using speed eligibility', () => {
   const asOf = dates.dayOf('2026-11-05');
   const completed = extra => removed({ start: '2026-11-02', end: '2026-11-05', ...extra });
@@ -70,16 +90,16 @@ test('header excludes two removed tasks while personal segments and semantic cou
     removed({ start: '2026-11-02', end: '2026-11-05' }), removed({ dev: 'SecOps' }),
     row('В работе'), row('В работе')];
   assert.deepEqual(size(segments.person(rows)), { removed: 2, done: 6, work: 2 });
-  assert.deepEqual(size(segments.hero(rows)), { done: 6, work: 2 });
+  assert.deepEqual(size(segments.hero(rows)), { 'done-dev': 6, work: 2 });
   assert.equal(rows.filter(roles.isDone).length, 8);
   for (const fn of [segments.person, segments.hero]) {
     const parts = fn(rows);
     const expected = fn === segments.person ? rows : rows.filter(r => !roles.isRemoved(r));
-    assert.equal(parts[0].key, fn === segments.person ? 'removed' : 'done');
+    assert.equal(parts[0].key, fn === segments.person ? 'removed' : 'done-dev');
     assert.deepEqual(new Set(parts.flatMap(p => p.rows)), new Set(expected));
     assert.equal(parts.reduce((n, p) => n + p.rows.length, 0), expected.length);
     if (fn === segments.person) assert.match(parts.find(p => p.key === 'done').label, /без убранных/);
-    else assert.equal(parts.find(p => p.key === 'done').label, 'Готово');
+    else assert.equal(segments.groups(parts).find(p => p.key === 'done').label, 'Готово');
     assert.equal(segments.groups(parts).flatMap(g => g.rows).length, expected.length);
   }
 });
@@ -118,8 +138,8 @@ test('header moves review and working tasks out of every right-hand segment with
   const pending = reasons.map(reasons => row('В работе', { dev: '', reasons }));
   const rows = [row('Готов'), ...reviews, ...working, ...pending, removed({ dev: 'SecOps' })];
   const parts = segments.hero(rows);
-  assert.deepEqual(parts.map(p => p.key), ['done', 'review', 'work', 'none', 'fixed', 'patch', 'range', 'dup']);
-  assert.deepEqual(size(parts), { done: 1, review: 5, work: 10, none: 1, fixed: 1, patch: 1, range: 1, dup: 1 });
+  assert.deepEqual(parts.map(p => p.key), ['done-dev', 'review', 'work', 'none', 'fixed', 'patch', 'range', 'dup']);
+  assert.deepEqual(size(parts), { 'done-dev': 1, review: 5, work: 10, none: 1, fixed: 1, patch: 1, range: 1, dup: 1 });
   assert.deepEqual(parts.find(p => p.key === 'review').rows, reviews);
   assert.deepEqual(parts.find(p => p.key === 'work').rows, working);
   assert.deepEqual(parts.slice(3).flatMap(p => p.rows), pending);
