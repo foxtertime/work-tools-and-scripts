@@ -26,6 +26,47 @@ let checks=0;
  const count=async()=>Number((await page.locator('#drill-count').innerText()).match(/\d+/)[0]);
  const rownums=()=>page.locator('#drill-body tr[data-row]').evaluateAll(nodes=>nodes.map(n=>Number(n.dataset.row)).sort((a,b)=>a-b));
  try {
+  await load('personal-measures');
+  const person=name=>page.locator('.dev').filter({has:page.locator('h3',{hasText:name})});
+  const alice=person('Алиса'), done=alice.locator('[data-measure-status="done"]'), review=alice.locator('[data-measure-status="review"]');
+  assert.equal(await review.count(),1,'Review measures must have a separate section in each developer card');
+  for(const [width,theme] of [[1440,'light'],[390,'dark']]) {
+   await page.setViewportSize({width,height:1000}); await page.emulateMedia({colorScheme:theme});
+   await page.waitForTimeout(300);
+   assert.equal(await review.locator('.cap').innerText(),'НА РЕВЬЮ ПО ПРИНЯТОЙ МЕРЕ · 6');
+   assert.equal(await done.locator('.cap').innerText(),'СДЕЛАНО ПО ПРИНЯТОЙ МЕРЕ · 1');
+   assert.deepEqual(await review.locator('.k').allTextContents(),['Патч из апстрима','Импорт новой версии','Своя мера','не указана']);
+   assert.deepEqual(await review.locator('.n').allTextContents(),['2','1','2','1']);
+   assert.deepEqual(await review.locator('.h').allTextContents(),['8 ч','32 ч','—','—']);
+   assert.deepEqual(await done.locator('.h').allTextContents(),['8 ч']);
+   assert.deepEqual(await review.locator('.b > span').evaluateAll(nodes=>nodes.map(n=>n.style.width)),['100%','50%','100%','50%']);
+   assert.equal(await review.locator('.b > span').first().evaluate(n=>getComputedStyle(n).backgroundColor),
+    await done.locator('.b > span').first().evaluate(n=>getComputedStyle(n).backgroundColor));
+   const border=await review.evaluate(n=>({width:getComputedStyle(n).borderTopWidth,style:getComputedStyle(n).borderTopStyle}));
+   assert.ok(parseFloat(border.width)>0 && border.style!=='none');
+   const bounds=await review.boundingBox(); assert.ok(bounds.x>=0 && bounds.x+bounds.width<=width);
+   for(const section of [done,review]) assert.ok(await section.locator('.kv').evaluate(n=>
+    [...n.children].every(cell=>cell.getBoundingClientRect().right<=n.getBoundingClientRect().right+1)),
+    'Measure names, counts and hours must fit inside the developer card');
+   assert.ok((await review.boundingBox()).y>(await done.boundingBox()).y);
+   await review.locator('.cap').click(); assert.deepEqual(await rownums(),[3,4,5,6,7,13]); await close(); checks++;
+   for(const [index,expected] of [[0,[3,13]],[1,[4]],[2,[6,7]],[3,[5]]]) {
+    for(const selector of ['.k','.b','.n']) {
+     const cell=review.locator(selector).nth(index);
+     await cell.focus(); await page.keyboard.press('Enter');
+     assert.deepEqual(await rownums(),expected); assert.match(await page.locator('#drill-title').innerText(),/Алиса.*На ревью/);
+     await close(); checks++;
+    }
+   }
+   await done.locator('.n').click(); assert.deepEqual(await rownums(),[2]); await close(); checks++;
+   await person('Борис').locator('[data-measure-status="review"] .n').click();
+   assert.deepEqual(await rownums(),[9]); await close(); checks++;
+   assert.equal(await person('Вера').locator('[data-measure-status="review"] .cap').innerText(),'НА РЕВЬЮ ПО ПРИНЯТОЙ МЕРЕ · 0');
+   assert.equal(await person('Вера').locator('[data-measure-status="review"] .k').count(),0);
+   assert.equal(await person('Только убранные').locator('[data-measure-status]').count(),0);
+   await alice.screenshot({path:path.join(base,`personal-measures-${width}.png`)});
+  }
+  await page.setViewportSize({width:1440,height:1000}); await page.emulateMedia({colorScheme:'light'});
   await load('header-done');
   for(const [width,theme] of [[1440,'light'],[390,'dark']]) {
    await page.setViewportSize({width,height:1000});

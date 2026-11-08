@@ -177,8 +177,8 @@
       const target = e.target.closest('[data-drill]');
       if (target && (e.key === 'Enter' || e.key === ' ') && !dialog.open) { e.preventDefault(); open(nodes.get(target), target); }
     });
-    function grid(id, getRows, opts = {}) {
-      const host = $(id); if (!host) return;
+    function grid(target, getRows, opts = {}) {
+      const host = typeof target === 'string' ? $(target) : target; if (!host) return;
       const cells = [...host.children];
       let index = 0;
       for (const indexes of strips.rows(cells, c => c.classList.contains('k'), c => c.classList.contains('h'))) {
@@ -337,6 +337,12 @@
         for (const node of card.querySelector('.pbar').children) {
           const part = parts.find(p => p.key === node.dataset.segment);
           if (part) bind(node, dev + ' · ' + part.label, part.rows);
+        }
+        for (const section of card.querySelectorAll('[data-measure-status]')) {
+          const review = section.dataset.measureStatus === 'review', label = review ? 'На ревью' : 'Сделано';
+          const members = mine.filter(r => review ? roles.isReview(r) : r.done);
+          bind(section.querySelector('.cap'), `${dev} · ${label} по принятой мере`, members);
+          grid(section.querySelector('.kv'), key => members.filter(r => r.measureN === key), { prefix: `${dev} · ${label} · ` });
         }
       }
       const anomalyNumbers=new Set([...$('anom-body').querySelectorAll('tr')].map(tr=>Number(tr.firstElementChild.textContent)).filter(Number.isFinite));

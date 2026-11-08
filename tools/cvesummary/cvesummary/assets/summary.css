@@ -249,6 +249,9 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .dev .kv.kv4{grid-template-columns:minmax(110px,1.4fr) minmax(40px,1fr) 3em 6.2em}
 .dev .kv .kh{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;text-align:right;white-space:nowrap}
 .dev .kv .h{text-align:right;color:var(--muted);white-space:nowrap}
+.dev-measures{display:flex;flex-direction:column;gap:8px;min-width:0}
+.dev-measures .k{min-width:0;overflow-wrap:anywhere}
+.dev-measures + .dev-measures{border-top:1px solid var(--line);margin-top:6px;padding-top:14px}
 /* статусы — строкой-легендой под полосой */
 .dev .dstat{display:flex;flex-wrap:wrap;gap:4px 20px;font-size:13px;color:var(--muted)}
 .dev .dstat div{display:flex;align-items:center;gap:6px;min-width:0}
@@ -262,6 +265,7 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .dev .speed .v{font-family:var(--f-display);font-size:18px;font-weight:500;font-variant-numeric:tabular-nums}
 .dev .speed .l{font-size:11.5px;color:var(--muted)}
 @media (max-width:720px){.dev{grid-template-columns:minmax(0,1fr)}.dev > div:nth-child(3){border-left:0;padding-left:20px}
+  .dev .kv.kv4{grid-template-columns:minmax(0,1.4fr) minmax(24px,1fr) 3em 6.2em;column-gap:6px}
   .dev > div:first-child{grid-template-columns:auto minmax(0,1fr)}
   .dev > div:first-child .dnow{grid-column:1/-1;grid-row:4;justify-self:start;text-align:left}}
 .person{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
@@ -379,7 +383,7 @@ td a{color:var(--accent);text-decoration:none}td a:hover{text-decoration:underli
 .pace-leg{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .tl .vmark{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 3}
 .tl text.vlab{font-size:11px;paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
-/* подпись перерыва в работе — по центру штриховки, поверх данных */
+/* вертикальная подпись перерыва — в первом дне штриховки, поверх данных */
 .tl text.brk-lab{fill:var(--fg);font-weight:600}
 .pace-leg i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:3px;margin-right:6px}
 .pace-tl .wkend{opacity:.6}

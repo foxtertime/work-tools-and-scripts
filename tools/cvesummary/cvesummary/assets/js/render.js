@@ -177,9 +177,9 @@
     F.plot.insertBefore(g, F.plot.querySelector('.gl'));
   }
   /* Перерывы в работе — штриховка, как «растриажено» в шапке, во всю
-     высоту поля, поверх выходных и окна темпа, под сеткой и данными; по
-     центру — подпись «перерыв», если влезает. dayX — левый край дня, dayW
-     — ширина дня. Подписи возвращаются — их кладут поверх данных. */
+     высоту поля, поверх выходных и окна темпа, под сеткой и данными; в
+     первом дне — вертикальная подпись. dayX — левый край дня, dayW —
+     ширина дня. Подписи возвращаются — их кладут поверх данных. */
   const BREAK_LEG = ['перерыв в работе', 'background:repeating-linear-gradient(135deg,transparent 0 4px,var(--hatch) 4px 8px);height:10px;vertical-align:-1px'];
   const PERSONAL_BREAK_LEG = ['личный перерыв', 'background:repeating-linear-gradient(45deg,transparent 0 4px,var(--personal-hatch) 4px 6px);height:10px;vertical-align:-1px'];
   let hatchN = 0;
@@ -194,9 +194,9 @@
       const x0 = Math.max(0, dayX(b.from)), x1 = Math.min(F.width, dayX(b.to) + dayW);
       if (x1 <= x0) continue;
       g.append(mk('rect', { x: x0, y: top, width: x1 - x0, height: bottom - top, fill: `url(#${id})`, 'data-from': b.from, 'data-to': b.to }));
-      if (x1 - x0 < 64) continue;
-      const overlapsCommon = personal && BREAKS.some(gap => gap.from <= b.to && gap.to >= b.from);
-      const t = mk('text', { x: (x0 + x1) / 2, y: overlapsCommon ? top + 14 : (top + bottom) / 2 + 4, 'text-anchor': 'middle', class: 'vlab brk-lab' });
+      const x = x0 + Math.min(dayW, x1 - x0) / 2, y = (top + bottom) / 2;
+      const t = mk('text', { x, y, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+        transform: `rotate(-90 ${x} ${y})`, class: 'vlab brk-lab' });
       t.textContent = personal ? 'личный перерыв' : 'перерыв'; labels.push(t);
     }
     F.plot.insertBefore(g, F.plot.querySelector('.gl'));
@@ -1063,7 +1063,7 @@
       paceInitialized = true;
     }
     const stop = dates.dayOf(sd.value), target = dates.dayOf(td.value);
-    $('pace-note').textContent += ` Скорость прогноза — сумма личных скоростей участников без текущего перерыва (кроме SecOps). Личный перерыв: ${activity.PERSONAL_BREAK_WORKDAYS} рабочих дней подряд без начатых задач; при достижении порога исключается весь простой. Исторические закрытия и остаток сохраняются.`;
+    $('pace-note').textContent += ` Скорость прогноза — сумма личных скоростей участников без текущего перерыва (кроме SecOps). Личный перерыв: ${activity.PERSONAL_BREAK_WORKDAYS} рабочих дней подряд без начатых задач; при достижении порога исключается весь новый отрезок простоя. Общий перерыв завершает личные: после его окончания отсчёт до личного перерыва начинается заново. Исторические закрытия и остаток сохраняются.`;
     const F = windowForecast(R, future.outR, stop, target);
     const row = (title, result, note) => {
       const r = el('div', 'fc-cell');
@@ -1118,8 +1118,6 @@
     for (const name of removedByDev.keys()) if (!devColor.has(name)) {
       devs.push([name, 0]); devColor.set(name, '--st-removed');
     }
-    const doneKeys = recs.filter(r => r.taken && r.done);
-    const measKeys = roles.measureOrder(doneKeys.map(r => r.measureN));
     const completed = recs.filter(r => r.taken && roles.isSpeedDone(r) && r.endD !== null && r.endD <= AS_OF);
     const chartMeasKeys = roles.measureOrder(completed.map(r => r.measureN));
     const chartStart = START ?? (completed.length ? minOf(completed.map(r => r.endD), Infinity) : null);
@@ -1184,18 +1182,26 @@
       c1.append(now);
       card.append(c1);
 
-      const c3 = el('div'); c3.append(el('div', 'cap', `Сделано по принятой мере · ${done.length}`));
-      /* меры — в их общих цветах; справа — сколько часов в среднем на задачу */
-      const kv3 = el('div', 'kv kv4'); const maxM = maxOf(measKeys.map(k => done.filter(r => r.measureN === k).length), 1);
-      kv3.append(el('span'), el('span'), el('span', 'kh', 'задач'), el('span', 'kh', 'ч на задачу'));
-      measKeys.forEach(k => {
-        const mk3 = done.filter(r => r.measureN === k), v = mk3.length; if (!v) return;
-        kvRow(kv3, k, v, maxM, measColor(k), `${d} · ${k}: ${v}`);
-        const s = Hm.summary(closedWithHours(mk3)), h = el('span', 'h', s.n ? f1(s.mean) + ' ч' : '—');
-        if (s.n) h.dataset.tip = `${k}: в среднем ${f1(s.mean)} ч, медиана ${f1(s.median)} ч, по ${s.n} ${plural(s.n, 'задаче', 'задачам', 'задачам')}`;
-        kv3.append(h);
-      });
-      c3.append(kv3);
+      const c3 = el('div');
+      /* Одинаковые меры сохраняют цвет; ревью показывает все задачи этого
+         статуса и учтённые часы, в том числе по задачам без End date. */
+      for (const [state, title, list] of [['done', 'Сделано', done], ['review', 'На ревью', mine.filter(r => r.review)]]) {
+        const section = el('div', 'dev-measures'); section.dataset.measureStatus = state;
+        section.append(el('div', 'cap', `${title} по принятой мере · ${list.length}`));
+        const keys = roles.measureOrder(list.map(r => r.measureN));
+        const kv = el('div', 'kv kv4'), max = maxOf(keys.map(k => list.filter(r => r.measureN === k).length), 1);
+        kv.append(el('span'), el('span'), el('span', 'kh', 'задач'), el('span', 'kh', 'ч на задачу'));
+        for (const key of keys) {
+          const members = list.filter(r => r.measureN === key), n = members.length;
+          kvRow(kv, key, n, max, measColor(key), `${d} · ${title} · ${key}: ${n}`);
+          const stats = Hm.summary(state === 'done' ? closedWithHours(members) : members.map(r => r.hours));
+          const h = el('span', 'h', stats.n ? f1(stats.mean) + ' ч' : '—');
+          if (stats.n) h.dataset.tip = `${key}: в среднем ${f1(stats.mean)} ч, медиана ${f1(stats.median)} ч, по ${stats.n} ${plural(stats.n, 'задаче', 'задачам', 'задачам')}`
+            + (state === 'review' ? ' · учтённые часы на дату отчёта; без End date — до даты отчёта' : '');
+          kv.append(h);
+        }
+        section.append(kv); c3.append(section);
+      }
       card.append(c3);
 
       const c4 = el('div'); c4.append(el('div', 'cap', 'Скорость'));
