@@ -27,13 +27,27 @@
     }
     for (const person of people.values()) {
       if (roles.norm(person.name) !== 'secops') person.days.forEach(d => active.add(d));
-      if (person.days.size) person.breaks = pace.breaks(person.days, since, asOf, PERSONAL_BREAK_WORKDAYS);
-      else if (since !== null && dates.workdays(since, asOf) >= PERSONAL_BREAK_WORKDAYS) {
-        person.breaks = [{ from: since, to: asOf, work: dates.workdays(since, asOf) }];
-      }
     }
     const breaks = pace.breaks(active, since, asOf);
+    // Общий перерыв завершает личный простой. Каждый промежуток между
+    // общими проверяется отдельно: его дни не продолжают прежний отсчёт.
+    const periods = [];
+    if (since !== null) {
+      let from = since;
+      for (const gap of breaks) {
+        if (from < gap.from) periods.push({ from, to: gap.from - 1 });
+        from = gap.to + 1;
+      }
+      if (from <= asOf) periods.push({ from, to: asOf });
+    }
     for (const person of people.values()) {
+      for (const { from, to } of periods) {
+        if (person.days.size) person.breaks.push(...pace.breaks(person.days, from, to, PERSONAL_BREAK_WORKDAYS));
+        else {
+          const work = dates.workdays(from, to);
+          if (work >= PERSONAL_BREAK_WORKDAYS) person.breaks.push({ from, to, work });
+        }
+      }
       person.current = since !== null && !pace.inBreak(breaks, asOf) && !pace.inBreak(person.breaks, asOf);
     }
     return { since, breaks, people };

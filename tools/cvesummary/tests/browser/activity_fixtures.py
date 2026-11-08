@@ -35,3 +35,12 @@ for name, day in [("short", 3), ("away", 8), ("returned", 9), ("open", 8), ("all
     data = dict(meta=dict(version="test", source="activity", as_of=(start + timedelta(days=day)).isoformat(),
                           skipped=0, bad_dates=0, missing=[]), rows=rows)
     (out / (name + ".html")).write_text(page.render(data), encoding="utf-8")
+
+for name, day in [("priority-common", 20), ("priority-fourth", 24), ("priority-fifth", 25)]:
+    rows = [task("Алиса", 0, 0, "Ожидает ревью" if i < 2 else "Готов") for i in range(5)]
+    rows += [task("Борис", 0, 7), task("Борис", 21, status="В работе")]
+    for i, row in enumerate(rows):
+        row.update(row=i + 2, cve="CVE-2026-%d" % (9100 + i), task="PRIORITY-%d" % i)
+    data = dict(meta=dict(version="test", source="break-priority", as_of=(start + timedelta(days=day)).isoformat(),
+                          skipped=0, bad_dates=0, missing=[]), rows=rows)
+    (out / (name + ".html")).write_text(page.render(data), encoding="utf-8")

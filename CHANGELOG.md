@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-09
+
+### Изменено
+
+- `cvesummary` (1.40.0): общий перерыв завершает личные и сбрасывает
+  отсчёт личного простоя; скорость и прогноз учитывают новые интервалы.
+  Подписи перерывов на таймлайнах расположены вертикально в первом дне полосы.
+
+### Добавлено
+
+- `cvesummary` (1.39.0): раздел «На ревью по принятой мере» в личных
+  карточках разработчиков, с разделителем, минибарами, количеством
+  задач, средними часами и точными списками по клику.
+
 ## [0.36.0] - 2026-11-09
 
 ### Добавлено
@@ -642,7 +656,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.36.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.37.0...HEAD
+[0.37.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.33.0...v0.34.0
