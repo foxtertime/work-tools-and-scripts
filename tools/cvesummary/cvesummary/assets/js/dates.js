@@ -12,6 +12,12 @@
   'use strict';
 
   const DAY_MS = 864e5;
+  let calendar = new Map();
+
+  /* Вызывается один раз перед расчётами отчёта. Без календаря — Пн–Пт. */
+  function setCalendar(data) {
+    calendar = new Map(Object.entries(data?.days || {}).map(([iso, info]) => [dayOf(iso), info]));
+  }
 
   function dayOf(iso) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
@@ -21,15 +27,20 @@
   function ruOf(day) { const s = isoOf(day); return `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}`; }
   function weekday(day) { return (new Date(day * DAY_MS).getUTCDay() + 6) % 7; }
   function isWeekend(day) { return weekday(day) >= 5; }
+  function isNonWorking(day) { return calendar.has(day) ? !calendar.get(day).working : isWeekend(day); }
+  function dayLabel(day) { return calendar.get(day)?.label || (isWeekend(day) ? 'Выходной' : 'Рабочий день'); }
   function mondayOf(day) { return day - weekday(day); }
-  /* рабочих дней Пн–Пт в [from, to] включительно; праздников не знаем */
+  /* Рабочие дни в [from, to]: Пн–Пт с поправками календаря. */
   function workdays(from, to) {
     if (to < from) return 0;
     const n = to - from + 1, full = Math.floor(n / 7);
     let k = full * 5;
     for (let d = from + full * 7; d <= to; d++) if (!isWeekend(d)) k++;
+    for (const [d, info] of calendar) {
+      if (d >= from && d <= to) k += Number(info.working) - Number(!isWeekend(d));
+    }
     return k;
   }
 
-  return { dayOf, isoOf, ruOf, weekday, isWeekend, mondayOf, workdays };
+  return { dayOf, isoOf, ruOf, weekday, isWeekend, isNonWorking, dayLabel, setCalendar, mondayOf, workdays };
 }));

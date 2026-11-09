@@ -5,6 +5,11 @@
   'use strict';
   const { dates, roles, scope, segments, hours: Hm, pace, activity, timeline, nav, strips, ai, links } = window.CS;
   const DATA = JSON.parse(document.getElementById('data').textContent);
+  dates.setCalendar(DATA.calendar);
+  const calendarYears = DATA.calendar?.years || [];
+  const calendarNote = calendarYears.length
+    ? `Календарь РФ: ${calendarYears.join(', ')} — с праздниками и переносами. Для остальных лет — Пн–Пт без праздников. Сокращённый день считается полным.`
+    : 'Календарь праздников не загружен: расчёты по Пн–Пт, без праздников и переносов.';
   const AS_OF = dates.dayOf(DATA.meta.as_of);
   const NS = 'http://www.w3.org/2000/svg';
   const AXIS_W = 32;
@@ -19,6 +24,7 @@
   const REVIEW_LEG = ['ожидает ревью', REVIEW_PATTERN_STYLE];
   const f1 = x => (Math.round(x * 10) / 10).toString().replace('.', ',');
   const fmt = d => (d === null || d === undefined ? '—' : dates.ruOf(d));
+  const dayTip = d => fmt(d) + (DATA.calendar?.days?.[dates.isoOf(d)] ? ` · ${dates.dayLabel(d)}` : '');
   const mk = (t, a) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   /* Math.max(...arr) на большом массиве валит стек вызовов — данные таблицы любого размера */
@@ -164,15 +170,15 @@
       t.textContent = label; return t;
     });
   }
-  /* Выходные — светло-серая заливка во всю высоту поля, по суббот-
-     воскресным отрезкам; поверх окна темпа, под сеткой и данными. */
+  /* Нерабочие дни календаря — серая заливка с подписью праздника;
+     поверх окна темпа, под сеткой и данными. */
   function weekends(F, from, n, top, bottom) {
     const g = mk('g', { class: 'wkend', fill: 'var(--weekend)' });
     for (let i = 0; i < n; i++) {
-      if (!dates.isWeekend(from + i)) continue;
-      let j = i; while (j + 1 < n && dates.isWeekend(from + j + 1)) j++;
-      g.append(mk('rect', { x: F.step * i, y: top, width: F.step * (j - i + 1), height: bottom - top }));
-      i = j;
+      const day = from + i;
+      if (!dates.isNonWorking(day)) continue;
+      g.append(mk('rect', { x: F.step * i, y: top, width: F.step, height: bottom - top,
+        'data-date': dates.isoOf(day), 'data-tip': `${fmt(day)} · ${dates.dayLabel(day)}` }));
     }
     F.plot.insertBefore(g, F.plot.querySelector('.gl'));
   }
@@ -275,8 +281,8 @@
     }
     all.forEach((s, i) => {
       const hit = mk('rect', { x: F.step * i, y: 8, width: F.step, height: 200, fill: 'transparent', 'data-i': i });
-      hit.dataset.tip = s.plan ? `${fmt(s.day)} · симуляция: поступит ${f1(s.i)}, закроем ${f1(s.o)} · среднее за 7 дней ${f1(s.ia)} / ${f1(s.oa)}`
-        : `${fmt(s.day)}: поступило ${s.i}, закрыто ${s.o} · среднее за 7 дней ${f1(s.ia)} / ${f1(s.oa)}` + breakTip(s.day, s.day);
+      hit.dataset.tip = s.plan ? `${dayTip(s.day)} · симуляция: поступит ${f1(s.i)}, закроем ${f1(s.o)} · среднее за 7 дней ${f1(s.ia)} / ${f1(s.oa)}`
+        : `${dayTip(s.day)}: поступило ${s.i}, закрыто ${s.o} · среднее за 7 дней ${f1(s.ia)} / ${f1(s.oa)}` + breakTip(s.day, s.day);
       F.plot.append(hit);
     });
     pauses.concat(labels).forEach(t => F.plot.append(t));
@@ -371,7 +377,7 @@
       }
       if (!v) continue;
       const hit = mk('rect', { x: F.step * i, y: 8, width: F.step, height: 200, fill: 'transparent', 'data-i': i });
-      const when = fmt(day) + (day > AS_OF ? ` · ${word}` : '');
+      const when = dayTip(day) + (day > AS_OF ? ` · ${word}` : '');
       const id = ideal(i);
       hit.dataset.tip = up ? `${when}: всего поступило ${R0(v.inc)}, закрыто ${R0(v.out)}, открыто ${R0(v.inc) - R0(v.out)}`
         : `${when}: открыто ${R0(v.open)}` + (id !== null && day > AS_OF ? ` · по идеальной линии ${R0(id)}` : '');
@@ -436,7 +442,7 @@
       const col = mk('g', { class: 'hl', 'data-chart-day': w.t }); F.plot.append(col);
       const x = i * F.step + (F.step - barW) / 2;
       const segs = cats.filter(s => w[s.k] > 0);
-      const when = byDay ? fmt(w.t) : 'Неделя с ' + fmt(w.t), segmentShapes = [];
+      const when = byDay ? dayTip(w.t) : 'Неделя с ' + fmt(w.t), segmentShapes = [];
       const info = segs.filter(s => s.info).reduce((n, s) => n + w[s.k], 0), primary = w.all - info;
       let acc = 0;
       segs.forEach((s, j) => {
@@ -894,7 +900,7 @@
     cell(`Остаток к ${target === null ? 'целевой дате' : fmt(target)}`, valid ? (F.remaining === 0 ? '0' : F.remaining < 0.1 ? '< 0,1' : '≈ ' + f1(F.remaining)) : '—',
       valid ? (plan ? 'По плановому темпу, если начать завтра.' : 'По скорости активных разработчиков за выбранный период.') + ' С учётом новых задач до цели.' : why,
       valid ? F.remaining > 0 ? 'bad' : 'ok' : '');
-    cell('Запас до цели', marginText(F, target), valid ? (F.margin === null ? forecastNote(F) : 'В рабочих днях, Пн–Пт, без праздников.') : why,
+    cell('Запас до цели', marginText(F, target), valid ? (F.margin === null ? forecastNote(F) : calendarNote) : why,
       F.margin !== null ? AS_OF + F.days > target ? 'bad' : 'ok' : '');
   }
 
@@ -958,7 +964,7 @@
     const f2 = x => String(Math.round(x * 100) / 100).replace('.', ',');  // темп — до сотых, как в поле
 
     $('pace-sub-plan').textContent = `На ${fmt(AS_OF)} · симуляция: ${people} по ${f2(rate)} — ${f2(P)} в рабочий день; ${source}; ` + (R.days ? `поступление — по факту с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}` : noPeriod);
-    $('pace-note-plan').textContent = `Симуляция на дату отчёта ${fmt(AS_OF)}: до старта задачи только поступают, со старта закрываем заданным темпом по рабочим дням, Пн–Пт, без учёта праздников. Новые приходят каждый календарный день в темпе периода с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)} (если задан сканфриз — до него). «Начать не позднее» — самый поздний день старта, при котором всё закрывается к цели. Разработчики и остальные блоки страницы считаются по фактическим данным.`;
+    $('pace-note-plan').textContent = `Симуляция на дату отчёта ${fmt(AS_OF)}: до старта задачи только поступают, со старта закрываем заданным темпом по рабочим дням. ${calendarNote} Новые приходят каждый календарный день в темпе периода с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)} (если задан сканфриз — до него). «Начать не позднее» — самый поздний день старта, при котором всё закрывается к цели. Разработчики и остальные блоки страницы считаются по фактическим данным.`;
     if (shown) {
       $('p-out').textContent = f2(P); $('p-out-l').textContent = 'по плану в рабочий день';
       $('p-out').parentElement.dataset.tip = `${people} × ${f2(rate)} в рабочий день`;
@@ -1042,7 +1048,8 @@
     $('pace-sub').textContent = `На ${fmt(AS_OF)} · темп с ${fmt(WINDOW.from)} по ${fmt(WINDOW.to)}: ${days(R.days)}, из них ${wdays(R.work)}${cutText(R)}` + (WINDOW.from > wa ? ` — начало прижато к началу работы` : '');
     $('pace-sub').textContent += ` · прогноз: ${capacity.active} из ${capacity.total} разработчиков, ${f1(capacity.outR)} задач/день`;
     if (!R.days) $('pace-sub').textContent = noPeriod;
-    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Убрано из эпика не входит в пул: остаток, поступление, баланс, графики и часы считаются без этих задач. Только скорость в задачах за день дополнительно учитывает убранные задачи, завершённые разработчиком, кроме SecOps: нужны корректные Start date и End date, конец не раньше начала и не позже даты отчёта. Незавершённые убранные задачи не влияют на рабочие дни и перерывы. Сканфриз — первый день без новых задач. До него новые задачи приходят каждый календарный день, закрываем по рабочим дням, Пн–Пт, без учёта праздников. Свободная мощность не накапливается. Завершение — после последних поступлений, а не при первом нуле в очереди. Перерыв в работе — ${pace.BREAK_WORKDAYS} и больше рабочих дней подряд, когда ни на ком из разработчиков (кроме SecOps) не висело задач: его рабочие дни и закрытое в нём в темп закрытия не идут, на графиках он заштрихован.`;
+    $('calendar-note').textContent = calendarNote;
+    $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Убрано из эпика не входит в пул: остаток, поступление, баланс, графики и часы считаются без этих задач. Только скорость в задачах за день дополнительно учитывает убранные задачи, завершённые разработчиком, кроме SecOps: нужны корректные Start date и End date, конец не раньше начала и не позже даты отчёта. Незавершённые убранные задачи не влияют на рабочие дни и перерывы. Сканфриз — первый день без новых задач. До него новые задачи приходят каждый календарный день, закрываем по рабочим дням. ${calendarNote} Свободная мощность не накапливается. Завершение — после последних поступлений, а не при первом нуле в очереди. Перерыв в работе — ${pace.BREAK_WORKDAYS} и больше рабочих дней подряд, когда ни на ком из разработчиков (кроме SecOps) не висело задач: его рабочие дни и закрытое в нём в темп закрытия не идут, на графиках он заштрихован.`;
     $('pace-note').textContent += ' В общей и личной скорости «Ожидает ревью» считается выполненной работой по корректной End date, если она попадает в период и не позже даты отчёта. Без End date задача не добавляет выполненную работу в скорость. Статус ревью, остаток и фактический баланс закрытия сохраняются; правила рабочих дней и перерывов не меняются.';
     /* средние — за период, в подсказке — сколько это задач; баланс — сколько
        реально пришло минус закрыто за выбранный период */

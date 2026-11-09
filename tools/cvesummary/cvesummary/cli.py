@@ -7,7 +7,7 @@ import sys
 import tempfile
 from typing import List, Optional
 
-from . import __version__, csvfile, page, table, xlsx
+from . import __version__, csvfile, page, table, workcalendar, xlsx
 
 logger = logging.getLogger("cvesummary")
 
@@ -104,6 +104,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                  "as_of": as_of.isoformat(), "release": release, "skipped": found.skipped,
                  "missing": found.missing, "bad_dates": found.bad_dates},
         "rows": found.rows,
+        "calendar": workcalendar.load(found.rows, as_of),
     }
     existed = os.path.exists(output)
     try:
