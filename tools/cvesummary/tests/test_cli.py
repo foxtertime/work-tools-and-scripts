@@ -8,7 +8,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
-from cvesummary import __version__, cli
+from cvesummary import __version__, cli, workcalendar
 from tests.xlsxmake import corrupt, write
 
 DATA_RE = re.compile(r'<script type="application/json" id="data">(.*?)</script>', re.S)
@@ -24,6 +24,11 @@ class Base(unittest.TestCase):
         self.addCleanup(self.dir.cleanup)
         self.table = self.path("t.xlsx")
         write(self.table, ROWS)
+        # CLI tests exercise the real bundled calendar, without network or user cache.
+        for patch in (mock.patch.dict(os.environ, {"XDG_CACHE_HOME": self.dir.name}),
+                      mock.patch.object(workcalendar, 'urlopen', side_effect=OSError('offline'))):
+            patch.start()
+            self.addCleanup(patch.stop)
 
     def path(self, name):
         return os.path.join(self.dir.name, name)
@@ -48,6 +53,8 @@ class WriteTest(Base):
         self.assertEqual(data["meta"]["as_of"], "2026-10-19")
         self.assertEqual(data["meta"]["skipped"], 1)
         self.assertEqual(data["meta"]["source"], "t.xlsx")
+        self.assertFalse(data['calendar']['days']['2026-11-04']['working'])
+        self.assertEqual(data['calendar']['years'], [2026, 2027])
         self.assertIn("записано", log)
         self.assertIn("без CVE ID пропущено: 1", log)
 

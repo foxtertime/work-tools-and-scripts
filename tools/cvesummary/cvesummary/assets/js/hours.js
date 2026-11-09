@@ -64,7 +64,7 @@
         const on = spans.filter(s => s.from <= d && d <= s.to);
         if (!on.length) continue;
         counts.set(d, on.length);
-        if (dates.isWeekend(d) && !edges.has(d)) continue;
+        if (dates.isNonWorking(d) && !edges.has(d)) continue;
         days.add(d);
         const share = HOURS_PER_DAY / on.length;
         on.forEach(s => { hours[s.i] += share; });

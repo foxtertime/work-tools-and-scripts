@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-09
+
+### Добавлено
+
+- `cvesummary` (1.41.0): производственный календарь РФ с праздниками и переносами
+  для часов, скоростей, перерывов и прогноза; кеш, автономные резервные копии
+  и подсказки праздников на графиках. Фактическая работа в праздник сохраняется.
+
 ## [0.37.0] - 2026-11-09
 
 ### Изменено
@@ -656,7 +664,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.37.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.38.0...HEAD
+[0.38.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.34.0...v0.35.0

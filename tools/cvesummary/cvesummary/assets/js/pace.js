@@ -2,8 +2,8 @@
    date, закрытие — «Готов» по End date; для скорости также учитывается
    «Ожидает ревью» с корректной End date. Всё, что позже даты отчёта, ещё
    не случилось. Новые задачи приходят каждый день, и в выходные: темп
-   поступления — на календарный день. Закрывают по рабочим дням (Пн–Пт,
-   без праздников): темп закрытия — на рабочий день. Баланс — за неделю:
+   поступления — на календарный день. Закрывают по производственному
+   календарю: темп закрытия — на рабочий день. Нормированный баланс за неделю:
    5 рабочих дней закрытия против 7 календарных поступления. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -104,7 +104,7 @@
     for (let d = 1; d <= horizon; d++) {
       const day = asOf + d, fresh = incomingOn(inR, stop, day);
       left += fresh; inc += fresh;
-      if (!dates.isWeekend(day) && (start == null || day >= start)) {
+      if (!dates.isNonWorking(day) && (start == null || day >= start)) {
         const closed = Math.min(Math.max(0, outR), left);
         left -= closed; out += closed;
       }
@@ -134,7 +134,7 @@
     let incoming = 0, left = 0, perDay = 0;
     for (let day = target; day > asOf; day--) {
       incoming += incomingOn(inR, stop, day);
-      if (!dates.isWeekend(day)) left++;
+      if (!dates.isNonWorking(day)) left++;
       const backlog = incoming + (day === asOf + 1 ? n : 0);
       perDay = Math.max(perDay, left ? backlog / left : backlog > EPS ? Infinity : 0);
     }
