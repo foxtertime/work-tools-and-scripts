@@ -59,7 +59,7 @@
       from = Math.max(from, person.since); to = Math.min(to, person.asOf);
       const gaps = commonBreaks.concat(person.breaks);
       for (let d = from; d <= to; d++) {
-        if (dates.isWeekend(d) && !person.days.has(d)) continue;
+        if (dates.isNonWorking(d) && !person.days.has(d)) continue;
         if (pace.inBreak(gaps, d)) cut++; else work++;
       }
       closed = person.closedDays.filter(d => d >= from && d <= to && !pace.inBreak(gaps, d)).length;
