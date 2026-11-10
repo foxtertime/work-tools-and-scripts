@@ -73,7 +73,8 @@
       node.dataset.drill = '1'; node.classList.add('drill-target'); node.tabIndex = 0;
       node.setAttribute('role', 'button'); node.setAttribute('aria-haspopup', 'dialog');
       node.setAttribute('aria-label', `${title} — открыть список, ${members.length} строк`);
-      node.title = 'Открыть задачи: ' + title;
+      // Подсказка — через data-tip; title перекрывает её нативным тултипом.
+      node.removeAttribute('title');
     }
     const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
     const dialog = make('dialog', 'drill-dialog'); dialog.id = 'task-explorer';
