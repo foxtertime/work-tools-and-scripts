@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+## [0.38.1] - 2026-11-10
+
+### Исправлено
+
+- `cvesummary` (1.41.1): убрана стандартная подсказка «Открыть задачи…»
+  у кликабельных баров и счётчиков, перекрывавшая стилизованные подсказки.
+
 ## [0.38.0] - 2026-11-09
 
 ### Добавлено
@@ -664,7 +671,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.38.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.38.1...HEAD
+[0.38.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.38.0...v0.38.1
 [0.38.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.35.0...v0.36.0
