@@ -35,7 +35,7 @@
 - `assets/js/links.js`: проверка URL и шаблонов, кнопки тикета/GitLab/CVE/RHSA.
 - `assets/js/model.js`: рабочая сессия, переходы, basis/повторное ревью, JSON validate/import/export.
 - `assets/js/app.js`: DOM/события, загрузки/скачивание/кеш, фильтры, страницы по 50 карточек, отмена.
-- `assets/review.html`, `assets/style.css`, `assets/fonts/`: выбранный UI и локальные ресурсы.
+- `assets/review.html`, `assets/style.css`, `assets/app.css`, `assets/fonts/`: выбранный UI и локальные ресурсы.
 - `build.py`: детерминированная упаковка и `--check`; `cvereview.html`: результат.
 - `tests/{csv,checklists,links,model}.test.cjs`, `tests/browser.cjs`: регрессии ядра и реальный HTML.
 - `README.md`, `TODO.md`, `CHANGELOG.md`, `VERSION`, `examples/vulnsheet-demo.csv`: использование, версия, пример.
@@ -46,11 +46,11 @@
 
 **Interfaces:** `CR.csv` in browser / CommonJS in Node. `parse(text, sourceName='') -> table`; `decode(Uint8Array) -> {text,encoding}`; `read(bytes,sourceName) -> table`; `identity(row) -> {task,cve,component}`; `keyOf(row) -> string`; `eligible(row) -> boolean`. Table `{sourceName,headers,rows,diagnostics,delimiter,encoding}`; rows use task/cve/component/dev/status/measure/sl/rh/p/d/rstate/severity/cvss/comment/start/end/fixdate/rhsa/link/ai_* plus raw fields and source record number.
 
-- [ ] Write tests: semicolon CSV with pre-header, CRLF and quoted multiline/escaped quote fields; comma/tab/BOM/cp1251; required headers, malformed quotes/NUL, shuffled headers; empty identifiers, exact/conflicting duplicates; case/space status matching and both accepted statuses; distinct tuples with same Task ID.
-- [ ] Run `node --test tools/cvereview/tests/csv.test.cjs`; observe failures from absent parser.
-- [ ] Implement a character-state CSV parser, delimiter/header selection, decoder and row normalization; preserve raw values, reject conflicting duplicates before returning a new table.
-- [ ] Run the same test command; expected all tests pass.
-- [ ] Commit `feat(cvereview): parse browser-loaded vulnerability CSV`.
+- [x] Write tests: semicolon CSV with pre-header, CRLF and quoted multiline/escaped quote fields; comma/tab/BOM/cp1251; required headers, malformed quotes/NUL, shuffled headers; empty identifiers, exact/conflicting duplicates; case/space status matching and both accepted statuses; distinct tuples with same Task ID.
+- [x] Run `node --test tools/cvereview/tests/csv.test.cjs`; observe failures from absent parser.
+- [x] Implement a character-state CSV parser, delimiter/header selection, decoder and row normalization; preserve raw values, reject conflicting duplicates before returning a new table.
+- [x] Run the same test command; expected all tests pass.
+- [x] Commit `feat(cvereview): parse browser-loaded vulnerability CSV`.
 
 ### Task 2: Measure profiles and links
 
@@ -58,12 +58,12 @@
 
 **Interfaces:** `CR.checklists.forMeasure(measure) -> {id,version,label,warning,items:[{id,label,description}]}` and `byId(id) -> profile|null`; `CR.links.safeURL(value) -> string|null`, `validateTemplate(value) -> string`, `forRow(row,settings) -> [{id,label,url,reason?}]`. Defaults: tracker URL from spec, GitLab unset.
 
-- [ ] Write tests for all exact production measure names, normalized matching, unknown/empty fallback, unique semantic IDs and nonempty descriptions; special non-applicability profile without build/patch checks.
-- [ ] Write link tests: full Task URL, encoded component path, disabled unconfigured GitLab, CVE fallback, conditional RHSA, rejected unsafe/malformed protocols and invalid templates.
-- [ ] Run `node --test tools/cvereview/tests/checklists.test.cjs tools/cvereview/tests/links.test.cjs`; observe RED.
-- [ ] Implement the spec's 11 profiles plus two explicit fallback profiles, and HTTP(S)-only link construction.
-- [ ] Run `node --test tools/cvereview/tests/*.test.cjs`; expected all pass.
-- [ ] Commit `feat(cvereview): add measure-specific checklists and task links`.
+- [x] Write tests for all exact production measure names, normalized matching, unknown/empty fallback, unique semantic IDs and nonempty descriptions; special non-applicability profile without build/patch checks.
+- [x] Write link tests: full Task URL, encoded component path, disabled unconfigured GitLab, CVE fallback, conditional RHSA, rejected unsafe/malformed protocols and invalid templates.
+- [x] Run `node --test tools/cvereview/tests/checklists.test.cjs tools/cvereview/tests/links.test.cjs`; observe RED.
+- [x] Implement the spec's 11 profiles plus two explicit fallback profiles, and HTTP(S)-only link construction.
+- [x] Run `node --test tools/cvereview/tests/*.test.cjs`; expected all pass.
+- [x] Commit `feat(cvereview): add measure-specific checklists and task links`.
 
 ### Task 3: State model and JSON
 
@@ -71,12 +71,12 @@
 
 **Interfaces:** `CR.model.create(table, previousSession=null) -> session`; `setCheck(session,key,item,value) -> session`; `decide(session,key,pool,comment?) -> session`; `importJSON(session,text) -> {session,summary}`; `exportJSON(session) -> string`; `profile(row)`, `complete(record,profile)`, `basis(row)`. Session holds table, records array keyed by identity, settings, dirty. Functions never mutate caller state; failures throw user-readable errors. JSON schema/app/profile snapshots follow the spec.
 
-- [ ] Write tests for unseen initial state, per-card isolation, completion guard, all marked including bad, blank problem comment, return preserving checks, and done read-only checks.
-- [ ] Write tests for round-trip, reordered rows, changed build/measure/profile version, prior snapshot retention, ignored unrelated fields, archived records, explicit import override, invalid/duplicate keys/unknown schema/enums/done with unseen, and atomic failure.
-- [ ] Run `node --test tools/cvereview/tests/model.test.cjs`; observe RED.
-- [ ] Implement immutable transitions and strict validation; compare normalized basis and profile; retain historical profile labels. Merge selected JSON explicitly; records outside current eligibility remain archived.
-- [ ] Run `node --test tools/cvereview/tests/*.test.cjs`; expected all pass.
-- [ ] Commit `feat(cvereview): persist review decisions and reconcile updated CSV`.
+- [x] Write tests for unseen initial state, per-card isolation, completion guard, all marked including bad, blank problem comment, return preserving checks, and done read-only checks.
+- [x] Write tests for round-trip, reordered rows, changed build/measure/profile version, prior snapshot retention, ignored unrelated fields, archived records, explicit import override, invalid/duplicate keys/unknown schema/enums/done with unseen, and atomic failure.
+- [x] Run `node --test tools/cvereview/tests/model.test.cjs`; observe RED.
+- [x] Implement immutable transitions and strict validation; compare normalized basis and profile; retain historical profile labels. Merge selected JSON explicitly; records outside current eligibility remain archived.
+- [x] Run `node --test tools/cvereview/tests/*.test.cjs`; expected all pass.
+- [x] Commit `feat(cvereview): persist review decisions and reconcile updated CSV`.
 
 ### Task 4: Working standalone UI
 
@@ -84,12 +84,12 @@
 
 **Interfaces:** The controller consumes CR modules from Tasks 1–3. Real file inputs `csv-file`, `state-file`; buttons `load-csv`, `load-state`, `save-state`; cards identified with stable `data-key`, check inputs with `data-item`. Cache namespace `cvereview:workspace:v1`, holding CSV text, source name and exported state. The build places inline JS in csv/checklists/links/model/app order; no imports/fetch at runtime.
 
-- [ ] Write browser scenarios for empty app, real CSV upload, correct eligibility/profile, tri-state gating, required problem comment, undo, JSON download/reimport, changed source invalidation, unsafe cell rendering, bad file atomicity, reload/cache failure, links and mobile layout. Run on missing HTML; observe failure.
-- [ ] Implement chosen prototype layout without UI LAB/demo rows, measure-specific right sidebar, settings and optional release label. Provide live source diagnostics and separate browser-cache/JSON status, filters and pagination of 50 cards.
-- [ ] Implement file operations transactionally and cache restoration via validated CSV+JSON. Imports clear undo. Exports download JSON; no claim of automatic filesystem writes. Rebuild only affected card for check changes to preserve focus/open details.
-- [ ] Implement deterministic builder with font data URLs and local licenses, preserving safe serialization of source assets. Build with `python3 tools/cvereview/build.py`.
-- [ ] Run all Node tests and `PLAYWRIGHT_MODULE=<installed module> node tools/cvereview/tests/browser.cjs`. Expected all scenarios pass; file://, no external requests; 360–1440 px and correct 3:1 desktop split.
-- [ ] Commit `feat(cvereview): ship standalone CSV review page`.
+- [x] Write browser scenarios for empty app, real CSV upload, correct eligibility/profile, tri-state gating, required problem comment, undo, JSON download/reimport, changed source invalidation, unsafe cell rendering, bad file atomicity, reload/cache failure, links and mobile layout. Run on missing HTML; observe failure.
+- [x] Implement chosen prototype layout without UI LAB/demo rows, measure-specific right sidebar, settings and optional release label. Provide live source diagnostics and separate browser-cache/JSON status, filters and pagination of 50 cards.
+- [x] Implement file operations transactionally and cache restoration via validated CSV+JSON. Imports clear undo. Exports download JSON; no claim of automatic filesystem writes. Rebuild only affected card for check changes to preserve focus/open details.
+- [x] Implement deterministic builder with font data URLs and local licenses, preserving safe serialization of source assets. Build with `python3 tools/cvereview/build.py`.
+- [x] Run all Node tests and `PLAYWRIGHT_MODULE=<installed module> node tools/cvereview/tests/browser.cjs`. Expected all scenarios pass; file://, no external requests; 360–1440 px and correct 3:1 desktop split.
+- [x] Commit `feat(cvereview): ship standalone CSV review page`.
 
 ### Task 5: Documentation, reproduction and final verification
 
