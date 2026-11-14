@@ -2,26 +2,64 @@ const assert=require('node:assert/strict'),path=require('node:path');const {path
 const C=require('../assets/js/csv.js'),M=require('../assets/js/model.js');
 const url=pathToFileURL(path.resolve(__dirname,'../cvereview.html')).href;
 const input=(name,text)=>({name,mimeType:name.endsWith('.csv')?'text/csv':'application/json',buffer:Buffer.from(text)});
+async function selectFilter(p,id,choices=[]){
+ const root=p.locator('#'+id);if(!Array.isArray(choices))choices=choices===''?[]:[choices];
+ if(!await root.evaluate(el=>el.open))await root.locator('summary').click();
+ await root.locator('[data-action="clear-filter"]').click();
+ for(const choice of choices){const label=typeof choice==='object'?choice.label:({'готов':'Готов','ожидает ревью':'Ожидает ревью'}[choice]||choice);await root.getByRole('checkbox',{name:label,exact:true}).check();}
+ await root.locator('summary').click();
+}
 async function run(browser,only='all'){
+ if(only==='all'||only==='multi'){
+  const p=await browser.newPage();try{
+   const custom='Особая мера с длинным названием для проверки ширины выпадающего списка';
+   const rows=[
+    {'Разработчик':'Анна','Статус':'Ожидает ревью','Принятая мера':'Бэкпорт патча'},
+    {'Разработчик':'Борис','Статус':'Готов','Принятая мера':'Обновление версии'},
+    {'Разработчик':'Вера','Статус':'Ожидает ревью','Принятая мера':'Бэкпорт патча'},
+    {'Разработчик':'Анна','Статус':'Готов','Принятая мера':'Обновление версии'},
+    {'Разработчик':'Борис','Статус':'Ожидает ревью','Принятая мера':custom},
+    {'Разработчик':'Вера','Статус':'Готов','Принятая мера':''}
+   ].map((r,i)=>({...r,'Task ID':String(100+i)}));
+   await p.goto(url);await p.locator('#csv-file').setInputFiles(input('multi.csv',fixture(rows)));await p.waitForSelector('.list-card');
+   assert.equal(await p.locator('#dev input[type="checkbox"]').count(),3,'Filters must offer checkbox choices');
+   const tasks=async()=>(await p.locator('.list-card').evaluateAll(els=>els.map(el=>el.dataset.task))).sort();
+   await selectFilter(p,'dev',['Анна','Борис']);assert.deepEqual(await tasks(),['100','101','103','104']);
+   await selectFilter(p,'developer-status',['Ожидает ревью','Готов']);
+   await selectFilter(p,'measure',['Бэкпорт патча','Обновление версии']);assert.deepEqual(await tasks(),['100','101','103']);
+   const status=p.locator('#developer-status');await status.locator('summary').click();await status.getByRole('checkbox',{name:'Готов',exact:true}).uncheck();assert.deepEqual(await tasks(),['100']);
+   assert.equal(await status.evaluate(el=>el.open),true,'Menu stays open while choosing values');assert.equal(await status.getByRole('checkbox',{name:'Готов',exact:true}).evaluate(el=>el===document.activeElement),true);
+   await status.getByRole('checkbox',{name:'Готов',exact:true}).check();await p.keyboard.press('Escape');assert.equal(await status.evaluate(el=>el.open),false);
+   await p.locator('.list-card[data-task="100"] input[data-item="branch"][value="ok"]').check();
+   await p.locator('#search').fill('Иванов');assert.equal(await p.locator('.list-card').count(),0);await p.locator('#search').fill('');assert.deepEqual(await tasks(),['100','101','103']);
+   await selectFilter(p,'dev',['Анна']);assert.deepEqual(await tasks(),['100','103']);await selectFilter(p,'dev',[]);assert.deepEqual(await tasks(),['100','101','102','103']);
+   await selectFilter(p,'measure',['Мера не указана',custom]);assert.deepEqual(await tasks(),['104','105']);await selectFilter(p,'measure',[]);assert.equal(await p.locator('.list-card[data-task="100"] input[data-item="branch"][value="ok"]').isChecked(),true);
+   for(const width of [1440,1000,901,850,801,800,360]){await p.setViewportSize({width,height:1000});await p.locator('#measure summary').click();const box=await p.locator('#measure .filter-options').boundingBox();assert.ok(box.x>=0&&box.x+box.width<=width,'Open menu must fit width '+width);await p.locator('.section-line').click();assert.equal(await p.locator('#measure').evaluate(el=>el.open),false);}
+   await p.locator('#csv-file').setInputFiles(input('reset.csv',fixture()));await p.waitForSelector('.list-card');assert.equal(await p.locator('.multi-filter input:checked').count(),0);assert.equal(await p.locator('.list-card').count(),1);
+   await p.locator('#csv-file').setInputFiles(input('people.csv',fixture(Array.from({length:45},(_,i)=>({'Task ID':String(200+i),'Разработчик':'Разработчик '+String(i).padStart(2,'0')})))));await p.waitForSelector('.list-card');
+   await p.locator('#dev summary').click();await p.locator('#dev').getByRole('checkbox',{name:'Разработчик 44',exact:true}).check();assert.ok(await p.locator('#dev .filter-choices').evaluate(el=>el.scrollTop>0),'Choosing from a long list must preserve menu scroll position');
+   console.log('PASS regression: multiselect OR within each filter, AND across filters, keyboard/mobile and review preservation');
+  }finally{await p.close();}
+ }
  if(only==='all'||only==='measure'){
   const p=await browser.newPage();try{
    const rows=Array.from({length:56},(_,i)=>({'Task ID':String(100+i),'Принятая мера':i<52?(i===0?'Бэкпорт патча':' БЭКПОРТ   ПАТЧА '):i===53?'Особая мера':i===54?'':'Обновление версии','Статус':i===55?'Готов':'Ожидает ревью','Разработчик':i===55?'Петров П.П.':'Иванов И.И.'}));
    await p.goto(url);await p.locator('#csv-file').setInputFiles(input('measures.csv',fixture(rows)));await p.waitForSelector('.list-card');
-   assert.equal(await p.getByRole('combobox',{name:'Принятая мера',exact:true}).count(),1,'Measure filter must be available');
-   assert.equal(await p.getByRole('combobox',{name:'Критичность',exact:true}).count(),0);
-   assert.equal(await p.locator('#measure option').count(),5,'Case and whitespace variants must share one option');
+   assert.equal(await p.locator('#measure.multi-filter').count(),1,'Measure filter must be available');
+   assert.equal(await p.locator('#severity').count(),0);
+   assert.equal(await p.locator('#measure input[type=checkbox]').count(),4,'Case and whitespace variants must share one option');
    await p.locator('[data-action="next-page"]').click();assert.equal(await p.locator('.list-card').count(),6);
-   await p.locator('#measure').selectOption({label:'Обновление версии'});assert.equal(await p.locator('.list-card').count(),2);assert.equal(await p.locator('.pagination').count(),0);
-   await p.locator('#developer-status').selectOption('готов');await p.locator('#dev').selectOption('Петров П.П.');await p.locator('#search').fill('CVE-2026-1000');assert.equal(await p.locator('.list-card').count(),1);
+   await selectFilter(p,'measure',{label:'Обновление версии'});assert.equal(await p.locator('.list-card').count(),2);assert.equal(await p.locator('.pagination').count(),0);
+   await selectFilter(p,'developer-status','готов');await selectFilter(p,'dev','Петров П.П.');await p.locator('#search').fill('CVE-2026-1000');assert.equal(await p.locator('.list-card').count(),1);
    const card=p.locator('.list-card[data-task="155"]');await card.locator('input[data-item="branch"][value="ok"]').check();
    await card.locator('[data-action="problem"]').click();await p.locator('#problem-comment').fill('Проверить версию');await p.locator('#problem-form button[type="submit"]').click();
    await p.locator('[data-action="pool"][data-pool="problem"]').click();assert.equal(await card.count(),1);
-   await p.locator('#measure').selectOption({label:'Бэкпорт патча'});assert.equal(await p.locator('.list-card').count(),0);
-   await p.locator('#measure').selectOption('');assert.equal(await card.locator('input[data-item="branch"][value="ok"]').isChecked(),true);
-   await p.locator('#developer-status').selectOption('');await p.locator('#dev').selectOption('');await p.locator('#search').fill('');await p.locator('[data-action="pool"][data-pool="pending"]').click();
-   for(const [label,task] of [['Особая мера','153'],['Мера не указана','154']]){await p.locator('#measure').selectOption({label});assert.equal(await p.locator('.list-card').count(),1);assert.equal(await p.locator('.list-card').getAttribute('data-task'),task);}
-   await p.locator('#measure').selectOption({label:'Бэкпорт патча'});assert.equal(await p.locator('.section-line h2 span').innerText(),'52');
-   await p.locator('#csv-file').setInputFiles(input('new.csv',fixture()));await p.waitForSelector('.list-card');assert.equal(await p.locator('#measure').inputValue(),'');assert.equal(await p.locator('.list-card').count(),1);
+   await selectFilter(p,'measure',{label:'Бэкпорт патча'});assert.equal(await p.locator('.list-card').count(),0);
+   await selectFilter(p,'measure','');assert.equal(await card.locator('input[data-item="branch"][value="ok"]').isChecked(),true);
+   await selectFilter(p,'developer-status','');await selectFilter(p,'dev','');await p.locator('#search').fill('');await p.locator('[data-action="pool"][data-pool="pending"]').click();
+   for(const [label,task] of [['Особая мера','153'],['Мера не указана','154']]){await selectFilter(p,'measure',{label});assert.equal(await p.locator('.list-card').count(),1);assert.equal(await p.locator('.list-card').getAttribute('data-task'),task);}
+   await selectFilter(p,'measure',{label:'Бэкпорт патча'});assert.equal(await p.locator('.section-line h2 span').innerText(),'52');
+   await p.locator('#csv-file').setInputFiles(input('new.csv',fixture()));await p.waitForSelector('.list-card');assert.equal(await p.locator('#measure input:checked').count(),0);assert.equal(await p.locator('.list-card').count(),1);
    console.log('PASS regression: measures replace severity, combine with filters, preserve marks and handle custom/empty values');
   }finally{await p.close();}
  }
@@ -56,22 +94,22 @@ async function run(browser,only='all'){
    const rows=Array.from({length:56},(_,i)=>({'Task ID':String(100+i),'Статус':i<54?'  ГОТОВ  ':' Ожидает   ревью ','Разработчик':i===0?'Петров П.П.':'Иванов И.И.','Принятая мера':i===1?'Обновление версии':'Бэкпорт патча','Комментарий':i===0?'Unique filtered target':'Патч применён.'}));
    await p.goto(url);await p.locator('#csv-file').setInputFiles(input('status.csv',fixture(rows)));await p.waitForSelector('.list-card');
    assert.equal(await p.locator('#developer-status').count(),1,'Developer status filter must be available');
-   assert.equal(await p.locator('#developer-status').inputValue(),'');
+   assert.equal(await p.locator('#developer-status input:checked').count(),0);
    await p.locator('[data-action="next-page"]').click();assert.equal(await p.locator('.list-card').count(),6);
-   await p.locator('#developer-status').selectOption('ожидает ревью');assert.equal(await p.locator('.list-card').count(),2);assert.equal(await p.locator('.pagination').count(),0);
+   await selectFilter(p,'developer-status','ожидает ревью');assert.equal(await p.locator('.list-card').count(),2);assert.equal(await p.locator('.pagination').count(),0);
    await p.locator('.list-card[data-task="154"] input[data-item="branch"][value="ok"]').check();
-   await p.locator('#developer-status').selectOption('готов');assert.equal(await p.locator('.list-card').count(),50);
-   await p.locator('#dev').selectOption('Петров П.П.');assert.equal(await p.locator('.list-card').count(),1);
-   await p.locator('#measure').selectOption({label:'Обновление версии'});assert.equal(await p.locator('.list-card').count(),0);
-   await p.locator('#measure').selectOption('');await p.locator('#search').fill('Unique filtered target');assert.equal(await p.locator('.list-card').count(),1);
-   await p.locator('#developer-status').selectOption('ожидает ревью');assert.equal(await p.locator('.list-card').count(),0);
-   await p.locator('#search').fill('');await p.locator('#dev').selectOption('');assert.equal(await p.locator('.list-card').count(),2);
+   await selectFilter(p,'developer-status','готов');assert.equal(await p.locator('.list-card').count(),50);
+   await selectFilter(p,'dev','Петров П.П.');assert.equal(await p.locator('.list-card').count(),1);
+   await selectFilter(p,'measure',{label:'Обновление версии'});assert.equal(await p.locator('.list-card').count(),0);
+   await selectFilter(p,'measure','');await p.locator('#search').fill('Unique filtered target');assert.equal(await p.locator('.list-card').count(),1);
+   await selectFilter(p,'developer-status','ожидает ревью');assert.equal(await p.locator('.list-card').count(),0);
+   await p.locator('#search').fill('');await selectFilter(p,'dev','');assert.equal(await p.locator('.list-card').count(),2);
    const card=p.locator('.list-card[data-task="154"]');assert.equal(await card.locator('input[data-item="branch"][value="ok"]').isChecked(),true);
    await card.locator('[data-action="problem"]').click();await p.locator('#problem-comment').fill('Уточнить патч');await p.locator('#problem-form button[type="submit"]').click();
    await p.locator('[data-action="pool"][data-pool="problem"]').click();assert.equal(await p.locator('.list-card').count(),1);
-   await p.locator('#developer-status').selectOption('готов');assert.equal(await p.locator('.list-card').count(),0);
-   await p.locator('#developer-status').selectOption('');assert.equal(await card.locator('input[data-item="branch"][value="ok"]').isChecked(),true);
-   await p.locator('#developer-status').selectOption('готов');await p.locator('#csv-file').setInputFiles(input('new.csv',fixture()));await p.waitForSelector('.list-card');assert.equal(await p.locator('#developer-status').inputValue(),'');assert.equal(await p.locator('.list-card').count(),1);
+   await selectFilter(p,'developer-status','готов');assert.equal(await p.locator('.list-card').count(),0);
+   await selectFilter(p,'developer-status','');assert.equal(await card.locator('input[data-item="branch"][value="ok"]').isChecked(),true);
+   await selectFilter(p,'developer-status','готов');await p.locator('#csv-file').setInputFiles(input('new.csv',fixture()));await p.waitForSelector('.list-card');assert.equal(await p.locator('#developer-status input:checked').count(),0);assert.equal(await p.locator('.list-card').count(),1);
    console.log('PASS regression: developer status combines with filters, resets pagination and preserves review');
   }finally{await p.close();}
  }
