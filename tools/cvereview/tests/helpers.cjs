@@ -1,0 +1,5 @@
+const headers=['Разработчик','Статус','Start date','End date','Принятая мера','Task ID','CVE ID','Task state','Task date','Исполнитель','Компонент','P','D','SL NVR (latest build)','RHEL NVR (if fixed)','Fix date','RHEL state','RHEL severity','RHEL CVSS','Advisory (RHSA)','CVE link','ai_nvr','ai_verdict','ai_confidence','ai_remediation','ai_run','Комментарий'];
+const base={'Разработчик':'Иванов И.И.','Статус':'Ожидает ревью','Принятая мера':'Патч из апстрима','Task ID':'100','CVE ID':'CVE-2026-1000','Компонент':'openssl','SL NVR (latest build)':'openssl-3.0.7-1.sl9','RHEL state':'Fixed','RHEL severity':'Important','RHEL CVSS':'8.1','End date':'14.11.2026','Комментарий':'Патч применён.'};
+const cell=(v,sep)=>{v=String(v??'');return v.includes(sep)||/["\r\n]/.test(v)?'"'+v.replaceAll('"','""')+'"':v;};
+function fixture(changes=[{}],sep=';',cols=headers){return [cols,...changes.map(c=>cols.map(k=>({...base,...c})[k]||''))].map(row=>row.map(v=>cell(v,sep)).join(sep)).join('\r\n');}
+module.exports={headers,base,fixture};
