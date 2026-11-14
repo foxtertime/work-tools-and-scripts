@@ -1,6 +1,9 @@
 /* Application shell around the approved compact card layout. */
 body{font-family:var(--body)}
 .filters{flex-wrap:wrap}
+[data-copy]{cursor:copy;border-radius:3px}
+[data-copy]:hover{box-shadow:0 0 0 2px var(--line)}
+[data-copy]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .file-actions{width:430px;max-width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;flex:none}
 .file-actions .btn{font-size:11px;padding:10px;white-space:normal;text-align:center}
 .hero .file-actions .btn:not(.ghost):not(.quiet){background:#e8f0f6;color:#0f1d29;border-color:#e8f0f6}
