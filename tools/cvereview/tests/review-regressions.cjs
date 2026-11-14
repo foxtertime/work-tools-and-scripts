@@ -3,6 +3,56 @@ const C=require('../assets/js/csv.js'),M=require('../assets/js/model.js');
 const url=pathToFileURL(path.resolve(__dirname,'../cvereview.html')).href;
 const input=(name,text)=>({name,mimeType:name.endsWith('.csv')?'text/csv':'application/json',buffer:Buffer.from(text)});
 async function run(browser,only='all'){
+ if(only==='all'||only==='copy'){
+  const context=await browser.newContext({permissions:['clipboard-read','clipboard-write']}),p=await context.newPage();try{
+   const {headers}=require('./helpers.cjs'),extra='  Строка & <текст>\n"кавычки"\t  ';
+   await p.goto(url);await p.locator('#csv-file').setInputFiles(input('copy.csv',fixture([{'Комментарий':'Комментарий без названия поля',Extra:extra}],';',[...headers,'Extra'])));await p.waitForSelector('.list-card');
+   const card=p.locator('.list-card');
+   const saved=await p.evaluate(()=>localStorage.getItem('cvereview:workspace:v1'));
+   await card.locator('.builds code').first().click();
+   await p.waitForFunction(()=>!document.getElementById('toast').hidden,{},{timeout:2000});
+   assert.equal(await p.evaluate(()=>navigator.clipboard.readText()),'openssl-3.0.7-1.sl9');
+   for(const [selector,value] of [['.package','openssl'],['.cve','CVE-2026-1000'],['.task-id','100'],['.facts dd','Иванов И.И.'],['.dev-note p','Комментарий без названия поля']]){
+    await card.locator(selector).first().click();await p.waitForFunction(async text=>await navigator.clipboard.readText()===text,value);
+   }
+   await card.locator('.raw summary').click();const raw=card.locator('.raw dl>div').filter({has:p.locator('dt',{hasText:/^Extra$/})}).locator('dd');
+   await raw.click();await p.waitForFunction(async text=>await navigator.clipboard.readText()===text,extra);
+   // Exercise the file-page fallback against the real browser clipboard.
+   await p.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:undefined}));
+   await card.locator('.builds code').first().focus();await p.keyboard.press('Enter');await p.evaluate(()=>delete navigator.clipboard);
+   await p.waitForFunction(async()=>await navigator.clipboard.readText()==='openssl-3.0.7-1.sl9');
+   assert.equal(await p.evaluate(()=>localStorage.getItem('cvereview:workspace:v1')),saved,'Copying must not change review state');
+   await card.locator('input[data-item="branch"][value="ok"]').check();
+   assert.notEqual(await p.evaluate(()=>localStorage.getItem('cvereview:workspace:v1')),saved);assert.equal(await p.evaluate(()=>navigator.clipboard.readText()),'openssl-3.0.7-1.sl9');
+   await p.evaluate(()=>{Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('denied');}}});document.execCommand=()=>false;});
+   await card.locator('.package').click();await p.waitForFunction(()=>document.getElementById('message').textContent.includes('Не удалось скопировать'));
+   console.log('PASS regression: click/keyboard copy exact field values and clipboard fallback');
+  }finally{await context.close();}
+ }
+ if(only==='all'||only==='status'){
+  const p=await browser.newPage();try{
+   const rows=Array.from({length:56},(_,i)=>({'Task ID':String(100+i),'Статус':i<54?'  ГОТОВ  ':' Ожидает   ревью ','Разработчик':i===0?'Петров П.П.':'Иванов И.И.','RHEL severity':i===1?'Low':'Important','Комментарий':i===0?'Unique filtered target':'Патч применён.'}));
+   await p.goto(url);await p.locator('#csv-file').setInputFiles(input('status.csv',fixture(rows)));await p.waitForSelector('.list-card');
+   assert.equal(await p.locator('#developer-status').count(),1,'Developer status filter must be available');
+   assert.equal(await p.locator('#developer-status').inputValue(),'');
+   await p.locator('[data-action="next-page"]').click();assert.equal(await p.locator('.list-card').count(),6);
+   await p.locator('#developer-status').selectOption('ожидает ревью');assert.equal(await p.locator('.list-card').count(),2);assert.equal(await p.locator('.pagination').count(),0);
+   await p.locator('.list-card[data-task="154"] input[data-item="branch"][value="ok"]').check();
+   await p.locator('#developer-status').selectOption('готов');assert.equal(await p.locator('.list-card').count(),50);
+   await p.locator('#dev').selectOption('Петров П.П.');assert.equal(await p.locator('.list-card').count(),1);
+   await p.locator('#severity').selectOption('Low');assert.equal(await p.locator('.list-card').count(),0);
+   await p.locator('#severity').selectOption('');await p.locator('#search').fill('Unique filtered target');assert.equal(await p.locator('.list-card').count(),1);
+   await p.locator('#developer-status').selectOption('ожидает ревью');assert.equal(await p.locator('.list-card').count(),0);
+   await p.locator('#search').fill('');await p.locator('#dev').selectOption('');assert.equal(await p.locator('.list-card').count(),2);
+   const card=p.locator('.list-card[data-task="154"]');assert.equal(await card.locator('input[data-item="branch"][value="ok"]').isChecked(),true);
+   await card.locator('[data-action="problem"]').click();await p.locator('#problem-comment').fill('Уточнить патч');await p.locator('#problem-form button[type="submit"]').click();
+   await p.locator('[data-action="pool"][data-pool="problem"]').click();assert.equal(await p.locator('.list-card').count(),1);
+   await p.locator('#developer-status').selectOption('готов');assert.equal(await p.locator('.list-card').count(),0);
+   await p.locator('#developer-status').selectOption('');assert.equal(await card.locator('input[data-item="branch"][value="ok"]').isChecked(),true);
+   await p.locator('#developer-status').selectOption('готов');await p.locator('#csv-file').setInputFiles(input('new.csv',fixture()));await p.waitForSelector('.list-card');assert.equal(await p.locator('#developer-status').inputValue(),'');assert.equal(await p.locator('.list-card').count(),1);
+   console.log('PASS regression: developer status combines with filters, resets pagination and preserves review');
+  }finally{await p.close();}
+ }
  if(only==='all'||only==='search'){
   const p=await browser.newPage();try{
    const {headers}=require('./helpers.cjs');
