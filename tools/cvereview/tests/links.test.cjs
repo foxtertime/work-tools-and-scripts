@@ -8,3 +8,15 @@ test('numeric task IDs need an explicit tracker setting and clearing it disables
  assert.equal(l.forRow(row,{taskTemplate:'https://tracker.test/tasks/{task}'}).find(i=>i.id==='task').url,'https://tracker.test/tasks/100');
  const cleared=l.forRow(row,{taskTemplate:''}).find(i=>i.id==='task');assert.equal(cleared.url,null);assert.ok(cleared.reason.includes('тасктрекера'));
 });
+test('RHSA link shows the full advisory ID from plain and encoded URL paths',()=>{
+ const row={task:'100',component:'openssl',cve:'CVE-2026-1000',link:''};
+ for(const [url,label] of [
+  ['https://access.redhat.com/errata/RHSA-2026:99999','RHSA-2026:99999'],
+  ['https://access.redhat.com/errata/rhsa-2025%3A01234?view=full#details','RHSA-2025:01234'],
+  ['https://access.redhat.com/errata/unknown','RHSA'],
+  ['https://access.redhat.com/errata/%invalid','RHSA']
+ ]){
+  const link=l.forRow({...row,rhsa:url}).find(i=>i.id==='rhsa');
+  assert.equal(link.label,label);assert.equal(link.url,url);
+ }
+});
