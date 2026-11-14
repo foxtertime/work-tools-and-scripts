@@ -3,6 +3,30 @@ const C=require('../assets/js/csv.js'),M=require('../assets/js/model.js');
 const url=pathToFileURL(path.resolve(__dirname,'../cvereview.html')).href;
 const input=(name,text)=>({name,mimeType:name.endsWith('.csv')?'text/csv':'application/json',buffer:Buffer.from(text)});
 async function run(browser,only='all'){
+ if(only==='all'||only==='status'){
+  const p=await browser.newPage();try{
+   const rows=Array.from({length:56},(_,i)=>({'Task ID':String(100+i),'Статус':i<54?'  ГОТОВ  ':' Ожидает   ревью ','Разработчик':i===0?'Петров П.П.':'Иванов И.И.','RHEL severity':i===1?'Low':'Important','Комментарий':i===0?'Unique filtered target':'Патч применён.'}));
+   await p.goto(url);await p.locator('#csv-file').setInputFiles(input('status.csv',fixture(rows)));await p.waitForSelector('.list-card');
+   assert.equal(await p.locator('#developer-status').count(),1,'Developer status filter must be available');
+   assert.equal(await p.locator('#developer-status').inputValue(),'');
+   await p.locator('[data-action="next-page"]').click();assert.equal(await p.locator('.list-card').count(),6);
+   await p.locator('#developer-status').selectOption('ожидает ревью');assert.equal(await p.locator('.list-card').count(),2);assert.equal(await p.locator('.pagination').count(),0);
+   await p.locator('.list-card[data-task="154"] input[data-item="branch"][value="ok"]').check();
+   await p.locator('#developer-status').selectOption('готов');assert.equal(await p.locator('.list-card').count(),50);
+   await p.locator('#dev').selectOption('Петров П.П.');assert.equal(await p.locator('.list-card').count(),1);
+   await p.locator('#severity').selectOption('Low');assert.equal(await p.locator('.list-card').count(),0);
+   await p.locator('#severity').selectOption('');await p.locator('#search').fill('Unique filtered target');assert.equal(await p.locator('.list-card').count(),1);
+   await p.locator('#developer-status').selectOption('ожидает ревью');assert.equal(await p.locator('.list-card').count(),0);
+   await p.locator('#search').fill('');await p.locator('#dev').selectOption('');assert.equal(await p.locator('.list-card').count(),2);
+   const card=p.locator('.list-card[data-task="154"]');assert.equal(await card.locator('input[data-item="branch"][value="ok"]').isChecked(),true);
+   await card.locator('[data-action="problem"]').click();await p.locator('#problem-comment').fill('Уточнить патч');await p.locator('#problem-form button[type="submit"]').click();
+   await p.locator('[data-action="pool"][data-pool="problem"]').click();assert.equal(await p.locator('.list-card').count(),1);
+   await p.locator('#developer-status').selectOption('готов');assert.equal(await p.locator('.list-card').count(),0);
+   await p.locator('#developer-status').selectOption('');assert.equal(await card.locator('input[data-item="branch"][value="ok"]').isChecked(),true);
+   await p.locator('#developer-status').selectOption('готов');await p.locator('#csv-file').setInputFiles(input('new.csv',fixture()));await p.waitForSelector('.list-card');assert.equal(await p.locator('#developer-status').inputValue(),'');assert.equal(await p.locator('.list-card').count(),1);
+   console.log('PASS regression: developer status combines with filters, resets pagination and preserves review');
+  }finally{await p.close();}
+ }
  if(only==='all'||only==='search'){
   const p=await browser.newPage();try{
    const {headers}=require('./helpers.cjs');
