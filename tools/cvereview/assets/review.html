@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Автономное ревью CSV vulnsheet с чеклистами по принятой мере и JSON состояния."><title>cvereview</title><style>/*@style*/</style></head>
+<body class="v1">
+<input id="csv-file" type="file" accept=".csv,text/csv" hidden>
+<input id="state-file" type="file" accept=".json,application/json" hidden disabled>
+<div id="app"></div><div id="toast" class="toast" role="status" hidden></div>
+<dialog id="problem-dialog" aria-labelledby="problem-title"><form id="problem-form">
+<div class="dialog-heading"><span class="eyebrow">РЕШЕНИЕ РЕВЬЮВЕРА</span><button type="button" class="icon-button" data-action="close" data-dialog="problem-dialog" aria-label="Закрыть">×</button></div>
+<h2 id="problem-title">Что нужно исправить?</h2><p id="problem-context" class="mono"></p><label for="problem-comment">Комментарий для разработчика</label><textarea id="problem-comment" rows="5" required placeholder="Опишите проблему и ожидаемое исправление…"></textarea><p class="dialog-note">После сохранения задача перейдёт в «Проблемы». Отметки чеклиста сохранятся.</p><div class="dialog-actions"><button type="button" class="btn" data-action="close" data-dialog="problem-dialog">Отмена</button><button type="submit" class="btn primary">Сохранить в «Проблемы»</button></div></form></dialog>
+<dialog id="settings-dialog" aria-labelledby="settings-title"><form id="settings-form">
+<div class="dialog-heading"><span class="eyebrow">НАСТРОЙКИ</span><button type="button" class="icon-button" data-action="close" data-dialog="settings-dialog" aria-label="Закрыть">×</button></div><h2 id="settings-title">Релиз и ссылки</h2><label for="release-input">Название релиза, необязательно</label><input id="release-input" placeholder="Например, 9.3.2"><label for="task-template">Шаблон адреса тасктрекера</label><input id="task-template" placeholder="https://tracker.example.internal/task/{task}"><label for="repo-template">Шаблон репозитория GitLab</label><input id="repo-template" placeholder="https://gitlab.example.internal/rpms/{component}"><p class="dialog-note">Подстановки: {task}, {component}, {cve}. Точные адреса берутся из ваших настроек. RHSA и CVE — из CSV.</p><div class="dialog-actions"><button type="button" class="btn" data-action="close" data-dialog="settings-dialog">Отмена</button><button type="submit" class="btn primary">Сохранить</button></div></form></dialog>
+<script>/*@script*/</script>
+</body></html>

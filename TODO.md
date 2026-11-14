@@ -16,6 +16,7 @@
 Задачи по конкретной тулзе живут в её каталоге и переезжают вместе с ней:
 
 - [`tools/cvesummary/TODO.md`](tools/cvesummary/TODO.md)
+- [`tools/cvereview/TODO.md`](tools/cvereview/TODO.md)
 - [`tools/dashboard/TODO.md`](tools/dashboard/TODO.md)
 - [`tools/patchaudit/TODO.md`](tools/patchaudit/TODO.md)
 - [`tools/taskhistory/TODO.md`](tools/taskhistory/TODO.md)
