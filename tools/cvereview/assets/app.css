@@ -1,6 +1,10 @@
 /* Application shell around the approved compact card layout. */
 body{font-family:var(--body)}
 .filters{flex-wrap:wrap}
+.sort-controls{display:flex;align-items:center;gap:6px;flex:0 1 230px;min-width:0}
+.filters .sort-controls select{flex:1;min-width:0;max-width:none;width:0}
+.sort-controls .btn{width:40px;height:40px;padding:0;font-size:20px;flex:none;justify-content:center}
+@media(max-width:800px){.sort-controls{flex:1 1 calc(50% - 7px)}}
 .multi-filter{position:relative;flex:0 1 205px;min-width:0}
 .multi-filter summary{height:40px;border:1px solid var(--line);border-radius:7px;background:var(--panel);padding:0 11px;display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;font-size:11px}
 .multi-filter summary::-webkit-details-marker{display:none}
