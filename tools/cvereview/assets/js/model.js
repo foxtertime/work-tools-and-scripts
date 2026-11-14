@@ -11,9 +11,13 @@
  function fresh(row){const p=profile(row);return {key:csv.keyOf(row),identity:csv.identity(row),basisVersion:1,basis:basis(row),checklistId:p.id,checklistVersion:p.version,checklistSnapshot:p.items.map(({id,label})=>({id,label})),checks:Object.fromEntries(p.items.map(i=>[i.id,'unseen'])),pool:'pending',reviewComment:'',updatedAt:now(),needsRecheck:false,previousReview:null};}
  function reconcile(row,old){
   const next=fresh(row);if(!old)return next;
-  if(old.basisVersion===1&&sameBasis(next.basis,old.basis)&&next.checklistId===old.checklistId&&next.checklistVersion===old.checklistVersion)return {...clone(old),key:next.key};
-  const untouched=old.needsRecheck&&Object.values(old.checks).every(v=>v==='unseen')&&!old.reviewComment;
+  const sameContext=old.basisVersion===1&&sameBasis(next.basis,old.basis)&&next.checklistId===old.checklistId;
+  const oldIds=Object.keys(old.checks),newIds=Object.keys(next.checks);
+  const added=newIds.filter(id=>!Object.hasOwn(old.checks,id)),removed=oldIds.filter(id=>!Object.hasOwn(next.checks,id));
+  if(sameContext&&!added.length&&!removed.length&&next.checklistVersion===old.checklistVersion)return {...clone(old),key:next.key,checklistSnapshot:next.checklistSnapshot};
+  const untouched=old.needsRecheck&&old.previousReview&&newIds.every(id=>old.checks[id]==='unseen'||old.checks[id]===old.previousReview.checks[id])&&(!old.reviewComment||old.reviewComment===old.previousReview.reviewComment);
   const previous=untouched&&old.previousReview?clone(old.previousReview):snapshot(old);
+  if(sameContext&&(added.length||removed.length))return {...clone(old),key:next.key,checklistVersion:next.checklistVersion,checklistSnapshot:next.checklistSnapshot,checks:Object.fromEntries(newIds.map(id=>[id,Object.hasOwn(old.checks,id)?old.checks[id]:'unseen'])),pool:added.length?'pending':old.pool,needsRecheck:Boolean(added.length||old.needsRecheck),previousReview:previous};
   return {...next,needsRecheck:true,previousReview:previous};
  }
  function snapshot(record){const {previousReview,key,...previous}=record;return clone(previous);}
@@ -37,7 +41,8 @@
   if(typeof raw.checklistId!=='string'||!Number.isInteger(raw.checklistVersion)||raw.checklistVersion<1)fail('неверный профиль чеклиста.');
   if(!Array.isArray(raw.checklistSnapshot)||!raw.checklistSnapshot.length||!raw.checklistSnapshot.every(i=>object(i)&&typeof i.id==='string'&&i.id&&typeof i.label==='string'))fail('нет снимка чеклиста.');
   const ids=raw.checklistSnapshot.map(i=>i.id);if(new Set(ids).size!==ids.length||!object(raw.checks)||Object.keys(raw.checks).length!==ids.length||!ids.every(id=>Object.hasOwn(raw.checks,id)&&STATES.includes(raw.checks[id])))fail('неверные пункты проверок.');
-  const p=checklists.byId(raw.checklistId);if(p&&p.version===raw.checklistVersion&&(p.items.length!==ids.length||!p.items.every(i=>ids.includes(i.id))))fail('пункты не соответствуют профилю.');
+  // A self-consistent snapshot can belong to an earlier catalog, even when
+  // its editor kept the numeric version. Reconcile required IDs before done.
   if(!POOLS.includes(raw.pool)||typeof raw.reviewComment!=='string'||typeof raw.updatedAt!=='string'||!Number.isFinite(Date.parse(raw.updatedAt))||typeof raw.needsRecheck!=='boolean')fail('неверный результат ревью.');
   if(raw.pool==='done'&&!ids.every(i=>raw.checks[i]!=='unseen'))fail('ревью завершено с непроверенными пунктами.');
   if(raw.pool==='problem'&&!raw.reviewComment.trim())fail('проблема без комментария.');
@@ -53,7 +58,9 @@
   const settings=settingsFrom(data.settings),incoming=data.records.map(r=>validateRecord(r)),seen=new Set();for(const r of incoming){if(seen.has(r.key))fail('дубликат идентичности.');seen.add(r.key);}
   const merged=new Map(session.records.map(r=>[r.key,r]));for(const r of incoming)merged.set(r.key,r);
   const next=create(session.table,{...session,settings,records:[...merged.values()]}),active=new Set(session.table.rows.filter(csv.eligible).map(csv.keyOf));
-  return {session:{...next,dirty:true},summary:{loaded:incoming.length,matched:incoming.filter(r=>active.has(r.key)).length,archived:incoming.filter(r=>!active.has(r.key)).length,recheck:next.records.filter(r=>active.has(r.key)&&r.needsRecheck).length}};
+  const current=new Map(next.records.map(r=>[r.key,r]));
+  const signature=r=>JSON.stringify([r.basisVersion,r.basis,r.checklistId,r.checklistVersion,r.checklistSnapshot,r.checks,r.pool,r.needsRecheck]);
+  return {session:{...next,dirty:true},summary:{loaded:incoming.length,matched:incoming.filter(r=>active.has(r.key)).length,archived:incoming.filter(r=>!active.has(r.key)).length,recheck:next.records.filter(r=>active.has(r.key)&&r.needsRecheck).length,migrated:incoming.filter(r=>active.has(r.key)&&signature(r)!==signature(current.get(r.key))).length}};
  }
  function exportJSON(session){return JSON.stringify({app:'cvereview',schemaVersion:1,savedAt:now(),sourceName:session.table.sourceName,settings:session.settings,records:session.records.map(({key,...r})=>r)},null,2);}
  return {create,setCheck,decide,importJSON,exportJSON,profile,complete,basis,date,BASIS};

@@ -3,13 +3,22 @@ const C=require('../assets/js/csv.js'),M=require('../assets/js/model.js');
 const url=pathToFileURL(path.resolve(__dirname,'../cvereview.html')).href;
 const input=(name,text)=>({name,mimeType:name.endsWith('.csv')?'text/csv':'application/json',buffer:Buffer.from(text)});
 async function run(browser,only='all'){
+ if(only==='all'||only==='catalog'){
+  const p=await browser.newPage();try{
+   const s=M.create(C.parse(fixture(),'legacy.csv'));for(const i of require('../assets/js/checklists.js').forMeasure('Патч из апстрима').items)s.records[0].checks[i.id]='ok';s.records[0].pool='done';
+   const data=JSON.parse(M.exportJSON(s)),r=data.records[0];r.checklistVersion=1;r.checklistSnapshot=[{id:'source',label:'Источник патча'},{id:'cve-coverage',label:'Патч закрывает CVE'},{id:'build-inclusion',label:'Применён в сборке'},{id:'regression',label:'Регрессии проверены'}];r.checks=Object.fromEntries(r.checklistSnapshot.map(i=>[i.id,'ok']));
+   await p.goto(url);await p.evaluate(cache=>localStorage.setItem('cvereview:workspace:v1',JSON.stringify(cache)),{version:1,csv:fixture(),sourceName:'legacy.csv',encoding:'UTF-8',state:JSON.stringify(data),dirty:false});await p.reload();await p.waitForSelector('.list-card');
+   assert.equal(await p.locator('input:checked[value="unseen"]').count(),8);assert.ok((await p.locator('#json-status').innerText()).includes('несохранённые'));await p.locator('.history summary').click();assert.ok((await p.locator('.history').innerText()).includes('Источник патча'));
+   console.log('PASS regression: legacy cached checklist migrates without losing old review');
+  }finally{await p.close();}
+ }
  if(only==='all'||only==='import'){
   const p=await browser.newPage();try{await p.goto(url);await p.locator('#csv-file').setInputFiles(input('race.csv',fixture()));await p.waitForSelector('.list-card');
    const data=JSON.parse(M.exportJSON(M.create(C.parse(fixture(),'race.csv'))));data.records=[];
    await p.evaluate(()=>{const original=File.prototype.text;File.prototype.text=async function(){const result=await original.call(this);if(this.name==='slow.json'){globalThis.readStarted=true;await new Promise(resolve=>{globalThis.finishRead=resolve;});}return result;};});
    await p.locator('#state-file').setInputFiles(input('slow.json',JSON.stringify(data)));await p.waitForFunction(()=>globalThis.readStarted);
-   await p.locator('input[data-item="source"][value="ok"]').check();await p.evaluate(()=>globalThis.finishRead());await p.waitForFunction(()=>document.getElementById('message').textContent.includes('Загружено решений'));
-   assert.equal(await p.locator('input[data-item="source"][value="ok"]').isChecked(),true,'JSON import must preserve edits made during file reading for unmentioned tasks');
+   await p.locator('input[data-item="branch"][value="ok"]').check();await p.evaluate(()=>globalThis.finishRead());await p.waitForFunction(()=>document.getElementById('message').textContent.includes('Загружено решений'));
+   assert.equal(await p.locator('input[data-item="branch"][value="ok"]').isChecked(),true,'JSON import must preserve edits made during file reading for unmentioned tasks');
    console.log('PASS regression: async import preserves concurrent edits');
   }finally{await p.close();}
  }
