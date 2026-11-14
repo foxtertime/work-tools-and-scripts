@@ -3,6 +3,21 @@ const C=require('../assets/js/csv.js'),M=require('../assets/js/model.js');
 const url=pathToFileURL(path.resolve(__dirname,'../cvereview.html')).href;
 const input=(name,text)=>({name,mimeType:name.endsWith('.csv')?'text/csv':'application/json',buffer:Buffer.from(text)});
 async function run(browser,only='all'){
+ if(only==='all'||only==='search'){
+  const p=await browser.newPage();try{
+   const {headers}=require('./helpers.cjs');
+   await p.goto(url);await p.locator('#csv-file').setInputFiles(input('search.csv',fixture([{'SL NVR (latest build)':'special-build-abc','ai_remediation':'special-ai-result',Extra:'Custom search token'},{'Task ID':'101'}],';',[...headers,'Extra'])));await p.waitForSelector('.list-card');
+   for(const q of ['special-build-abc','SPECIAL-AI-RESULT','custom search token']){await p.locator('#search').fill(q);assert.equal(await p.locator('.list-card').count(),1);assert.equal(await p.locator('.list-card').first().getAttribute('data-task'),'100');}
+   await p.locator('#search').fill('');await p.locator('.list-card[data-task="100"] input[data-item="branch"][value="bad"]').check();
+   await p.locator('#search').fill('✕');assert.equal(await p.locator('.list-card').count(),1);
+   // This click intentionally removes its own card from the filtered DOM;
+   // check() would wait for that now-detached input to remain checked.
+   await p.locator('.list-card[data-task="100"] input[data-item="branch"][value="ok"]').click();assert.equal(await p.locator('.list-card').count(),0);
+   assert.equal(await p.locator('#search').inputValue(),'✕');
+   await p.locator('#search').fill('special-build-abc');assert.equal(await p.locator('.list-card input[data-item="branch"][value="ok"]').isChecked(),true);
+   console.log('PASS regression: all-field search updates after checker edits');
+  }finally{await p.close();}
+ }
  if(only==='all'||only==='tracker'){
   const p=await browser.newPage();try{
    await p.goto(url);await p.locator('#csv-file').setInputFiles(input('tracker.csv',fixture()));await p.waitForSelector('.list-card');

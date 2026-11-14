@@ -21,7 +21,7 @@ def render():
     definitions = json.dumps(catalog, ensure_ascii=False, separators=(',', ':'))
     definitions = definitions.replace('&', '\\u0026').replace('<', '\\u003c').replace('>', '\\u003e')
     script += 'CR.checklistDefinitions = ' + definitions + ';\n'
-    script += '\n'.join((ASSETS / 'js' / name).read_text(encoding='utf-8') for name in ['csv.js', 'checklists.js', 'links.js', 'model.js', 'app.js'])
+    script += '\n'.join((ASSETS / 'js' / name).read_text(encoding='utf-8') for name in ['csv.js', 'checklists.js', 'links.js', 'model.js', 'search.js', 'app.js'])
     if template.count('/*@style*/') != 1 or template.count('/*@script*/') != 1:
         raise ValueError('Template markers must occur exactly once')
     parts = {'/*@style*/': css, '/*@script*/': script.replace('</script', '<\\/script')}
