@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-11-15
+
+### Изменено
+
+- `cvereview` (0.4.1): на кнопке RHSA отображается полный ID advisory.
+
+### Добавлено
+
+- `cvereview` (0.5.0): копирование содержимого полей по клику и с клавиатуры
+  с подтверждением, включая многострочные значения в подробностях CSV.
+
+- `cvereview` (0.4.0): фильтр по статусам «Ожидает ревью» и «Готов»
+  для раздельной проверки задач; совместим с поиском и другими фильтрами.
+
 ## [0.39.0] - 2026-11-15
 
 ### Изменено
@@ -698,7 +712,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.39.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.40.0...HEAD
+[0.40.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.38.1...v0.39.0
 [0.38.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.38.0...v0.38.1
 [0.38.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.37.0...v0.38.0
