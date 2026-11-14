@@ -33,5 +33,6 @@ const initial=fixture([{'Advisory (RHSA)':'https://access.redhat.com/errata/RHSA
   const many=fixture(Array.from({length:65},(_,i)=>({'Task ID':String(200+i)})));await page.locator('#csv-file').setInputFiles(input('many.csv',many));await page.waitForFunction(()=>document.querySelectorAll('.list-card').length===50);await page.locator('[data-action="next-page"]').click();assert.equal(await page.locator('.list-card').count(),15);
   const denied=await browser.newContext();await denied.addInitScript(()=>{Storage.prototype.setItem=function(){throw new Error('denied');};});const p=await denied.newPage();await p.goto(pathToFileURL(html).href);await p.locator('#csv-file').setInputFiles(input('x.csv',initial));await p.waitForSelector('.list-card');assert.ok((await p.locator('#storage-status').innerText()).includes('недоступ'));assert.equal(await p.locator('#save-state').isEnabled(),true);await denied.close();
   assert.deepEqual(errors,[]);assert.deepEqual(network,[]);console.log('PASS browser: CSV/JSON, state, profiles, tri-state/undo, stale review, injection, cache failure, pagination, mobile, offline');
+  await require('./review-regressions.cjs')(browser);
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

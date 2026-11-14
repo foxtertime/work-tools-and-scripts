@@ -1,6 +1,6 @@
 # cvereview Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Выпустить автономный HTML для ревью CSV vulnsheet с чеклистами по мере и переносимым JSON состояния.
 
@@ -95,9 +95,9 @@
 
 **Files:** Update tool `README.md`, `TODO.md`, add `CHANGELOG.md`; update root README/CHANGELOG/TODO only for this tool; finalize generated HTML and plan checkboxes.
 
-- [ ] Document browser usage, JSON precedence, pool rules, all measure profiles, stale-review behavior, cache limits, configuring internal links, version/build/tests and example CSV.
-- [ ] Remove completed tool TODO; keep only genuinely deferred work, without starting unrelated TODO tasks.
-- [ ] Run full Node and browser suites, `python3 tools/cvereview/build.py --check`, root required checks and `git diff --check`. Verify rebuilding leaves HTML unchanged.
-- [ ] Commit `docs(cvereview): document offline review workflow and state files`.
-- [ ] Request one fresh whole-branch review against this plan/spec; fix Important/Critical findings with RED→GREEN tests; record minor findings and rulings in ledger.
-- [ ] Leave completed feature branch without merge/push/publication; open the real cvereview.html in Chrome and report result and material limitations.
+- [x] Document browser usage, JSON precedence, pool rules, all measure profiles, stale-review behavior, cache limits, configuring internal links, version/build/tests and example CSV.
+- [x] Remove completed tool TODO; keep only genuinely deferred work, without starting unrelated TODO tasks.
+- [x] Run full Node and browser suites, `python3 tools/cvereview/build.py --check`, root required checks and `git diff --check`. Verify rebuilding leaves HTML unchanged.
+- [x] Commit `docs(cvereview): document offline review workflow and state files`.
+- [x] Request one fresh whole-branch review against this plan/spec; fix Important/Critical findings with RED→GREEN tests; record minor findings and rulings in ledger.
+- [x] Leave completed feature branch without merge/push/publication; open the real cvereview.html in Chrome and report result and material limitations.

@@ -7,9 +7,17 @@
  const names={pending:'На ревью',problem:'Проблемы',done:'Ревьювед'},poolIcons={pending:'inbox',problem:'alert',done:'check'};
  let session=null,pool='pending',query='',dev='',severity='',order='severity',page=0,undo=null,notice='',noticeError=false,busy=false,cacheOK=true,exportTime='',dialogKey='',dialogTrigger=null;
  const button=(text,action,key='',type='',disabled=false)=>`<button class="btn ${type}" data-action="${action}" ${key?`data-key="${esc(key)}"`:''} ${disabled?'disabled':''}>${text}</button>`;
- const active=()=>session?session.table.rows.filter(C.eligible).map(row=>({row,record:session.records.find(r=>r.key===C.keyOf(row))})):[];
+ let viewSession=null,viewItems=[];
+ const active=()=>{
+  if(session!==viewSession){
+   const byKey=new Map((session?.records||[]).map(r=>[r.key,r]));
+   viewItems=session?session.table.rows.filter(C.eligible).map(row=>({row,record:byKey.get(C.keyOf(row))})):[];
+   viewSession=session;
+  }
+  return viewItems;
+ };
  const counts=()=>Object.fromEntries(Object.keys(names).map(p=>[p,active().filter(i=>i.record.pool===p).length]));
- function filtered(){return active().filter(({row:r,record:s})=>s.pool===pool&&(!dev||r.dev===dev)&&(!severity||r.severity===severity)&&[r.task,r.cve,r.component,r.dev,r.comment,s.reviewComment].join(' ').toLowerCase().includes(query.toLowerCase())).sort((a,b)=>{if(order==='oldest'){const da=M.date(a.row.end),db=M.date(b.row.end),valid=s=>/^\d{4}-\d{2}-\d{2}$/.test(s);return (valid(da)?da:'9999').localeCompare(valid(db)?db:'9999')||a.row.task.localeCompare(b.row.task);}const rank=s=>({Critical:4,Important:3,Moderate:2,Low:1})[s]||0;return rank(b.row.severity)-rank(a.row.severity)||(Number(b.row.cvss.replace(',','.'))||0)-(Number(a.row.cvss.replace(',','.'))||0)||a.row.task.localeCompare(b.row.task);});}
+ function filtered(){return active().filter(({row:r,record:s})=>s.pool===pool&&(!dev||r.dev===dev)&&(!severity||r.severity===severity)&&[r.task,r.cve,r.component,r.dev,r.comment,s.reviewComment].join(' ').toLowerCase().includes(query.toLowerCase())).sort((a,b)=>{if(order==='oldest'){const da=M.date(a.row.end),db=M.date(b.row.end),valid=s=>{const d=new Date(s+'T00:00:00Z');return /^\d{4}-\d{2}-\d{2}$/.test(s)&&Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===s;};return (valid(da)?da:'9999').localeCompare(valid(db)?db:'9999')||a.row.task.localeCompare(b.row.task);}const rank=s=>({Critical:4,Important:3,Moderate:2,Low:1})[s]||0;return rank(b.row.severity)-rank(a.row.severity)||(Number(b.row.cvss.replace(',','.'))||0)-(Number(a.row.cvss.replace(',','.'))||0)||a.row.task.localeCompare(b.row.task);});}
  function flash(text,error=false){notice=text;noticeError=error;const el=$('message');if(el){el.textContent=text;el.classList.toggle('error',error);el.hidden=!text;}}
  function cache(){if(!session)return;try{localStorage.setItem(CACHE,JSON.stringify({version:1,csv:session.table.text,sourceName:session.table.sourceName,encoding:session.table.encoding,state:M.exportJSON(session),dirty:session.dirty,exportTime,savedAt:new Date().toISOString()}));cacheOK=true;}catch{cacheOK=false;}storageStatus();}
  function storageStatus(){const el=$('storage-status');if(el)el.textContent=session?(cacheOK?'В браузере сохранено':'Автосохранение недоступно — сохраните JSON'):'CSV ещё не загружен';const state=$('json-status');if(state)state.textContent=session?(session.dirty?'JSON: есть несохранённые изменения':exportTime?'JSON подготовлен к скачиванию '+exportTime:'JSON ещё не сохранялся'):'';}
@@ -36,7 +44,7 @@
  function resetView(){pool='pending';query='';dev='';severity='';page=0;undo=null;$('toast').hidden=true;}
  async function load(file,kind){if(!file||busy)return;busy=true;render();try{
    if(kind==='csv'){const table=C.read(new Uint8Array(await file.arrayBuffer()),file.name),next=M.create(table,session);session={...next,dirty:true};resetView();flash(`Загружено ${table.rows.length} строк. В пуле: ${active().length}.`);}
-   else{if(!session)throw Error('Сначала загрузите CSV.');const result=M.importJSON(session,await file.text());session=result.session;undo=null;$('toast').hidden=true;flash(`Загружено решений: ${result.summary.loaded}; совпало: ${result.summary.matched}; архивных: ${result.summary.archived}; требуют повторной проверки: ${result.summary.recheck}. Настройки из JSON применены.`);}
+   else{if(!session)throw Error('Сначала загрузите CSV.');const text=await file.text();const result=M.importJSON(session,text);session=result.session;undo=null;$('toast').hidden=true;flash(`Загружено решений: ${result.summary.loaded}; совпало: ${result.summary.matched}; архивных: ${result.summary.archived}; требуют повторной проверки: ${result.summary.recheck}. Настройки из JSON применены.`);}
    cache();
   }catch(e){flash(e.message,true);}finally{busy=false;render();}}
  $('csv-file').addEventListener('change',e=>{const file=e.target.files[0];e.target.value='';load(file,'csv');});

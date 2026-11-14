@@ -37,7 +37,9 @@
   const absent=REQUIRED.filter(k=>missing.includes(k));if(absent.length)throw Error('Нет обязательных колонок: '+absent.map(k=>FIELDS[k]).join(', '));
   const diagnostics={read:0,skipped:[],duplicates,merged:0,missing:missing.map(k=>FIELDS[k]),excluded:0},rows=[],seen=new Map();
   for(let i=at+1;i<parsed.length;i++){
-   const cells=parsed[i];if(!cells.some(c=>c.trim()))continue;diagnostics.read++;
+   const cells=parsed[i];if(!cells.some(c=>c.trim()))continue;
+   if(cells.length>headers.length&&cells.slice(headers.length).some(c=>c.trim()))throw Error(`В записи ${i+1} больше непустых полей, чем колонок в шапке. Проверьте разделители и кавычки.`);
+   diagnostics.read++;
    const r={record:i+1,raw:headers.map((name,j)=>({name,value:cells[j]??''}))};
    for(const [key,name] of Object.entries(FIELDS))r[key]=value(cells[index.get(norm(name))]);
    r.cve=r.cve.toUpperCase();if(!r.task||!r.cve||!r.component){diagnostics.skipped.push(i+1);continue;}

@@ -29,3 +29,7 @@ test('required column errors and extra columns produce actionable results',()=>{
  assert.throws(()=>csv.parse(fixture([{}],';',headers.filter(h=>h!=='Разработчик'))),/Разработчик/);
  const t=csv.parse(fixture([{'Extra':'abc'}],';',[...headers,'Extra']));assert.equal(t.rows[0].raw.at(-1).value,'abc');
 });
+test('unheaded nonempty fields reject instead of hiding changed comments; trailing empty fields remain readable',()=>{
+ assert.throws(()=>csv.parse(fixture()+';Фикс не работает'),/запис|колон|пол/i);
+ assert.equal(csv.parse(fixture()+';;').rows[0].comment,'Патч применён.');
+});
