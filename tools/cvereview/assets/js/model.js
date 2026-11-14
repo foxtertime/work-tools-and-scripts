@@ -24,7 +24,7 @@
  function create(table,previous=null){
   const records=new Map((previous?.records||[]).map(r=>[r.key,clone(r)]));
   for(const row of table.rows.filter(csv.eligible))records.set(csv.keyOf(row),reconcile(row,records.get(csv.keyOf(row))));
-  return {table,records:[...records.values()],settings:{taskTemplate:links.DEFAULT_TASK,repoTemplate:'',release:'',...previous?.settings},dirty:Boolean(previous?.dirty||previous),updatedAt:now()};
+  return {table,records:[...records.values()],settings:{taskTemplate:'',repoTemplate:'',release:'',...previous?.settings},dirty:Boolean(previous?.dirty||previous),updatedAt:now()};
  }
  function change(session,key,fn){const record=session.records.find(r=>r.key===key);if(!record)throw Error('Задача не найдена.');const next=fn(clone(record));return {...session,records:session.records.map(r=>r.key===key?{...next,updatedAt:now()}:r),dirty:true,updatedAt:now()};}
  function setCheck(session,key,item,value){return change(session,key,r=>{const row=session.table.rows.find(row=>csv.keyOf(row)===key),p=row&&profile(row);if(r.pool==='done')throw Error('Сначала верните задачу на ревью.');if(!p||!p.items.some(i=>i.id===item)||!STATES.includes(value))throw Error('Неверный пункт или состояние проверки.');r.checks[item]=value;return r;});}

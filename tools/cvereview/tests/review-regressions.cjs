@@ -3,6 +3,18 @@ const C=require('../assets/js/csv.js'),M=require('../assets/js/model.js');
 const url=pathToFileURL(path.resolve(__dirname,'../cvereview.html')).href;
 const input=(name,text)=>({name,mimeType:name.endsWith('.csv')?'text/csv':'application/json',buffer:Buffer.from(text)});
 async function run(browser,only='all'){
+ if(only==='all'||only==='tracker'){
+  const p=await browser.newPage();try{
+   await p.goto(url);await p.locator('#csv-file').setInputFiles(input('tracker.csv',fixture()));await p.waitForSelector('.list-card');
+   await p.locator('[data-action="settings"]').click();assert.equal(await p.locator('#task-template').inputValue(),'');
+   await p.locator('#task-template').fill('https://tracker.test/tasks/{task}');await p.locator('#settings-form button[type="submit"]').click();
+   assert.equal(await p.getByRole('link',{name:'Тикет 100',exact:true}).getAttribute('href'),'https://tracker.test/tasks/100');
+   await p.locator('[data-action="settings"]').click();await p.locator('#task-template').fill('');await p.locator('#settings-form button[type="submit"]').click();
+   assert.equal(await p.getByRole('button',{name:'Тикет 100',exact:true}).isDisabled(),true);
+   await p.reload();await p.waitForSelector('.list-card');assert.equal(await p.getByRole('button',{name:'Тикет 100',exact:true}).isDisabled(),true);
+   console.log('PASS regression: tracker is configured explicitly and can be cleared');
+  }finally{await p.close();}
+ }
  if(only==='all'||only==='catalog'){
   const p=await browser.newPage();try{
    const s=M.create(C.parse(fixture(),'legacy.csv'));for(const i of require('../assets/js/checklists.js').forMeasure('Патч из апстрима').items)s.records[0].checks[i.id]='ok';s.records[0].pool='done';

@@ -13,3 +13,8 @@ test('explicit JSON import overrides matching states and preserves unmatched sta
 test('invalid JSON has no partial effects for schema, duplicate identity, missing checks, unsafe settings',()=>{const s=checked(make()),before=JSON.stringify(s),raw=JSON.parse(m.exportJSON(s));const cases=[d=>d.schemaVersion=99,d=>d.records.push(d.records[0]),d=>delete d.records[0].checks.branch,d=>d.records[0].checks.branch='maybe',d=>{d.records[0].pool='done';d.records[0].checks.branch='unseen';},d=>{d.records[0].pool='problem';d.records[0].reviewComment=' ';},d=>d.settings.repoTemplate='javascript:x'];for(const corrupt of cases){const d=structuredClone(raw);corrupt(d);assert.throws(()=>m.importJSON(s,JSON.stringify(d)));assert.equal(JSON.stringify(s),before);}});
 test('equivalent dates do not reset reviews; source sessions remain immutable',()=>{const old=checked(make());const saved=JSON.stringify(old);const next=m.create(csv.parse(fixture([{'End date':'2026-11-14'}])),old);assert.equal(record(next).needsRecheck,false);assert.equal(record(next).checks.branch,'ok');assert.equal(JSON.stringify(old),saved);});
 test('records with same task id across CVEs never share state',()=>{const s=make([{}, {'CVE ID':'CVE-2026-1001'}]);const next=m.setCheck(s,key,'branch','ok');assert.equal(next.records[1].checks.branch,'unseen');assert.equal(s.records[0].checks.branch,'unseen');});
+test('tracker is unset for new sessions and an intentionally empty template survives JSON',()=>{
+ const initial=make();assert.equal(initial.settings.taskTemplate,'');
+ const saved=JSON.parse(m.exportJSON(initial));saved.settings.taskTemplate='';
+ assert.equal(m.importJSON(initial,JSON.stringify(saved)).session.settings.taskTemplate,'');
+});
