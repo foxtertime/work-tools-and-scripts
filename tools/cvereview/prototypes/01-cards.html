@@ -225,7 +225,7 @@ let saved = read(storageKey, {});
 let links = read('cvereview-ui-links-v1', {task:'https://tracker.example.internal/task/{task}',repo:'https://gitlab.example.internal/rpms/{component}'});
 let rows = eligible.map(r => withChecks({...r,...(['pending','problem','done'].includes(saved[r.id]?.pool) ? saved[r.id] : {})}));
 let pool = 'pending', query = '', dev = '', severity = '', order = 'severity', selected = null, undo = null;
-const poolNames = {pending:'На ревью',problem:'Проблемы',done:'Ревьювед'};
+const poolNames = {pending:'На ревью',problem:'Проблемы',done:'Проверено'};
 const poolIcons = {pending:'inbox',problem:'alert',done:'check'};
 const counts = () => Object.fromEntries(Object.keys(poolNames).map(p => [p, rows.filter(r=>r.pool === p).length]));
 const persist = () => {try { localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(rows.map(r=>[r.id,{pool:r.pool,reviewComment:r.reviewComment,...(variant === 1?{checks:r.checks}:{})}]))));} catch { storageAvailable = false; }};
@@ -233,7 +233,7 @@ const initials = name => name.replaceAll('.','').split(' ').filter(Boolean).map(
 const btn = (label, action, id, type='', ic='') => `<button class="btn ${type}" data-action="${action}" ${id != null ? `data-id="${id}"` : ''}>${ic ? icon(ic) : ''}${label}</button>`;
 function external(url,label,ic='arrow') { return `<a class="btn link-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${icon(ic)}${label}${icon('arrow')}</a>`; }
 function makeURL(template,r) { const result = String(template).replace(/\{(task|component|cve)\}/g, (_,k)=>encodeURIComponent(r[k])); try {const u = new URL(result); return ['http:','https:'].includes(u.protocol) ? u.href : '#';} catch {return '#';} }
-function actions(r) { return `<div class="actions">${r.pool !== 'done' ? btn('Ревьювед','done',r.id,'primary','check') : ''}${r.pool === 'pending' ? btn('Есть проблема','problem',r.id,'danger-outline','alert') : btn('Вернуть на ревью','pending',r.id,'','back')}${r.pool === 'problem' ? btn('Комментарий','problem',r.id,'quiet') : ''}</div>`; }
+function actions(r) { return `<div class="actions">${r.pool !== 'done' ? btn('Проверено','done',r.id,'primary','check') : ''}${r.pool === 'pending' ? btn('Есть проблема','problem',r.id,'danger-outline','alert') : btn('Вернуть на ревью','pending',r.id,'','back')}${r.pool === 'problem' ? btn('Комментарий','problem',r.id,'quiet') : ''}</div>`; }
 function badges(r) { return `<span class="badge severity ${r.severity.toLowerCase()}">${r.severity} <b>${r.cvss.toFixed(1)}</b></span><span class="badge measure">${esc(r.measure)}</span>`; }
 function advisoryLink(value) {
   const url=String(value ?? '').trim();
@@ -276,7 +276,7 @@ function reviewChecklist(r) {
     <div class="check-legend">□ не смотрел · ✓ ок · ✕ не ок</div>
     <div class="check-items">${reviewChecks.map(check=>`<div class="check-row"><span id="check-label-${r.id}-${check.key}" title="${esc(check.hint)}">${check.label}</span><div class="check-options" role="group" aria-labelledby="check-label-${r.id}-${check.key}">${states.map(state=>`<label class="check-option ${state.name}" title="${esc(check.label+': '+state.label)}"><input type="radio" name="check-${r.id}-${check.key}" value="${state.value}" aria-label="${state.label}" data-review-check="${check.key}" data-id="${r.id}" ${r.checks[check.key] === state.value?'checked':''} ${r.pool === 'done'?'disabled':''}><span aria-hidden="true">${state.mark}</span></label>`).join('')}</div></div>`).join('')}</div>
     <p class="check-hint ${failed?'has-failures':''}">${failed?`Не ОК: ${failed}. Можно отправить в проблемы.`:checked === reviewChecks.length?'Все пункты проверены.':'Для завершения отметьте каждый пункт.'}</p>
-    <div class="check-actions">${r.pool === 'done'?`<span class="check-done">${icon('check')}Ревью завершено</span>${btn('Вернуть на ревью','pending',r.id,'','back')}`:`<button class="btn primary" data-action="done" data-id="${r.id}" ${reviewComplete(r)?'':'disabled'}>${icon('check')}Ревьювед</button>${r.pool === 'pending'?btn('Есть проблема','problem',r.id,'danger-outline','alert'):btn('Комментарий','problem',r.id,'danger-outline','alert')+btn('Вернуть на ревью','pending',r.id,'quiet','back')}`}</div>
+    <div class="check-actions">${r.pool === 'done'?`<span class="check-done">${icon('check')}Ревью завершено</span>${btn('Вернуть на ревью','pending',r.id,'','back')}`:`<button class="btn primary" data-action="done" data-id="${r.id}" ${reviewComplete(r)?'':'disabled'}>${icon('check')}Проверено</button>${r.pool === 'pending'?btn('Есть проблема','problem',r.id,'danger-outline','alert'):btn('Комментарий','problem',r.id,'danger-outline','alert')+btn('Вернуть на ревью','pending',r.id,'quiet','back')}`}</div>
   </aside>`;
 }
 function stats() {const c=counts();return `<div class="stats"><div><span class="label">Ожидают решения</span><b>${String(c.pending).padStart(2,'0')}</b><span>задач разработчиков</span></div><div><span class="label">Нужна доработка</span><b>${String(c.problem).padStart(2,'0')}</b><span>с замечаниями</span></div><div><span class="label">Ревью завершено</span><b>${String(c.done).padStart(2,'0')}</b><span>задач проверено</span></div></div>`;}
