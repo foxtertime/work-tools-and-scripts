@@ -3,6 +3,28 @@ const C=require('../assets/js/csv.js'),M=require('../assets/js/model.js');
 const url=pathToFileURL(path.resolve(__dirname,'../cvereview.html')).href;
 const input=(name,text)=>({name,mimeType:name.endsWith('.csv')?'text/csv':'application/json',buffer:Buffer.from(text)});
 async function run(browser,only='all'){
+ if(only==='all'||only==='measure'){
+  const p=await browser.newPage();try{
+   const rows=Array.from({length:56},(_,i)=>({'Task ID':String(100+i),'Принятая мера':i<52?(i===0?'Бэкпорт патча':' БЭКПОРТ   ПАТЧА '):i===53?'Особая мера':i===54?'':'Обновление версии','Статус':i===55?'Готов':'Ожидает ревью','Разработчик':i===55?'Петров П.П.':'Иванов И.И.'}));
+   await p.goto(url);await p.locator('#csv-file').setInputFiles(input('measures.csv',fixture(rows)));await p.waitForSelector('.list-card');
+   assert.equal(await p.getByRole('combobox',{name:'Принятая мера',exact:true}).count(),1,'Measure filter must be available');
+   assert.equal(await p.getByRole('combobox',{name:'Критичность',exact:true}).count(),0);
+   assert.equal(await p.locator('#measure option').count(),5,'Case and whitespace variants must share one option');
+   await p.locator('[data-action="next-page"]').click();assert.equal(await p.locator('.list-card').count(),6);
+   await p.locator('#measure').selectOption({label:'Обновление версии'});assert.equal(await p.locator('.list-card').count(),2);assert.equal(await p.locator('.pagination').count(),0);
+   await p.locator('#developer-status').selectOption('готов');await p.locator('#dev').selectOption('Петров П.П.');await p.locator('#search').fill('CVE-2026-1000');assert.equal(await p.locator('.list-card').count(),1);
+   const card=p.locator('.list-card[data-task="155"]');await card.locator('input[data-item="branch"][value="ok"]').check();
+   await card.locator('[data-action="problem"]').click();await p.locator('#problem-comment').fill('Проверить версию');await p.locator('#problem-form button[type="submit"]').click();
+   await p.locator('[data-action="pool"][data-pool="problem"]').click();assert.equal(await card.count(),1);
+   await p.locator('#measure').selectOption({label:'Бэкпорт патча'});assert.equal(await p.locator('.list-card').count(),0);
+   await p.locator('#measure').selectOption('');assert.equal(await card.locator('input[data-item="branch"][value="ok"]').isChecked(),true);
+   await p.locator('#developer-status').selectOption('');await p.locator('#dev').selectOption('');await p.locator('#search').fill('');await p.locator('[data-action="pool"][data-pool="pending"]').click();
+   for(const [label,task] of [['Особая мера','153'],['Мера не указана','154']]){await p.locator('#measure').selectOption({label});assert.equal(await p.locator('.list-card').count(),1);assert.equal(await p.locator('.list-card').getAttribute('data-task'),task);}
+   await p.locator('#measure').selectOption({label:'Бэкпорт патча'});assert.equal(await p.locator('.section-line h2 span').innerText(),'52');
+   await p.locator('#csv-file').setInputFiles(input('new.csv',fixture()));await p.waitForSelector('.list-card');assert.equal(await p.locator('#measure').inputValue(),'');assert.equal(await p.locator('.list-card').count(),1);
+   console.log('PASS regression: measures replace severity, combine with filters, preserve marks and handle custom/empty values');
+  }finally{await p.close();}
+ }
  if(only==='all'||only==='copy'){
   const context=await browser.newContext({permissions:['clipboard-read','clipboard-write']}),p=await context.newPage();try{
    const {headers}=require('./helpers.cjs'),extra='  Строка & <текст>\n"кавычки"\t  ';
@@ -31,7 +53,7 @@ async function run(browser,only='all'){
  }
  if(only==='all'||only==='status'){
   const p=await browser.newPage();try{
-   const rows=Array.from({length:56},(_,i)=>({'Task ID':String(100+i),'Статус':i<54?'  ГОТОВ  ':' Ожидает   ревью ','Разработчик':i===0?'Петров П.П.':'Иванов И.И.','RHEL severity':i===1?'Low':'Important','Комментарий':i===0?'Unique filtered target':'Патч применён.'}));
+   const rows=Array.from({length:56},(_,i)=>({'Task ID':String(100+i),'Статус':i<54?'  ГОТОВ  ':' Ожидает   ревью ','Разработчик':i===0?'Петров П.П.':'Иванов И.И.','Принятая мера':i===1?'Обновление версии':'Бэкпорт патча','Комментарий':i===0?'Unique filtered target':'Патч применён.'}));
    await p.goto(url);await p.locator('#csv-file').setInputFiles(input('status.csv',fixture(rows)));await p.waitForSelector('.list-card');
    assert.equal(await p.locator('#developer-status').count(),1,'Developer status filter must be available');
    assert.equal(await p.locator('#developer-status').inputValue(),'');
@@ -40,8 +62,8 @@ async function run(browser,only='all'){
    await p.locator('.list-card[data-task="154"] input[data-item="branch"][value="ok"]').check();
    await p.locator('#developer-status').selectOption('готов');assert.equal(await p.locator('.list-card').count(),50);
    await p.locator('#dev').selectOption('Петров П.П.');assert.equal(await p.locator('.list-card').count(),1);
-   await p.locator('#severity').selectOption('Low');assert.equal(await p.locator('.list-card').count(),0);
-   await p.locator('#severity').selectOption('');await p.locator('#search').fill('Unique filtered target');assert.equal(await p.locator('.list-card').count(),1);
+   await p.locator('#measure').selectOption({label:'Обновление версии'});assert.equal(await p.locator('.list-card').count(),0);
+   await p.locator('#measure').selectOption('');await p.locator('#search').fill('Unique filtered target');assert.equal(await p.locator('.list-card').count(),1);
    await p.locator('#developer-status').selectOption('ожидает ревью');assert.equal(await p.locator('.list-card').count(),0);
    await p.locator('#search').fill('');await p.locator('#dev').selectOption('');assert.equal(await p.locator('.list-card').count(),2);
    const card=p.locator('.list-card[data-task="154"]');assert.equal(await card.locator('input[data-item="branch"][value="ok"]').isChecked(),true);
