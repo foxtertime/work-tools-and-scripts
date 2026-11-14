@@ -1,0 +1,50 @@
+/* Application shell around the approved compact card layout. */
+body{font-family:var(--body)}
+.file-actions{width:430px;max-width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;flex:none}
+.file-actions .btn{font-size:11px;padding:10px;white-space:normal;text-align:center}
+.hero .file-actions .btn:not(.ghost):not(.quiet){background:#e8f0f6;color:#0f1d29;border-color:#e8f0f6}
+.file-actions .btn.quiet{background:transparent;color:#8fa6b8;border-color:transparent}
+.btn:disabled{opacity:.5;cursor:not-allowed;filter:none}
+.message{margin-top:18px;padding:11px 14px;border:1px solid #b9d7e3;border-radius:7px;color:var(--accent);background:#edf6fa;font-size:12px;overflow-wrap:anywhere}
+.message.error{background:#fff1ed;border-color:#efc7be;color:var(--bad)}
+.diagnostics{margin:15px 0 4px;color:var(--muted);font-size:11px}
+.diagnostics summary{padding:3px 0;font-size:11px}
+.diagnostics p{font-size:11px;margin:7px 0;overflow-wrap:anywhere}
+.welcome{padding:60px 20px;text-align:center;max-width:650px;margin:30px auto 50px}
+.welcome-icon{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;background:var(--soft);border-radius:14px;color:var(--accent);margin-bottom:20px}
+.welcome-icon svg{width:30px;height:30px}
+.welcome h2{font-size:25px;margin-bottom:12px}
+.welcome>p{font-size:14px;line-height:1.8;color:var(--muted);max-width:500px;margin:0 auto 22px}
+.welcome .btn{padding:12px 20px;font-size:13px}
+.welcome .welcome-note{font:10px/1.8 var(--mono);margin-top:20px}
+.v1 .check-profile{font-size:10px;line-height:1.4;color:var(--muted);margin-top:3px}
+.v1 .profile-warning{font-size:10px;line-height:1.5;color:var(--bad);margin-top:5px}
+.v1 .check-option.unseen input:checked+span{background:#e6edf2;color:#526b7d}
+.v1 .list-card-main .links{max-width:100%}
+.v1 .list-card-main .link-btn{max-width:100%;min-width:0}
+.link-label{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.v1 .task-id{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v1 .list-card-heading .package{overflow-wrap:anywhere}
+.v1 .badge.measure{white-space:normal;overflow-wrap:anywhere}
+.v1 .raw dd,.v1 .history dd{white-space:pre-wrap;overflow-wrap:anywhere}
+.v1 .dev-note p,.v1 .review-note p{white-space:pre-wrap}
+.recheck-notice{margin-top:10px;padding:8px 10px;font-size:11px;background:#fff4db;border:1px solid #ead9a9;border-radius:6px;color:#865d1e;display:flex;align-items:center;gap:7px}
+.recheck-notice svg{width:14px;height:14px;flex:none}
+.history{font-size:11px;color:var(--muted);margin-top:8px}
+.history summary{padding:4px 0;font-size:10px}
+.history p{font-size:11px;margin:7px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.history ul{padding-left:19px;margin:8px 0;font-size:11px}
+.history dl{display:grid;gap:6px;margin:10px 0}
+.history dl>div{display:grid;grid-template-columns:minmax(90px,1fr) minmax(0,2fr);gap:10px;border-top:1px solid var(--line);padding-top:6px;font-size:10px}
+.history dd{margin:0;overflow-wrap:anywhere}
+.pagination{display:flex;justify-content:center;align-items:center;gap:16px;margin:24px 0}
+.pagination>span{font:11px var(--mono);color:var(--muted)}
+.dragging::after{content:"Перетащите один CSV или JSON";position:fixed;inset:18px;z-index:20;display:flex;align-items:center;justify-content:center;border:3px dashed var(--accent);border-radius:14px;background:#e2eff5ed;color:var(--accent);font-size:22px;pointer-events:none}
+.v1 .list-card-main>.raw{clear:both}
+#footnote{line-height:1.8}
+@media(max-width:1100px){.page-head h1{font-size:32px}.file-actions{width:370px}.section-line>span{max-width:42%;text-align:right}.v1 .list-card-heading .badges{flex-wrap:wrap}}
+@media(max-width:800px){
+ .wrap{padding-inline:22px}.page-head{flex-direction:column;align-items:stretch;gap:20px;padding:28px 0 24px}.page-head h1{font-size:32px}.page-head p{font-size:12px}.file-actions{width:100%;max-width:500px}.stats{gap:12px}.stats b{font-size:35px}.stats .label{font-size:8px;letter-spacing:.5px}.stats>div>span:last-child{display:none}.hero-foot{font-size:9px;flex-wrap:wrap;gap:6px}.filters{flex-wrap:wrap;gap:7px}.filters .search{flex-basis:100%}.filters select{flex:1;min-width:0;max-width:none;font-size:10px;padding:0 7px}.pools{gap:16px}.pool{font-size:11px;gap:6px}.section-line>span{display:none}.pagination{gap:10px}.pagination>span{font-size:9px}
+}
+@media(max-width:520px){.wrap{padding-inline:17px}.page-head h1{font-size:29px;letter-spacing:-1px}.file-actions{gap:7px}.file-actions .btn{font-size:10px;padding:9px 7px}.stats{gap:8px}.stats b{font-size:32px}.hero-foot{font-size:8px}.filters select{font-size:9px;padding:0 3px}.pools{justify-content:space-between;gap:6px}.pool{font-size:10px;gap:5px}.pool svg{width:13px}.pool b{font-size:9px;min-width:19px;line-height:18px}.welcome{padding:35px 0;margin-top:20px}.welcome h2{font-size:22px}.welcome>p{font-size:12px}.message{font-size:11px}.diagnostics summary{font-size:10px}.pagination .btn{font-size:10px;padding:7px 10px}.pagination>span{font-size:8px}.toast{font-size:10px;padding:10px 12px;gap:7px}.toast .btn{font-size:10px;padding:5px}dialog{padding:20px}dialog h2{font-size:22px}.dialog-actions .btn{font-size:10px;padding:8px}.v1 .list-card-heading .task-id{max-width:70px}.v1 .check-profile{font-size:10px}#footnote{font-size:8px;padding:0 17px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
