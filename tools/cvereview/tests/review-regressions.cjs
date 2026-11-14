@@ -10,6 +10,27 @@ async function selectFilter(p,id,choices=[]){
  await root.locator('summary').click();
 }
 async function run(browser,only='all'){
+ if(only==='all'||only==='sorting'){
+  const p=await browser.newPage();try{
+   const rows=[
+    {'Task ID':'10','Разработчик':'Борис','Принятая мера':'Обновление версии','Статус':'Готов','Компонент':'zlib','CVE ID':'CVE-2026-10000','End date':'03.11.2026','Task date':'01.11.2026','RHEL severity':'Important'},
+    {'Task ID':'2','Разработчик':'Анна','Принятая мера':'Бэкпорт патча','Статус':'Ожидает ревью','Компонент':'openssl','CVE ID':'CVE-2026-9999','End date':'01.11.2026','Task date':'03.11.2026','RHEL severity':'Critical'},
+    {'Task ID':'100','Разработчик':'Вера','Принятая мера':'Собственный патч','Статус':'Готов','Компонент':'kernel','CVE ID':'CVE-2026-10001','End date':'02.11.2026','Task date':'02.11.2026','RHEL severity':'Low'}
+   ];
+   await p.goto(url);await p.locator('#csv-file').setInputFiles(input('sort.csv',fixture(rows)));await p.waitForSelector('.list-card');
+   assert.equal(await p.locator('#sort-direction').count(),1,'Sort direction control must be available');
+   const tasks=()=>p.locator('.list-card').evaluateAll(els=>els.map(el=>el.dataset.task));
+   assert.deepEqual(await tasks(),['2','10','100']);
+   const cases=[['end',['2','100','10'],['10','100','2']],['taskdate',['10','100','2'],['2','100','10']],['dev',['2','10','100'],['100','10','2']],['measure',['2','10','100'],['100','10','2']],['component',['100','2','10'],['10','2','100']],['task',['2','10','100'],['100','10','2']],['cve',['2','10','100'],['100','10','2']],['status',['10','100','2'],['2','10','100']],['severity',['2','10','100'],['100','10','2']]];
+   for(const [key,first,reverse] of cases){await p.locator('#order').selectOption(key);assert.deepEqual(await tasks(),first,key);await p.locator('#sort-direction').click();assert.deepEqual(await tasks(),reverse,key+' reversed');}
+   await p.locator('.list-card[data-task="2"] input[data-item="branch"][value="ok"]').check();await selectFilter(p,'dev',['Анна','Борис']);
+   await p.locator('#order').selectOption('component');assert.deepEqual(await tasks(),['2','10']);await p.locator('#sort-direction').click();assert.deepEqual(await tasks(),['10','2']);
+   await p.locator('#search').fill('CVE-2026-9999');assert.deepEqual(await tasks(),['2']);assert.equal(await p.locator('.list-card input[data-item="branch"][value="ok"]').isChecked(),true);assert.equal(await p.locator('#order').inputValue(),'component');
+   await p.locator('#csv-file').setInputFiles(input('many.csv',fixture(Array.from({length:56},(_,i)=>({'Task ID':String(200+i)})))));await p.waitForFunction(()=>document.querySelectorAll('.list-card').length===50);
+   await p.locator('[data-action="next-page"]').click();assert.equal(await p.locator('.list-card').count(),6);await p.locator('#order').selectOption('end');assert.equal(await p.locator('.list-card').count(),50);assert.equal(await p.locator('[data-action="prev-page"]').isDisabled(),true);
+   console.log('PASS regression: sort fields/directions, combined filters, pagination and review preservation');
+  }finally{await p.close();}
+ }
  if(only==='all'||only==='multi'){
   const p=await browser.newPage();try{
    const custom='Особая мера с длинным названием для проверки ширины выпадающего списка';
@@ -166,7 +187,7 @@ async function run(browser,only='all'){
   }finally{await p.close();}
  }
  if(only==='all'||only==='date'){
-  const p=await browser.newPage();try{await p.goto(url);await p.locator('#csv-file').setInputFiles(input('dates.csv',fixture([{'End date':'2026-02-30'},{'Task ID':'101','End date':'2026-03-01'}])));await p.waitForSelector('.list-card');await p.locator('#order').selectOption('oldest');assert.equal(await p.locator('.list-card').first().getAttribute('data-task'),'101','Impossible ISO date must sort after valid dates');console.log('PASS regression: invalid calendar date sorts last');}finally{await p.close();}
+  const p=await browser.newPage();try{await p.goto(url);await p.locator('#csv-file').setInputFiles(input('dates.csv',fixture([{'End date':'2026-02-30'},{'Task ID':'101','End date':'2026-03-01'}])));await p.waitForSelector('.list-card');await p.locator('#order').selectOption('end');assert.equal(await p.locator('.list-card').first().getAttribute('data-task'),'101','Impossible ISO date must sort after valid dates');console.log('PASS regression: invalid calendar date sorts last');}finally{await p.close();}
  }
 }
 module.exports=run;
