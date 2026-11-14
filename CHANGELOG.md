@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-11-15
+
 ### Изменено
 
 - `cvereview` (0.3.0): поиск по всем полям CSV, дополнительным колонкам,
@@ -696,7 +698,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.38.1...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.39.0...HEAD
+[0.39.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.38.1...v0.39.0
 [0.38.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.38.0...v0.38.1
 [0.38.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.36.0...v0.37.0
