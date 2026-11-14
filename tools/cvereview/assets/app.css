@@ -1,6 +1,20 @@
 /* Application shell around the approved compact card layout. */
 body{font-family:var(--body)}
 .filters{flex-wrap:wrap}
+.multi-filter{position:relative;flex:0 1 205px;min-width:0}
+.multi-filter summary{height:40px;border:1px solid var(--line);border-radius:7px;background:var(--panel);padding:0 11px;display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;font-size:11px}
+.multi-filter summary::-webkit-details-marker{display:none}
+.multi-filter summary>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.multi-filter summary b{font-weight:500}
+.multi-filter summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.multi-filter[open] summary{border-color:var(--accent);color:var(--accent)}
+.filter-options{position:absolute;top:46px;right:0;z-index:5;width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 8px 25px #10263720}
+.filter-options>.btn{width:100%;text-align:left;justify-content:flex-start;font-size:11px;padding:8px}
+.filter-choices{max-height:280px;overflow:auto;overscroll-behavior:contain}
+.filter-choices label{display:flex;align-items:flex-start;gap:8px;padding:8px;border-radius:5px;font-size:12px;line-height:1.5;cursor:pointer;overflow-wrap:anywhere}
+.filter-choices label:hover{background:var(--soft)}
+.filter-choices input[type="checkbox"]{width:15px;height:15px;padding:0;margin:2px 0 0;flex:none;accent-color:var(--accent)}
+@media(max-width:800px){.multi-filter{flex:1 1 calc(50% - 7px)}.multi-filter summary{font-size:10px;padding:0 8px}.filter-options{width:100%;max-width:100%}.filter-choices label{font-size:11px}}
 [data-copy]{cursor:copy;border-radius:3px}
 [data-copy]:hover{box-shadow:0 0 0 2px var(--line)}
 [data-copy]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

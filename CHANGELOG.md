@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-11-15
+
+### Добавлено
+
+- `cvereview` (0.7.0): множественный выбор разработчиков, статусов и принятых
+  мер в выпадающих списках с чекбоксами, сбросом и управлением с клавиатуры.
+
+### Изменено
+
+- `cvereview` (0.6.0): фильтр критичности заменён фильтром по принятой мере
+  из CSV, включая неизвестные и пустые значения.
+
 ## [0.40.0] - 2026-11-15
 
 ### Изменено
@@ -712,7 +724,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.40.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.41.0...HEAD
+[0.41.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.40.0...v0.41.0
 [0.40.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.38.1...v0.39.0
 [0.38.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.38.0...v0.38.1
