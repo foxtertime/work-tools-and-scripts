@@ -632,7 +632,7 @@ CR.checklistDefinitions = {"schemaVersion":1,"profiles":[{"id":"upstream-patch",
   const oldIds=Object.keys(old.checks),newIds=Object.keys(next.checks);
   const added=newIds.filter(id=>!Object.hasOwn(old.checks,id)),removed=oldIds.filter(id=>!Object.hasOwn(next.checks,id));
   if(sameContext&&!added.length&&!removed.length&&next.checklistVersion===old.checklistVersion)return {...clone(old),key:next.key,checklistSnapshot:next.checklistSnapshot};
-  const untouched=old.needsRecheck&&old.previousReview&&newIds.every(id=>old.checks[id]==='unseen'||old.checks[id]===old.previousReview.checks[id])&&(!old.reviewComment||old.reviewComment===old.previousReview.reviewComment);
+  const untouched=old.needsRecheck&&old.previousReview&&oldIds.every(id=>old.checks[id]==='unseen'||old.checks[id]===old.previousReview.checks[id])&&(!old.reviewComment||old.reviewComment===old.previousReview.reviewComment);
   const previous=untouched&&old.previousReview?clone(old.previousReview):snapshot(old);
   if(sameContext&&(added.length||removed.length))return {...clone(old),key:next.key,checklistVersion:next.checklistVersion,checklistSnapshot:next.checklistSnapshot,checks:Object.fromEntries(newIds.map(id=>[id,Object.hasOwn(old.checks,id)?old.checks[id]:'unseen'])),pool:added.length?'pending':old.pool,needsRecheck:Boolean(added.length||old.needsRecheck),previousReview:previous};
   return {...next,needsRecheck:true,previousReview:previous};

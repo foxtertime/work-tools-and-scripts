@@ -48,3 +48,15 @@ test('self-consistent incomplete snapshot cannot bypass newly required checks',(
  const data=JSON.parse(M.exportJSON(done())),r=data.records[0];r.checklistSnapshot=r.checklistSnapshot.filter(i=>i.id!=='branch');delete r.checks.branch;
  const next=M.importJSON(M.create(table()),JSON.stringify(data)).session;assert.equal(record(next).checks.branch,'unseen');assert.equal(record(next).pool,'pending');assert.throws(()=>M.decide(next,key,'done'));
 });
+test('add, mark bad, then remove keeps the removed result in exported history',()=>{
+ const original=done(),items=P.forMeasure('Патч из апстрима').items;
+ const expanded=modelWith([...items,{id:'new-proof',label:'Новая проверка',description:'Проверить новое подтверждение'}]);
+ let s=expanded.importJSON(expanded.create(table()),M.exportJSON(original)).session;
+ s=expanded.setCheck(s,key,'new-proof','bad');
+ const reduced=modelWith(items),next=reduced.importJSON(reduced.create(table()),expanded.exportJSON(s)).session;
+ assert.equal(Object.hasOwn(record(next).checks,'new-proof'),false);
+ assert.equal(record(next).previousReview.checks['new-proof'],'bad');
+ assert.equal(record(next).previousReview.checklistSnapshot.at(-1).label,'Новая проверка');
+ const restored=reduced.importJSON(reduced.create(table()),reduced.exportJSON(next)).session;
+ assert.equal(record(restored).previousReview.checks['new-proof'],'bad');
+});
