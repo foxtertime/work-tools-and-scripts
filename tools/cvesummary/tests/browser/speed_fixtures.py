@@ -29,6 +29,10 @@ fixtures = {
 fixtures["review-no-end"] = (fixtures["review"][0], [
     dict(r, end="") if i == 1 else dict(r) for i, r in enumerate(fixtures["review"][1])
 ])
+fixtures["review-ready"] = ("2026-11-05", [
+    dict(task(end="2026-11-04"), status="Ожидает ревью", p="+"),
+    dict(task(), p="+"), task(),
+])
 for name, (as_of, rows) in fixtures.items():
     for i, row in enumerate(rows):
         row.update(row=i + 2, cve="CVE-2026-%d" % (8000 + i), task="TASK-%d" % i)

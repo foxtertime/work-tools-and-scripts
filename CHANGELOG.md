@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+## [0.42.1] - 2026-11-17
+
+### Исправлено
+
+- `cvesummary` (1.41.2): задачи на ревью считаются закрытыми в блоке темпа —
+  в остатке для прогноза, балансе и графиках; исключено повторное вычитание
+  ревью с готовым решением.
+
 ## [0.42.0] - 2026-11-15
 
 ### Добавлено
@@ -731,7 +739,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.42.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.42.1...HEAD
+[0.42.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.42.0...v0.42.1
 [0.42.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.41.0...v0.42.0
 [0.41.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.40.0...v0.41.0
 [0.40.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.39.0...v0.40.0

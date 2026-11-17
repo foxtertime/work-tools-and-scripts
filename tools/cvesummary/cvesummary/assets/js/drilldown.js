@@ -49,7 +49,7 @@
     return [...groups.values()];
   }
   function mount(CS) {
-    const { roles, scope, segments, hours, dates, ai, strips, links } = CS;
+    const { roles, scope, segments, hours, dates, ai, strips, links, pace } = CS;
     const $ = id => document.getElementById(id);
     const data = JSON.parse($('data').textContent), asOf = dates.dayOf(data.meta.as_of);
     const scopes = scope.split(data.rows, asOf);
@@ -284,7 +284,7 @@
         if (part) bind(node, part.label, part.rows);
       }
       bind($('hero-risk').firstElementChild, 'Есть проблема / нужна доработка', rows.filter(roles.needsAttention));
-      bind($('p-open'), 'Открыто сейчас', openRows); bind($('att-sub').querySelector('b'), 'Требует внимания', rows.filter(roles.needsAttention));
+      bind($('p-open'), 'Открыто сейчас', rows.filter(r => !pace.isClosed(r))); bind($('att-sub').querySelector('b'), 'Требует внимания', rows.filter(roles.needsAttention));
       bind($('close-sub').querySelector('b'), 'Можно закрыть', ready);
       bind($('removed-count'), 'Убрано из эпика', removed);
       const removedParts = segments.removed(removed, asOf);

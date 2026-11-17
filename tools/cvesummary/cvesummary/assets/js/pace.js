@@ -1,6 +1,6 @@
 /* Темп и прогноз в задачах — как в образце сводки. Поступление — по Task
-   date, закрытие — «Готов» по End date; для скорости также учитывается
-   «Ожидает ревью» с корректной End date. Всё, что позже даты отчёта, ещё
+   date, закрытие — «Готов» и «Ожидает ревью» по End date.
+   Ревью исключается из остатка работы, как готовая задача. Всё, что позже даты отчёта, ещё
    не случилось. Новые задачи приходят каждый день, и в выходные: темп
    поступления — на календарный день. Закрывают по производственному
    календарю: темп закрытия — на рабочий день. Нормированный баланс за неделю:
@@ -21,8 +21,9 @@
   const BREAK_WORKDAYS = 5;
 
   const inDay = r => dates.dayOf(r.tdate);
-  const outDay = r => (roles.isDone(r) ? dates.dayOf(roles.endOf(r)) : null);
-  const speedDay = r => (roles.isSpeedDone(r) ? dates.dayOf(roles.endOf(r)) : null);
+  const isClosed = r => roles.isDone(r) || roles.isReview(r);
+  const outDay = r => (roles.isSpeedDone(r) ? dates.dayOf(roles.endOf(r)) : null);
+  const speedDay = outDay;
 
   /* Начало работы — самая ранняя Start date у взятой задачи, не позже даты
      отчёта; нет такой — null */
@@ -79,14 +80,14 @@
     const cut = gaps.reduce((a, g) => a + dates.workdays(Math.max(g.from, from + 1), Math.min(g.to, end)), 0);
     const days = Math.max(0, end - from), work = dates.workdays(from + 1, end) - cut;
     const shut = rows.map(outDay).filter(within);
-    // В скорости есть завершённые убранные задачи и ревью с End date;
-    // их вклад в скорость не уменьшает баланс пула (closedTotal).
+    // Завершённые убранные задачи входят только в скорость;
+    // ревью с End date входит также в баланс пула (closedTotal).
     const closed = history.map(speedDay).filter(d => within(d) && !inBreak(gaps, d)).length;
     const inR = days ? rows.map(inDay).filter(within).length / days : 0;
     const calendarCut = gaps.reduce((a, g) => a + Math.max(0, Math.min(g.to, end) - Math.max(g.from, from + 1) + 1), 0);
     const rateDays = work || Math.max(0, days - calendarCut), calendarRate = work === 0 && rateDays > 0;
     const outR = rateDays ? closed / rateDays : 0;
-    return { inR, outR, net: outR * (calendarRate ? 7 : 5) - inR * 7, open: rows.filter(roles.isOpen).length,
+    return { inR, outR, net: outR * (calendarRate ? 7 : 5) - inR * 7, open: rows.filter(r => !isClosed(r)).length,
       days, work, cut, closed, closedTotal: shut.length, rateDays, calendarRate };
   }
 
@@ -158,9 +159,9 @@
 
   /* Накопительные ряды по дням from..to для burn-up и burn-down: всего
      поступило (inc), всего закрыто (out), открыто (open). Задача без Task
-     date — в бэклоге с начала; закрыта не раньше, чем поступила; «Готов»
-     без End date закрыт сразу, как поступил. Даты позже to прижимаются к
-     to: на последний день открыты ровно не «Готов», как в rates().open. */
+     date — в бэклоге с начала; закрыта не раньше, чем поступила; «Готов» и ревью
+     без корректной End date закрыт сразу, как поступил. Даты позже to прижимаются к
+     to: на последний день открыты только задачи не «Готов» и не на ревью, как в rates().open. */
   function cumulative(rows, from, to) {
     const n = to - from + 1;
     if (n <= 0) return [];
@@ -169,7 +170,7 @@
     rows.forEach(r => {
       const a = inDay(r) === null ? -Infinity : inDay(r);
       put(inc, a);
-      if (roles.isDone(r)) put(out, Math.max(a, outDay(r) === null ? -Infinity : outDay(r)));
+      if (isClosed(r)) put(out, Math.max(a, outDay(r) === null ? -Infinity : outDay(r)));
     });
     const s = [];
     let ci = 0, co = 0;
@@ -245,5 +246,5 @@
     return hi;
   }
 
-  return { HORIZON, BREAK_WORKDAYS, workStart, breaks, inBreak, rates, simulate, need, daily, cumulative, project, latestStart, devsNeeded, forecast, scenarios };
+  return { isClosed, HORIZON, BREAK_WORKDAYS, workStart, breaks, inBreak, rates, simulate, need, daily, cumulative, project, latestStart, devsNeeded, forecast, scenarios };
 }));
