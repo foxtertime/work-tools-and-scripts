@@ -16,5 +16,14 @@
     }
     return { pool, removed, speed };
   }
-  return { split };
+  // Task date — дата создания; сам день сканфриза не включается.
+  function afterFreeze(rows, stop, asOf) {
+    if (stop == null) return [];
+    return rows.filter(r => {
+      if (roles.isRemoved(r) || (r.bad || []).includes('tdate')) return false;
+      const day = dates.dayOf(r.tdate);
+      return day !== null && day > stop && day <= asOf;
+    });
+  }
+  return { split, afterFreeze };
 }));

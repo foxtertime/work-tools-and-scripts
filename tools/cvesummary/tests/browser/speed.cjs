@@ -63,6 +63,41 @@ assert.equal(fixture.status, 0, fixture.stderr);
       await p.locator('#plan-ready').check();
       assert.match(await p.locator('#plan-ready').locator('..').getAttribute('data-tip'), /решением \(1\)/);
     });
+    await check('after freeze filters creation dates and updates bars and drilldown', 'after-freeze', async p => {
+      const setFreeze = async value => {
+        await p.locator('#stop-date').fill(value);
+        await p.locator('#stop-date').dispatchEvent('change');
+      };
+      const list = async (selector, expected) => {
+        await p.locator(selector).click();
+        assert.deepEqual(await p.locator('#drill-body tr[data-row]').evaluateAll(nodes => nodes.map(n => Number(n.dataset.row)).sort()), expected);
+        await p.locator('.drill-close').click();
+      };
+      assert.match(await p.locator('#after-freeze-sub').innerText(), /Укажите дату/);
+      assert.equal(await p.locator('#after-freeze-bar').isVisible(), false);
+      await setFreeze('2026-11-03');
+      for (const width of [1440, 390]) {
+        await p.setViewportSize({width, height: 1000}); await p.waitForTimeout(250);
+        assert.equal(await p.locator('#after-freeze-count').innerText(), '2');
+        assert.deepEqual(await p.locator('#after-freeze-bar > span').evaluateAll(nodes => nodes.map(n => [n.dataset.segment, Number(n.style.flexGrow)])), [['done-dev', 1], ['review', 1]]);
+        await list('#after-freeze-count', [4, 5]);
+        await list('#after-freeze-bar [data-segment="review"]', [4]);
+        await list('#after-freeze-rows .n[data-segment="done-dev"]', [5]);
+        assert.ok(await p.locator('#after-freeze').evaluate(e => e.scrollWidth <= e.clientWidth));
+      }
+      await setFreeze('2026-11-04');
+      assert.equal(await p.locator('#after-freeze-count').innerText(), '1');
+      await list('#after-freeze-count', [5]);
+      await p.reload();
+      assert.equal(await p.locator('#after-freeze-count').innerText(), '1');
+      await setFreeze('2026-11-05');
+      assert.equal(await p.locator('#after-freeze-count').innerText(), '0');
+      assert.match(await p.locator('#after-freeze-sub').innerText(), /Таких задач нет/);
+      await list('#after-freeze-count', []);
+      await setFreeze('');
+      assert.equal(await p.locator('#after-freeze-count').innerText(), '—');
+      assert.equal(await p.locator('#after-freeze-bar').isVisible(), false);
+    });
     await check('zero is known', 'zero', async p => {
       assert.equal(await p.locator('#hero-risk > div').filter({ hasText: /^Задач в день/ }).locator('b').innerText(), '0');
       assert.equal(await p.locator('#p-out').innerText(), '0');

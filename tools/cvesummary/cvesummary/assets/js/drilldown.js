@@ -286,6 +286,13 @@
       bind($('hero-risk').firstElementChild, 'Есть проблема / нужна доработка', rows.filter(roles.needsAttention));
       bind($('p-open'), 'Открыто сейчас', rows.filter(r => !pace.isClosed(r))); bind($('att-sub').querySelector('b'), 'Требует внимания', rows.filter(roles.needsAttention));
       bind($('close-sub').querySelector('b'), 'Можно закрыть', ready);
+      const afterFreeze = scope.afterFreeze(rows, dates.dayOf($('stop-date').value), asOf);
+      bind($('after-freeze-count'), 'Задачи после сканфриза', afterFreeze);
+      for (const part of segments.hero(afterFreeze)) {
+        for (const node of $('after-freeze').querySelectorAll('[data-segment="' + part.key + '"]')) {
+          bind(node, 'После сканфриза · ' + segmentTitle(part), part.rows);
+        }
+      }
       bind($('removed-count'), 'Убрано из эпика', removed);
       const removedParts = segments.removed(removed, asOf);
       for (const part of removedParts.flatMap(p => [p, ...p.parts])) {
