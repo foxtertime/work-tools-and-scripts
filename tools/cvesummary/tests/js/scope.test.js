@@ -35,3 +35,19 @@ test('removed workload cannot dilute pool hours or keep a developer active', () 
   assert.deepEqual([stats.closed, stats.work, stats.rate], [1, 1, 1]);
   assert.deepEqual(old.pool, []);
 });
+
+test('after freeze uses creation date strictly after freeze through report date, only in pool', () => {
+  const rows = [
+    { row: 1, tdate: '2026-11-02' }, { row: 2, tdate: '2026-11-03' },
+    { row: 3, tdate: '2026-11-04', status: 'Ожидает ревью' },
+    { row: 4, tdate: '2026-11-05', status: 'Готов' },
+    { row: 5, tdate: '2026-11-06' }, removed({ row: 6, tdate: '2026-11-04' }),
+    { row: 7, tdate: '' }, { row: 8, tdate: '2026-02-30' },
+    { row: 9, tdate: '2026-11-04', bad: ['tdate'] },
+    { row: 10, tdate: '2026-11-02', start: '2026-11-04' },
+  ];
+  assert.deepEqual(scope.afterFreeze(rows, D + 1, D + 3).map(r => r.row), [3, 4]);
+  assert.deepEqual(scope.afterFreeze(rows, D + 2, D + 3).map(r => r.row), [4]);
+  assert.deepEqual(scope.afterFreeze(rows, null, D + 3), []);
+  assert.deepEqual(scope.afterFreeze(rows, D + 4, D + 3), []);
+});
