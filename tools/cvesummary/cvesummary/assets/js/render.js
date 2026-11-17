@@ -509,7 +509,7 @@
       const off = clipped(cap);
       cap.classList.toggle('off', off); li.hidden = !off;
     }
-    for (const s of document.querySelectorAll('#hero-bar > span, main .sevstrip > span, .dev .pbar > span, #removed-bar > span')) {
+    for (const s of document.querySelectorAll('#hero-bar > span, main .sevstrip > span, .dev .pbar > span, #removed-bar > span, #after-freeze-bar > span')) {
       s.textContent = s.dataset.label || '';
       if (s.textContent && clipped(s)) s.textContent = '';
     }
@@ -668,6 +668,39 @@
     statTable('measrows', 'Мера', mg, true);
     const st = $('measstrip'); st.replaceChildren(); const tot = mg.reduce((a, g) => a + g.recs.length, 0);
     for (const g of mg) { const sp = el('span'); sp.style.flexGrow = g.recs.length; sp.style.background = css(g.c); sp.dataset.tip = `${g.k}: ${g.recs.length} (${tot ? Math.round(g.recs.length / tot * 100) : 0}%)`; sp.dataset.key = g.k; st.append(sp); }
+  }
+
+  function renderAfterFreeze() {
+    const stop = dates.dayOf($('stop-date').value);
+    const rows = scope.afterFreeze(recs, stop, AS_OF), parts = segments.hero(rows);
+    const bar = $('after-freeze-bar'), grid = $('after-freeze-rows');
+    $('after-freeze-count').textContent = stop === null ? '—' : String(rows.length);
+    $('after-freeze-sub').textContent = stop === null
+      ? 'Укажите дату сканфриза в блоке темпа.'
+      : `Созданы после ${fmt(stop)} и не позже ${fmt(AS_OF)} по Task date. День сканфриза не включён; задачи, убранные из эпика, исключены.`;
+    bar.replaceChildren(); grid.replaceChildren();
+    bar.hidden = grid.hidden = !rows.length;
+    if (!rows.length) {
+      if (stop !== null) $('after-freeze-sub').append(' Таких задач нет.');
+      return;
+    }
+    [['Категория', 'h l'], ['', 'h bar'], ['Всего', 'h'], ['% от всех', 'h']]
+      .forEach(([text, cls]) => grid.append(el('div', cls, text)));
+    const max = maxOf(parts.map(p => p.rows.length), 1), mobile = matchMedia('(max-width:560px)').matches;
+    for (const part of parts) {
+      const n = part.rows.length, percent = Math.round(n / rows.length * 100);
+      const title = part.group === 'done' ? 'Готово · ' + part.label : part.label;
+      const segment = el('span'); segment.style.flexGrow = n; segment.style.background = css(part.color);
+      segment.dataset.segment = part.key; segment.dataset.tip = `${title}: ${n} (${percent}%)`;
+      bar.append(segment);
+      const label = el('div', 'k'), dot = el('i'); dot.style.background = css(part.color); label.append(dot, title);
+      const track = el('div', 'b track'), fill = el('span');
+      fill.style.width = (n / max * 100) + '%'; fill.style.background = css(part.color); track.append(fill);
+      const count = el('div', 'n', String(n)), share = el('div', 'p', percent + '%');
+      const cells = mobile ? [label, count, share, track] : [label, track, count, share];
+      cells.forEach(cell => { cell.dataset.segment = part.key; cell.dataset.tip = segment.dataset.tip; });
+      grid.append(...cells);
+    }
   }
 
   function renderRemoved() {
@@ -1424,7 +1457,7 @@
       parts.forEach((s, i) => { s.dataset.label = text[i]; s.style.color = strips.ink(getComputedStyle(s).backgroundColor); });
     };
     document.querySelectorAll('main .sevstrip').forEach(bar => label(bar, 'pct'));
-    document.querySelectorAll('.dev .pbar, #removed-bar').forEach(bar => label(bar, 'n'));
+    document.querySelectorAll('.dev .pbar, #removed-bar, #after-freeze-bar').forEach(bar => label(bar, 'n'));
   }
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { labelStrips(); fitLabels(); });
 
@@ -1432,7 +1465,7 @@
     stripCaps = [];
     /* темп — первым: строка «Задач в день» в шапке берёт его период */
     const W = renderPace();
-    renderHead(); renderCuts(); renderTables(); renderRemoved(); renderBars();
+    renderHead(); renderCuts(); renderTables(); renderAfterFreeze(); renderRemoved(); renderBars();
     renderPeople(W); renderAnomalies(); renderAi(); renderRemediation();
     labelStrips(); fitLabels(); navSync();
   }

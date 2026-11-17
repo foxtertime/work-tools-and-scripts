@@ -40,6 +40,7 @@
       <a href="#pace">Темп и прогноз</a>
       <a href="#attention">Требует внимания <span class="badge bad" id="nb-att">—</span></a>
       <a href="#closable">Можно закрыть <span class="badge ok" id="nb-close">—</span></a>
+      <a href="#after-freeze">После сканфриза</a>
       <a href="#removed">Убрано из эпика</a>
       <a href="#comps">Компоненты</a>
       <a href="#rhel-state">Состояние в RHEL</a>
@@ -162,6 +163,13 @@
         <thead><tr><th>CVE</th><th>Компонент</th><th>Критичность</th><th>CVSS</th><th>Основание</th><th>Статус</th><th>Разработчик</th><th>Часов</th></tr></thead>
         <tbody id="close-body"></tbody>
       </table></div>
+    </section>
+
+    <section class="card wide" id="after-freeze">
+      <h2>Задачи после сканфриза <span class="cnt" id="after-freeze-count">—</span></h2>
+      <p class="sub" id="after-freeze-sub"></p>
+      <div class="pbar" id="after-freeze-bar"></div>
+      <div class="cve-rows removed-rows" id="after-freeze-rows"></div>
     </section>
 
     <section class="card wide" id="removed">

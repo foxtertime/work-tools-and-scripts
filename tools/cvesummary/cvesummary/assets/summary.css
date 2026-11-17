@@ -188,6 +188,8 @@ h2{font-family:var(--f-display);font-weight:500;font-size:18px;margin:0;letter-s
 .sub{color:var(--muted);font-size:13px;margin:-8px 0 0}
 
 /* horizontal bars */
+#after-freeze-bar{margin-top:14px}
+#after-freeze-rows{margin-top:12px}
 .removed-mix{display:flex;flex-direction:column;gap:4px}
 #removed-groups{margin-top:0}
 .pbar.removed-bar{display:grid}

@@ -33,6 +33,16 @@ fixtures["review-ready"] = ("2026-11-05", [
     dict(task(end="2026-11-04"), status="Ожидает ревью", p="+"),
     dict(task(), p="+"), task(),
 ])
+fixtures["after-freeze"] = ("2026-11-05", [
+    dict(task(), tdate="2026-11-02"),
+    dict(task(), tdate="2026-11-03"),
+    dict(task(), tdate="2026-11-04", status="Ожидает ревью"),
+    dict(task(end="2026-11-05"), tdate="2026-11-05"),
+    dict(task(), tdate="2026-11-06"),
+    dict(task(), tdate="2026-11-04", status="Убрано из эпика"),
+    dict(task(), tdate=""),
+    dict(task(), tdate="2026-11-04", bad=["tdate"]),
+])
 for name, (as_of, rows) in fixtures.items():
     for i, row in enumerate(rows):
         row.update(row=i + 2, cve="CVE-2026-%d" % (8000 + i), task="TASK-%d" % i)
