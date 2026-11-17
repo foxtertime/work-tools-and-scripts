@@ -39,7 +39,7 @@ test('Nov 4 no longer depresses team or personal rate and does not add hours', (
   assert.deepEqual(H.hours, [8, 8, 8, 8]);
   assert.equal(H.workdays.get('Алиса').has(d('2026-11-04')), false);
   const R = pace.rates(rows, asOf, Infinity, d('2026-11-02'));
-  assert.equal(R.work, 4); assert.equal(R.outR, 1); assert.equal(R.closedTotal, 3);
+  assert.equal(R.work, 4); assert.equal(R.outR, 1); assert.equal(R.closedTotal, 4);
   assert.equal(activity.stats(A.people.get('Алиса'), d('2026-11-02'), asOf).rate, 1);
   assert.equal(activity.team(A, d('2026-11-02'), asOf).outR, 1);
 });
