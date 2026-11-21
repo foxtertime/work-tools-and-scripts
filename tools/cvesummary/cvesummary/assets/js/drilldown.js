@@ -238,17 +238,20 @@
         const from = Number(col.dataset.chartDay), to = Math.min(from + span - 1, asOf);
         const when = span === 1 ? dates.ruOf(from) : 'неделя с ' + dates.ruOf(from);
         const event = field === 'tdate' ? 'Поступление задач' : dev === null ? 'Выполнено командой' : 'Выполнено · ' + dev;
-        const note = field === 'tdate' ? 'Поступившие задачи по Task date.' : 'Готовые задачи и ревью с корректной End date, с назначенным разработчиком, по End date.';
+        const note = field === 'tdate' ? 'Поступившие задачи по Task date.' : 'Готовые задачи, ревью и ожидающие комментария с корректной End date, с назначенным разработчиком, по End date.';
         const members = groups.get(from) || [];
         bind(col, `${event} · ${when}`, includeRemoved ? members.filter(r => !roles.isRemoved(r)) : members,
           `${note} Период: ${dates.ruOf(from)} — ${dates.ruOf(to)}, включительно.`);
         if (field === 'end') {
-          for (const node of col.querySelectorAll('[data-chart-segment="review"]')) {
-            const developers = node.dataset.chartDevelopers ? JSON.parse(node.dataset.chartDevelopers) : null;
-            const selected = members.filter(r => roles.isReview(r) && (developers
-              ? developers.includes(r.devKey) : r.measureN === node.dataset.chartMeasure));
-            bind(node, `Ожидает ревью · ${dev === null ? '' : dev + ' · '}${node.dataset.chartKey} · ${when}`, selected,
-              `Выполненная работа по End date, статус ревью сохраняется. Период: ${dates.ruOf(from)} — ${dates.ruOf(to)}, включительно.`);
+          for (const [segment, test, title, kept] of [['review', roles.isReview, 'Ожидает ревью', 'статус ревью'],
+            ['comment', roles.isComment, 'Ожидает комментарий', 'статус ожидания комментария']]) {
+            for (const node of col.querySelectorAll(`[data-chart-segment="${segment}"]`)) {
+              const developers = node.dataset.chartDevelopers ? JSON.parse(node.dataset.chartDevelopers) : null;
+              const selected = members.filter(r => test(r) && (developers
+                ? developers.includes(r.devKey) : r.measureN === node.dataset.chartMeasure));
+              bind(node, `${title} · ${dev === null ? '' : dev + ' · '}${node.dataset.chartKey} · ${when}`, selected,
+                `Выполненная работа по End date, ${kept} сохраняется. Период: ${dates.ruOf(from)} — ${dates.ruOf(to)}, включительно.`);
+            }
           }
         }
         if (includeRemoved) {
@@ -347,8 +350,9 @@
           if (part) bind(node, dev + ' · ' + part.label, part.rows);
         }
         for (const section of card.querySelectorAll('[data-measure-status]')) {
-          const review = section.dataset.measureStatus === 'review', label = review ? 'На ревью' : 'Сделано';
-          const members = mine.filter(r => review ? roles.isReview(r) : r.done);
+          const status = section.dataset.measureStatus;
+          const label = { review: 'На ревью', comment: 'Ожидает комментарий' }[status] || 'Сделано';
+          const members = mine.filter(r => status === 'review' ? roles.isReview(r) : status === 'comment' ? roles.isComment(r) : r.done);
           bind(section.querySelector('.cap'), `${dev} · ${label} по принятой мере`, members);
           grid(section.querySelector('.kv'), key => members.filter(r => r.measureN === key), { prefix: `${dev} · ${label} · ` });
         }

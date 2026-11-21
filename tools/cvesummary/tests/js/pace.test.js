@@ -376,3 +376,38 @@ test('undated and invalid review dates do not invent daily closures', () => {
   assert.deepStrictEqual(pace.daily(rows, D, D + 2).map(x => x.o), [0, 0, 0]);
   assert.deepStrictEqual(pace.cumulative(rows, D, D + 2).map(x => x.open), [0, 0, 0]);
 });
+
+test('awaiting comment is closed in pace backlog, balance and charts; only dated review contributes throughput', function () {
+  const rows = [r(D, 'Готов', D + 1), r(D, ' ОЖИДАЕТ  комментарий ', D + 2),
+    r(D, 'Ожидает комментарий'), { ...r(D, 'Ожидает комментарий'), end: '2026-02-30' },
+    r(D, 'Ожидает комментарий', D + 4), { ...r(D, 'Ожидает комментарий', D + 1), bad: ['end'] },
+    r(D, 'В работе', D + 2), r(D, 'Ожидает комментарий', D + 3)];
+  const got = pace.rates(rows, D + 3, Infinity, D);
+  assert.deepStrictEqual([got.closed, got.outR, got.closedTotal, got.open, got.inR], [3, 0.75, 3, 1, 2]);
+  const earlier = pace.rates(rows, D + 3, 2, D, D + 1);
+  assert.deepStrictEqual([earlier.closed, earlier.outR], [1, 0.5]);
+  assert.ok(pace.scenarios(rows, D + 3, D, null, D + 10).every(x => x.closed === 3 && x.rates.closedTotal === 3));
+  const last = pace.cumulative(rows, D, D + 3).slice(-1)[0];
+  assert.deepStrictEqual([last.out, last.open], [7, 1]);
+});
+
+
+test('awaiting comment closure appears on its End date in flow and burn charts and reduces forecast work', () => {
+  const rows = [r(D, 'Ожидает комментарий', D + 1), r(D)];
+  assert.deepStrictEqual(pace.daily(rows, D, D + 2).map(x => x.o), [0, 1, 0]);
+  assert.deepStrictEqual(pace.cumulative(rows, D, D + 2).map(x => [x.out, x.open]),
+    [[0, 2], [1, 1], [1, 1]]);
+  const rates = pace.rates(rows, D + 2, 1, D);
+  assert.strictEqual(rates.open, 1);
+  assert.strictEqual(pace.forecast(rates.open, rates.inR, 1, D + 2, null, D + 3).remaining, 0);
+});
+
+
+test('undated and invalid awaiting-comment dates do not invent daily closures', () => {
+  const rows = [r(D, 'Ожидает комментарий'), {...r(D, 'Ожидает комментарий'), end: '2026-02-30'},
+    {...r(D, 'Ожидает комментарий', D + 1), bad: ['end']}];
+  const rates = pace.rates(rows, D + 2, Infinity, D);
+  assert.deepStrictEqual([rates.open, rates.closed, rates.closedTotal], [0, 0, 0]);
+  assert.deepStrictEqual(pace.daily(rows, D, D + 2).map(x => x.o), [0, 0, 0]);
+  assert.deepStrictEqual(pace.cumulative(rows, D, D + 2).map(x => x.open), [0, 0, 0]);
+});

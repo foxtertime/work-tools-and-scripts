@@ -6,7 +6,7 @@
  const value=v=>['-','—'].includes(String(v??'').trim())?'':String(v??'').trim();
  const identity=r=>({task:r.task.trim(),cve:r.cve.trim().toUpperCase(),component:r.component.trim()});
  const keyOf=r=>{const i=identity(r);return JSON.stringify([i.task,i.cve,i.component]);};
- const eligible=r=>Boolean(r.dev)&&norm(r.dev)!=='secops'&&['ожидает ревью','готов'].includes(norm(r.status));
+ const eligible=r=>Boolean(r.dev)&&norm(r.dev)!=='secops'&&['ожидает ревью','ожидает комментарий','готов'].includes(norm(r.status));
  function decode(bytes){
   if(bytes.includes(0)||bytes[0]===255&&bytes[1]===254||bytes[0]===254&&bytes[1]===255)throw Error('Нужен CSV в UTF-8 или Windows-1251, не XLSX/UTF-16.');
   try{return {text:new TextDecoder('utf-8',{fatal:true}).decode(bytes),encoding:'UTF-8'};}
