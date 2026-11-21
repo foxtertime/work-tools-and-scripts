@@ -184,3 +184,21 @@ test('убранные строки не участвуют в выборе ду
   assert.deepEqual(roles.closeReasons({ ...removed, dev: 'X', p: '+' }, true), ['patch']);
   assert.deepEqual(roles.uniques([removed, normal]), { tasks: 1, comps: 1 });
 });
+
+test('ожидает комментарий — отдельная открытая роль, сданная как ревью', function () {
+  for (const status of ['Ожидает комментарий', '  ОЖИДАЕТ  комментарий ']) {
+    const r = row('X', status);
+    assert.strictEqual(roles.isComment(r), true);
+    assert.strictEqual(roles.isReview(r), false);
+    assert.strictEqual(roles.isSubmitted(r), true);
+    assert.strictEqual(roles.isOpen(r), true);
+    assert.strictEqual(roles.isWorking(r), true);
+  }
+  assert.strictEqual(roles.isSubmitted(row('X', 'Ожидает ревью')), true);
+  assert.strictEqual(roles.isSubmitted(row('X', 'В работе')), false);
+  assert.strictEqual(roles.isComment(row('X', 'Ожидает ревью')), false);
+  assert.strictEqual(roles.isSpeedDone(row('X', 'Ожидает комментарий', { end: '2026-11-05' })), true);
+  assert.strictEqual(roles.isSpeedDone(row('X', 'Ожидает комментарий')), false);
+  assert.strictEqual(roles.isSpeedDone(row('X', 'Ожидает комментарий', { end: '2026-02-30' })), false);
+  assert.strictEqual(roles.isSpeedDone(row('X', 'Ожидает комментарий', { end: '2026-11-05', bad: ['end'] })), false);
+});

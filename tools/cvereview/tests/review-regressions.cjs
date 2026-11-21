@@ -180,6 +180,21 @@ async function run(browser,only='all'){
    console.log('PASS regression: async import preserves concurrent edits');
   }finally{await p.close();}
  }
+ if(only==='all'||only==='comment'){
+  const p=await browser.newPage();try{
+   const rows=[{'Статус':'Ожидает ревью'},{'Статус':'Ожидает комментарий'},{'Статус':'Готов'},{'Разработчик':'SecOps','Статус':'Ожидает комментарий'}].map((r,i)=>({...r,'Task ID':String(300+i)}));
+   await p.goto(url);await p.locator('#csv-file').setInputFiles(input('comment.csv',fixture(rows)));await p.waitForSelector('.list-card');
+   const tasks=async()=>(await p.locator('.list-card').evaluateAll(els=>els.map(el=>el.dataset.task))).sort();
+   assert.deepEqual(await tasks(),['300','301','302']);
+   const status=p.locator('#developer-status');await status.locator('summary').click();
+   assert.deepEqual(await status.locator('input[type="checkbox"]:not([data-action])').evaluateAll(els=>els.map(el=>el.closest('label').textContent.trim())),['Ожидает ревью','Ожидает комментарий','Готов']);
+   await status.locator('summary').click();
+   await selectFilter(p,'developer-status','Ожидает комментарий');assert.deepEqual(await tasks(),['301']);
+   assert.match(await p.locator('.section-line').innerText(),/«Ожидает ревью», «Ожидает комментарий» и «Готов»/);
+   assert.match(await p.locator('#footnote').innerText(),/«Ожидает ревью», «Ожидает комментарий» и «Готов»/);
+   console.log('PASS regression: awaiting comment joins the review pool and status filter');
+  }finally{await p.close();}
+ }
  if(only==='all'||only==='performance'){
   const p=await browser.newPage();try{await p.goto(url);await p.locator('#csv-file').setInputFiles(input('large.csv',fixture(Array.from({length:5000},(_,i)=>({'Task ID':String(20000+i)})))));await p.waitForFunction(()=>document.getElementById('csv-diagnostics').textContent.includes('5000'));
    const elapsed=await p.evaluate(()=>{const field=document.getElementById('search');field.value='CVE';const start=performance.now();field.dispatchEvent(new Event('input',{bubbles:true}));return performance.now()-start;});

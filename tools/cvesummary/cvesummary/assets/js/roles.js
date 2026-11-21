@@ -11,7 +11,7 @@
   'use strict';
 
   const norm = s => String(s == null ? '' : s).trim().replace(/\s+/g, ' ').toLowerCase();
-  const DONE = 'готов', REVIEW = 'ожидает ревью', PAUSED = 'на паузе', REMOVED = 'убрано из эпика';
+  const DONE = 'готов', REVIEW = 'ожидает ревью', COMMENT = 'ожидает комментарий', PAUSED = 'на паузе', REMOVED = 'убрано из эпика';
   const ATTENTION = ['есть проблема', 'нужна доработка'];
   const SEVERITIES = ['Critical', 'Important', 'Moderate', 'Low'];
   const MEASURES = ['Патч из апстрима', 'Импорт новой версии', 'Тег свежего билда',
@@ -39,8 +39,12 @@
   const isOpen = r => !isDone(r);
   const isWorking = r => isTaken(r) && !isDone(r);
   const isReview = r => norm(r.status) === REVIEW;
-  // Сданная на ревью работа считается выполненной только для скорости.
-  const isSpeedDone = r => isDone(r) || (isReview(r) && hasDate(r, 'end'));
+  // После пройденного ревью разработчик оставляет комментарий в задаче.
+  const isComment = r => norm(r.status) === COMMENT;
+  /* Сданная работа — ревью или ожидание комментария: в расчётах одна роль,
+     в отображении — две. Выполненной считается только для скорости. */
+  const isSubmitted = r => isReview(r) || isComment(r);
+  const isSpeedDone = r => isDone(r) || (isSubmitted(r) && hasDate(r, 'end'));
   const isPaused = r => norm(r.status) === PAUSED;
   const needsAttention = r => ATTENTION.includes(norm(r.status));
   const isTriaged = r => isTaken(r) || norm(r.exec) === 'уа';
@@ -125,7 +129,7 @@
   const sevOrder = values => order(values, SEVERITIES, NO_SEVERITY);
   const measureOrder = values => order(values, MEASURES, NO_MEASURE);
 
-  return { norm, devOf, endOf, isTaken, isRemoved, isDone, isSpeedDone, isOpen, isWorking, isReview, isPaused,
+  return { norm, devOf, endOf, isTaken, isRemoved, isDone, isSpeedDone, isOpen, isWorking, isReview, isComment, isSubmitted, isPaused,
     needsAttention, isTriaged, closeReasons, taskKey, uniques, duplicates, sevOf, sevOrder, measureOf, measureOrder,
     SEVERITIES, MEASURES, NO_SEVERITY, NO_MEASURE };
 }));

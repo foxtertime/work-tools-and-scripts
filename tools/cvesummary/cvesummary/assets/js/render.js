@@ -22,6 +22,8 @@
   const REMOVED_HATCH_STYLE = 'background:repeating-linear-gradient(135deg,#ffffff66 0 2px,transparent 2px 8px),var(--st-removed)';
   const REVIEW_PATTERN_STYLE = 'background:radial-gradient(circle,#fff 0 1px,#0006 1px 1.5px,transparent 1.5px),var(--st-review);background-size:6px 6px';
   const REVIEW_LEG = ['ожидает ревью', REVIEW_PATTERN_STYLE];
+  const COMMENT_PATTERN_STYLE = 'background:radial-gradient(circle,var(--st-comment) 0 1.4px,#fff 1.4px 2px,transparent 2px),var(--st-comment);background-size:6px 6px';
+  const COMMENT_LEG = ['ожидает комментарий', COMMENT_PATTERN_STYLE];
   const f1 = x => (Math.round(x * 10) / 10).toString().replace('.', ',');
   const fmt = d => (d === null || d === undefined ? '—' : dates.ruOf(d));
   const dayTip = d => fmt(d) + (DATA.calendar?.days?.[dates.isoOf(d)] ? ` · ${dates.dayLabel(d)}` : '');
@@ -77,7 +79,7 @@
   const recs = SCOPES.pool.map((r, i) => Object.assign({}, r, {
     i, devKey: roles.devOf(r), sevN: roles.sevOf(r), measureN: roles.measureOf(r),
     done: roles.isDone(r), open: roles.isOpen(r), taken: roles.isTaken(r), working: roles.isWorking(r),
-    review: roles.isReview(r), paused: roles.isPaused(r), attention: roles.needsAttention(r),
+    review: roles.isReview(r), comment: roles.isComment(r), paused: roles.isPaused(r), attention: roles.needsAttention(r),
     reasons: roles.closeReasons(r, DUP[i] !== null), dupOf: DUP[i], cvssN: parseFloat(String(r.cvss).replace(',', '.')) || 0,
     tdateD: dates.dayOf(r.tdate), startD: dates.dayOf(r.start), endD: dates.dayOf(roles.endOf(r)), hours: H.hours[i],
   }));
@@ -113,7 +115,7 @@
   const allDays = recs.flatMap(r => [r.tdateD, r.startD, r.endD]).filter(d => d !== null && d <= AS_OF);
   const FIRST = allDays.length ? minOf(allDays, Infinity) : null;
   const statusKey = r => String(r.status || '').trim() || (r.taken ? 'Без статуса' : 'Не взята');
-  const roleColor = r => roles.isRemoved(r) ? '--st-removed' : r.done ? '--st-done' : r.attention ? '--st-bad' : r.paused ? '--st-pause' : r.review ? '--st-review' : r.taken ? '--st-work' : '--st-idle';
+  const roleColor = r => roles.isRemoved(r) ? '--st-removed' : r.done ? '--st-done' : r.attention ? '--st-bad' : r.paused ? '--st-pause' : r.review ? '--st-review' : r.comment ? '--st-comment' : r.taken ? '--st-work' : '--st-idle';
   const hoursText = r => (r.hours === null ? '—' : f1(r.hours));
 
   /* ---------- графики по времени ---------- */
@@ -429,9 +431,12 @@
     const fills = new Map();
     for (const s of cats.filter(s => s.hatch)) {
       const id = 'stack-hatch-' + (++hatchN), defs = mk('defs');
-      const dots = s.hatch === 'dots', size = dots ? 6 : 8;
+      const dots = s.hatch === 'dots' || s.hatch === 'comment-dots', size = dots ? 6 : 8;
       const pattern = mk('pattern', { id, width: size, height: size, patternUnits: 'userSpaceOnUse', patternTransform: dots ? 'rotate(0)' : 'rotate(45)' });
-      pattern.append(mk('rect', { width: size, height: size, fill: css(s.c) }), dots
+      // Ревью — белая точка, ожидание комментария — пурпурная с белой обводкой.
+      pattern.append(mk('rect', { width: size, height: size, fill: css(s.c) }), s.hatch === 'comment-dots'
+        ? mk('circle', { cx: 3, cy: 3, r: 1.6, fill: 'var(--st-comment)', stroke: '#fff', 'stroke-width': 0.7 })
+        : dots
         ? mk('circle', { cx: 3, cy: 3, r: 1.2, fill: '#fff', stroke: '#000', 'stroke-opacity': 0.4, 'stroke-width': 0.6 })
         : mk('rect', { width: 2, height: 8, fill: '#fff', 'fill-opacity': 0.4 }));
       defs.append(pattern); F.plot.prepend(defs); fills.set(s.k, `url(#${id})`);
@@ -454,11 +459,11 @@
         let shape;
         if (j === segs.length - 1 && h > 4) { const r = Math.min(3, barW / 2); shape = mk('path', { d: `M${x},${y0}V${top + r}Q${x},${top} ${x + r},${top}H${x + barW - r}Q${x + barW},${top} ${x + barW},${top + r}V${y0}Z`, fill }); }
         else shape = mk('rect', { x, y: top, width: barW, height: h, fill });
-        if (s.info || s.review) {
+        if (s.info || s.submitted) {
           shape.dataset.chartSegment = s.segment; shape.dataset.chartCount = String(n);
           shape.dataset.tip = `${when}: ${s.label || s.k} ${n}` + (s.info ? ' · вне пула' : '');
-          if (s.review) {
-            shape.dataset.chartKey = s.reviewKey;
+          if (s.submitted) {
+            shape.dataset.chartKey = s.statusKey;
             if (s.devs) shape.dataset.chartDevelopers = JSON.stringify(s.devs);
             if (s.measure !== undefined) shape.dataset.chartMeasure = s.measure;
           }
@@ -585,10 +590,11 @@
       if (note) { k.append(' '); k.append(el('small', null, '· ' + note)); }
       d.append(k, el('b', null, String(val))); if (tip) d.dataset.tip = tip; box.append(d); return d;
     };
-    const review = working.filter(r => r.review).length, paused = working.filter(r => r.paused).length;
+    const review = working.filter(r => r.review).length, comment = working.filter(r => r.comment).length;
+    const paused = working.filter(r => r.paused).length;
     const st = $('hero-state'); st.replaceChildren();
     for (const part of segments.heroState([...recs, ...SCOPES.removed])) {
-      const note = part.key === 'work' ? `ревью ${review} · пауза ${paused}` : part.key === 'none' ? 'без разработчика' : '';
+      const note = part.key === 'work' ? `ревью ${review} · комментарий ${comment} · пауза ${paused}` : part.key === 'none' ? 'без разработчика' : '';
       const node = row(st, part.label, note, part.rows.length, null, removedTip(part.rows), part.color);
       node.dataset.role = part.key;
     }
@@ -1083,7 +1089,7 @@
     if (!R.days) $('pace-sub').textContent = noPeriod;
     $('calendar-note').textContent = calendarNote;
     $('pace-note').textContent = `Всё посчитано на дату отчёта ${fmt(AS_OF)}: темп — за выбранный период (не позже неё и не раньше начала работы разработчиков), прогноз — со следующего дня; даты в таблице позже неё не учитываются. Убрано из эпика не входит в пул: остаток, поступление, баланс, графики и часы считаются без этих задач. Только скорость в задачах за день дополнительно учитывает убранные задачи, завершённые разработчиком, кроме SecOps: нужны корректные Start date и End date, конец не раньше начала и не позже даты отчёта. Незавершённые убранные задачи не влияют на рабочие дни и перерывы. Сканфриз — первый день без новых задач. До него новые задачи приходят каждый календарный день, закрываем по рабочим дням. ${calendarNote} Свободная мощность не накапливается. Завершение — после последних поступлений, а не при первом нуле в очереди. Перерыв в работе — ${pace.BREAK_WORKDAYS} и больше рабочих дней подряд, когда ни на ком из разработчиков (кроме SecOps) не висело задач: его рабочие дни и закрытое в нём в темп закрытия не идут, на графиках он заштрихован.`;
-    $('pace-note').textContent += ' В общей и личной скорости «Ожидает ревью» считается выполненной работой по корректной End date, если она попадает в период и не позже даты отчёта. Без End date задача не добавляет выполненную работу в скорость. В блоке темпа ревью считается закрытой задачей: входит в баланс и график закрытий по End date и исключается из остатка для прогноза. Без корректной End date дневное закрытие не добавляется, а на накопительных графиках задача считается закрытой с поступления, как «Готов» без даты. Статус в остальных разделах сохраняется; правила рабочих дней и перерывов не меняются.';
+    $('pace-note').textContent += ' В общей и личной скорости «Ожидает ревью» и «Ожидает комментарий» считаются выполненной работой по корректной End date, если она попадает в период и не позже даты отчёта. Без End date задача не добавляет выполненную работу в скорость. В блоке темпа ревью и ожидание комментария считаются закрытыми задачами: входят в баланс и график закрытий по End date и исключаются из остатка для прогноза. Без корректной End date дневное закрытие не добавляется, а на накопительных графиках задача считается закрытой с поступления, как «Готов» без даты. Статус в остальных разделах сохраняется; правила рабочих дней и перерывов не меняются.';
     /* средние — за период, в подсказке — сколько это задач; баланс — сколько
        реально пришло минус закрыто за выбранный период */
     const inN = Math.round(R.inR * R.days), outN = R.closed, bal = inN - R.closedTotal;
@@ -1129,17 +1135,26 @@
     return WINDOW;
   }
 
-  // Ревью сохраняет цвет разработчика/меры, паттерн выделяет его часть.
+  /* Ревью и ожидание комментария сохраняют цвет разработчика/меры, узор
+     выделяет их части: у каждого статуса своя часть и своя выборка. */
+  const SUBMITTED = [
+    { segment: 'review', test: r => r.review, label: 'ожидает ревью', hatch: 'dots' },
+    { segment: 'comment', test: r => r.comment, label: 'ожидает комментарий', hatch: 'comment-dots' },
+  ];
   function completionSeries(rows, cats, keyOf) {
-    const reviewKey = k => '\u0003review:' + k;
-    const reviews = new Set(rows.filter(r => r.review).map(keyOf));
+    const statusKey = (st, k) => '\u0003' + st.segment + ':' + k;
+    const statusOf = r => SUBMITTED.find(st => st.test(r));
+    const present = new Map(SUBMITTED.map(st => [st.segment, new Set(rows.filter(st.test).map(keyOf))]));
     return {
-      hasReview: reviews.size > 0,
-      cats: cats.flatMap(c => reviews.has(c.k) ? [c, { ...c, k: reviewKey(c.k),
-        label: (c.label || c.k) + ' · ожидает ревью', hatch: 'dots', segment: 'review', review: true, reviewKey: c.k }] : [c]),
-      items: rows.map(r => [r.endD, r.review ? reviewKey(keyOf(r)) : keyOf(r)]),
+      hasReview: present.get('review').size > 0,
+      hasComment: present.get('comment').size > 0,
+      cats: cats.flatMap(c => [c, ...SUBMITTED.filter(st => present.get(st.segment).has(c.k)).map(st => ({ ...c,
+        k: statusKey(st, c.k), label: (c.label || c.k) + ' · ' + st.label, hatch: st.hatch, segment: st.segment,
+        submitted: true, statusKey: c.k }))]),
+      items: rows.map(r => { const st = statusOf(r); return [r.endD, st ? statusKey(st, keyOf(r)) : keyOf(r)]; }),
     };
   }
+  const submittedLegend = series => [...(series.hasReview ? [REVIEW_LEG] : []), ...(series.hasComment ? [COMMENT_LEG] : [])];
 
   function renderPeople(W) {
     const devs = count(recs, r => r.devKey);
@@ -1187,7 +1202,7 @@
       c1.append(bar);
       /* Основные счётчики — пул; убранные показаны отдельно, справочно. */
       const stat = el('div', 'dstat');
-      const names = { done: 'готово', work: 'в работе', review: 'ревью', pause: 'пауза', bad: 'проблемы' };
+      const names = { done: 'готово', work: 'в работе', review: 'ревью', comment: 'комментарий', pause: 'пауза', bad: 'проблемы' };
       for (const part of person ? segments.personCounts(mine) : []) {
         const k = part.rows.length, row = el('div', k ? null : 'zero'); row.dataset.role = part.key;
         const i = el('i'); i.style.background = css(part.color);
@@ -1223,9 +1238,11 @@
       card.append(c1);
 
       const c3 = el('div');
-      /* Одинаковые меры сохраняют цвет; ревью показывает все задачи этого
-         статуса и учтённые часы, в том числе по задачам без End date. */
-      for (const [state, title, list] of [['done', 'Сделано', done], ['review', 'На ревью', mine.filter(r => r.review)]]) {
+      /* Одинаковые меры сохраняют цвет; ревью и ожидание комментария
+         показывают все задачи статуса и учтённые часы, в том числе по задачам
+         без End date. */
+      for (const [state, title, list] of [['done', 'Сделано', done], ['review', 'На ревью', mine.filter(r => r.review)],
+        ['comment', 'Ожидает комментарий', mine.filter(r => r.comment)]]) {
         const section = el('div', 'dev-measures'); section.dataset.measureStatus = state;
         section.append(el('div', 'cap', `${title} по принятой мере · ${list.length}`));
         const keys = roles.measureOrder(list.map(r => r.measureN));
@@ -1237,7 +1254,7 @@
           const stats = Hm.summary(state === 'done' ? closedWithHours(members) : members.map(r => r.hours));
           const h = el('span', 'h', stats.n ? f1(stats.mean) + ' ч' : '—');
           if (stats.n) h.dataset.tip = `${key}: в среднем ${f1(stats.mean)} ч, медиана ${f1(stats.median)} ч, по ${stats.n} ${plural(stats.n, 'задаче', 'задачам', 'задачам')}`
-            + (state === 'review' ? ' · учтённые часы на дату отчёта; без End date — до даты отчёта' : '');
+            + (state !== 'done' ? ' · учтённые часы на дату отчёта; без End date — до даты отчёта' : '');
           kv.append(h);
         }
         section.append(kv); c3.append(section);
@@ -1259,7 +1276,7 @@
       if (chartStart !== null || starts.length) {
         /* выполненная работа по дням, столбики разбиты по принятой мере —
            как график поступления, только меньше */
-        const sh = el('div', 'tl dev-tl'); sh.setAttribute('aria-label', `Выполненные задачи, включая ревью: ${d}, по дням`); c4.append(sh);
+        const sh = el('div', 'tl dev-tl'); sh.setAttribute('aria-label', `Выполненные задачи, включая ревью и ожидающие комментария: ${d}, по дням`); c4.append(sh);
         card.append(c4); ppl.append(card);
         /* ось у всех личных графиков общая — от начала работы, чтобы один
            день стоял на одной вертикали; прокрутка связана (см. ниже) */
@@ -1268,7 +1285,7 @@
         const series = completionSeries(completed.filter(r => r.devKey === d), mcats, r => r.measureN);
         stackChart(sh, daysOf(series.items, series.cats, first), series.cats, 'выполнено', true, { height: 130, key: 'dev:all', window: W, personalBreaks });
         const leg = el('div', 'pace-leg dev-break-legend');
-        for (const [name, style] of [...(series.hasReview ? [REVIEW_LEG] : []), ...(BREAKS.length ? [BREAK_LEG] : []), ...(personalBreaks.length ? [PERSONAL_BREAK_LEG] : [])]) {
+        for (const [name, style] of [...submittedLegend(series), ...(BREAKS.length ? [BREAK_LEG] : []), ...(personalBreaks.length ? [PERSONAL_BREAK_LEG] : [])]) {
           const item = el('span'), swatch = el('i'); swatch.setAttribute('style', style);
           item.append(swatch, name); leg.append(item);
         }
@@ -1290,7 +1307,7 @@
     const cats = names.slice(0, 8).map(k => ({ k, c: devColor.get(k), devs: [k] }));
     if (names.length > 8) cats.push({ k: 'Другие', c: '--sev-none', devs: names.slice(8) });
     const series = completionSeries(completed, cats, r => names.indexOf(r.devKey) < 8 ? r.devKey : 'Другие');
-    legend('burnleg', cats.concat(series.hasReview ? [{ k: REVIEW_LEG[0], style: REVIEW_LEG[1] }] : [],
+    legend('burnleg', cats.concat(submittedLegend(series).map(([k, style]) => ({ k, style })),
       [{ k: 'окно темпа', c: '--accent-soft' }], BREAKS.length ? [BREAK_CAT] : []));
     burnData = { ...series, window: W };
     renderBurn();
@@ -1301,7 +1318,7 @@
   function renderBurn() {
     if (!burnData) return;
     const byDay = burnBy === 'day', { cats, items, window } = burnData;
-    $('burn').setAttribute('aria-label', `Выполненные задачи, включая ревью, по ${byDay ? 'дням' : 'неделям'} и разработчикам`);
+    $('burn').setAttribute('aria-label', `Выполненные задачи, включая ревью и ожидающие комментария, по ${byDay ? 'дням' : 'неделям'} и разработчикам`);
     for (const b of $('burn-by').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.by === burnBy));
     stackChart($('burn'), byDay ? daysOf(items, cats) : weeksOf(items, cats), cats, 'выполнено', byDay, { window });
   }
