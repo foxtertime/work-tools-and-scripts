@@ -12,8 +12,12 @@ test('strict UTF8 fallback decodes cp1251 and rejects binary or malformed CSV',(
  for(const s of ['x;y','CVE ID;Task ID\n"unfinished','\0abc'])assert.throws(()=>csv.parse(s));
  assert.throws(()=>csv.decode(new Uint8Array([255,254,0,0])));
 });
-test('eligibility includes both developer statuses but excludes SecOps and other statuses',()=>{
+test('eligibility includes «Ожидает ревью» and «Готов» but excludes SecOps and other statuses',()=>{
  const t=csv.parse(fixture([{}, {'Task ID':'101','Статус':' ГОТОВ '},{'Task ID':'102','Разработчик':' sEcOps ','Статус':'Готов'},{'Task ID':'103','Статус':'В работе'},{'Task ID':'104','Разработчик':'-'}]));
+ assert.deepEqual(t.rows.filter(csv.eligible).map(r=>r.task),['100','101']);
+});
+test('eligibility includes awaiting comment for developers but not for SecOps',()=>{
+ const t=csv.parse(fixture([{'Статус':'Ожидает комментарий'},{'Task ID':'101','Статус':'  ОЖИДАЕТ  комментарий '},{'Task ID':'102','Разработчик':'SecOps','Статус':'Ожидает комментарий'},{'Task ID':'103','Разработчик':'-','Статус':'Ожидает комментарий'}]));
  assert.deepEqual(t.rows.filter(csv.eligible).map(r=>r.task),['100','101']);
 });
 test('tuple identity survives ordering and prevents collisions across CVEs and components',()=>{
