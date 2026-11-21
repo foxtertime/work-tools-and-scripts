@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-11-21
+
 ### Добавлено
 
 - `cvesummary` (1.43.0): статус «Ожидает комментарий» — считается как ревью,
@@ -754,7 +756,8 @@
 - Корневой `TODO.md` со списком задач уровня репозитория и правилом работы
   со списками.
 
-[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.43.0...HEAD
+[Unreleased]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.44.0...HEAD
+[0.44.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.43.0...v0.44.0
 [0.43.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.42.1...v0.43.0
 [0.42.1]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.42.0...v0.42.1
 [0.42.0]: https://github.com/foxtertime/work-tools-and-scripts/compare/v0.41.0...v0.42.0
