@@ -156,3 +156,32 @@ test('unique representatives prefer ordinary rows but all-removed pairs remain v
     row('В работе', { cve: 'CVE-1', comp: 'bash' }), removed({ cve: 'CVE-3', comp: '' })];
   assert.deepEqual(segments.uniqueRows(rows, roles.duplicates(rows)), [rows[1], rows[2], rows[5]]);
 });
+
+test('header shows awaiting comment as its own segment right after review, out of every right-hand segment', () => {
+  const reasons = [[], ['fixed'], ['patch'], ['range'], ['dup']];
+  const comments = reasons.map(reasons => row('Ожидает комментарий', { reasons }));
+  comments[4] = row('  ОЖИДАЕТ  комментарий ', { dev: '', reasons: ['dup'] });
+  const review = row('Ожидает ревью', { reasons: ['fixed'] });
+  const working = [row('В работе'), row('На паузе')];
+  const pending = reasons.map(reasons => row('В работе', { dev: '', reasons }));
+  const parts = segments.hero([row('Готов'), review, ...comments, ...working, ...pending]);
+  assert.deepEqual(parts.map(p => [p.key, p.label]), [['done-dev', 'Разработчики'], ['review', 'Ревью'],
+    ['comment', 'Комментарий'], ['work', 'В работе'], ['none', 'Не взято'], ['fixed', 'Фикс в RHEL'],
+    ['patch', 'Устранено ранее'], ['range', 'Вне диапазона'], ['dup', 'Дубликат']]);
+  assert.equal(parts.find(p => p.key === 'comment').color, '--st-comment');
+  assert.deepEqual(parts.find(p => p.key === 'comment').rows, comments);
+  assert.deepEqual(parts.find(p => p.key === 'review').rows, [review]);
+  assert.deepEqual(parts.find(p => p.key === 'work').rows, working);
+  assert.deepEqual(parts.slice(4).flatMap(p => p.rows), pending);
+  assert.deepEqual(size(segments.groups(parts)), { done: 1, review: 1, comment: 5, work: 2, none: 1, ready: 4 });
+});
+
+test('personal roles put awaiting comment between review and pause and keep it out of work', () => {
+  const rows = [row('Готов'), row('В работе'), row('Ожидает ревью'), row('Ожидает комментарий'),
+    row(' ожидает  КОММЕНТАРИЙ'), row('На паузе'), row('Есть проблема')];
+  const parts = segments.person(rows);
+  assert.deepEqual(parts.map(p => [p.key, p.rows.length]), [['done', 1], ['work', 1], ['review', 1],
+    ['comment', 2], ['pause', 1], ['bad', 1]]);
+  const comment = segments.personCounts([row('Готов')]).find(p => p.key === 'comment');
+  assert.deepEqual([comment.label, comment.color, comment.rows.length], ['Ожидает комментарий', '--st-comment', 0]);
+});

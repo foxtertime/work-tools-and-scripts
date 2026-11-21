@@ -42,10 +42,11 @@
       { key: 'done-secops', label: 'SecOps', color: '--st-done-secops', group: 'done', test: r => roles.isDone(r) && roles.norm(r.dev) === 'secops' },
       { key: 'done-dev', label: 'Разработчики', color: '--st-done', group: 'done', test: r => roles.isDone(r) && roles.norm(r.dev) !== 'secops' },
       { key: 'review', label: 'Ревью', color: '--st-review', group: 'review', test: roles.isReview },
-      { key: 'work', label: 'В работе', color: '--st-work', group: 'work', test: r => roles.isWorking(r) && !roles.isReview(r) },
-      { key: 'none', label: 'Не взято', color: '--rs-none', group: 'none', test: r => roles.isOpen(r) && !roles.isReview(r) && !roles.isWorking(r) && !r.reasons.length },
+      { key: 'comment', label: 'Комментарий', color: '--st-comment', group: 'comment', test: roles.isComment },
+      { key: 'work', label: 'В работе', color: '--st-work', group: 'work', test: r => roles.isWorking(r) && !roles.isSubmitted(r) },
+      { key: 'none', label: 'Не взято', color: '--rs-none', group: 'none', test: r => roles.isOpen(r) && !roles.isSubmitted(r) && !roles.isWorking(r) && !r.reasons.length },
       ...[['fixed', 'Фикс в RHEL'], ['patch', 'Устранено ранее'], ['range', 'Вне диапазона'], ['dup', 'Дубликат']]
-        .map(([key, label]) => ({ key, label, color: '--rs-' + key, group: 'ready', test: r => roles.isOpen(r) && !roles.isReview(r) && !roles.isWorking(r) && r.reasons[0] === key })),
+        .map(([key, label]) => ({ key, label, color: '--rs-' + key, group: 'ready', test: r => roles.isOpen(r) && !roles.isSubmitted(r) && !roles.isWorking(r) && r.reasons[0] === key })),
     ], false);
   }
   // Категории блока «Состояние» не пересекаются; нулевые счётчики остаются.
@@ -60,8 +61,9 @@
   }
   const personRoles = [
     { key: 'done', label: 'Готово', color: '--st-done', test: roles.isDone },
-    { key: 'work', label: 'В работе', color: '--st-work', test: r => roles.isWorking(r) && !roles.isReview(r) && !roles.isPaused(r) && !roles.needsAttention(r) },
+    { key: 'work', label: 'В работе', color: '--st-work', test: r => roles.isWorking(r) && !roles.isSubmitted(r) && !roles.isPaused(r) && !roles.needsAttention(r) },
     { key: 'review', label: 'Ожидает ревью', color: '--st-review', test: r => roles.isWorking(r) && roles.isReview(r) },
+    { key: 'comment', label: 'Ожидает комментарий', color: '--st-comment', test: r => roles.isWorking(r) && roles.isComment(r) },
     { key: 'pause', label: 'На паузе', color: '--st-pause', test: r => roles.isWorking(r) && roles.isPaused(r) },
     { key: 'bad', label: 'Проблемы', color: '--st-bad', test: r => roles.isWorking(r) && roles.needsAttention(r) },
   ];

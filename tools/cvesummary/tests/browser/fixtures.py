@@ -151,3 +151,20 @@ for i, (dev, status, start, end, measure, bad) in enumerate([
         dev=dev, status=status, start=start, end=end, measure=measure, bad=bad,
         tdate="2026-11-02", p="", d="", rstate="Affected"))
 (out / "personal-measures.html").write_text(page.render(personal_measures), encoding="utf-8")
+
+comment_status = {"meta": dict(data["meta"], as_of="2026-11-05", missing=[]), "rows": []}
+for i, (dev, status, end, measure) in enumerate([
+    ("X", "Готов", "2026-11-03", "Патч из апстрима"),
+    ("X", "Ожидает ревью", "2026-11-03", "Патч из апстрима"),
+    ("X", "Ожидает комментарий", "2026-11-03", "Патч из апстрима"),
+    ("X", "  ОЖИДАЕТ  комментарий ", "2026-11-04", "Импорт новой версии"),
+    ("X", "Ожидает комментарий", "", "Патч из апстрима"),
+    ("X", "Ожидает комментарий", "2026-11-06", "Патч из апстрима"),
+    ("Y", "Ожидает комментарий", "2026-11-03", "Патч из апстрима"),
+    ("", "Ожидает комментарий", "", "Патч из апстрима"),
+    ("X", "В работе", "", "Патч из апстрима"),
+]):
+    comment_status["rows"].append(dict(data["rows"][0], row=i + 2, cve="CVE-2026-%d" % (9700 + i),
+        dev=dev, status=status, start="2026-11-02" if dev else "", end=end, tdate="2026-11-02",
+        measure=measure, bad=[], p="", d="", rstate="Affected"))
+(out / "comment-status.html").write_text(page.render(comment_status), encoding="utf-8")

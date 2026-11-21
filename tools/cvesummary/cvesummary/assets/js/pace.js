@@ -1,6 +1,6 @@
 /* Темп и прогноз в задачах — как в образце сводки. Поступление — по Task
-   date, закрытие — «Готов» и «Ожидает ревью» по End date.
-   Ревью исключается из остатка работы, как готовая задача. Всё, что позже даты отчёта, ещё
+   date, закрытие — «Готов», «Ожидает ревью» и «Ожидает комментарий» по End date.
+   Ревью и ожидание комментария исключаются из остатка работы, как готовая задача. Всё, что позже даты отчёта, ещё
    не случилось. Новые задачи приходят каждый день, и в выходные: темп
    поступления — на календарный день. Закрывают по производственному
    календарю: темп закрытия — на рабочий день. Нормированный баланс за неделю:
@@ -21,7 +21,7 @@
   const BREAK_WORKDAYS = 5;
 
   const inDay = r => dates.dayOf(r.tdate);
-  const isClosed = r => roles.isDone(r) || roles.isReview(r);
+  const isClosed = r => roles.isDone(r) || roles.isSubmitted(r);
   const outDay = r => (roles.isSpeedDone(r) ? dates.dayOf(roles.endOf(r)) : null);
   const speedDay = outDay;
 
@@ -81,7 +81,7 @@
     const days = Math.max(0, end - from), work = dates.workdays(from + 1, end) - cut;
     const shut = rows.map(outDay).filter(within);
     // Завершённые убранные задачи входят только в скорость;
-    // ревью с End date входит также в баланс пула (closedTotal).
+    // ревью и ожидание комментария с End date входят также в баланс пула (closedTotal).
     const closed = history.map(speedDay).filter(d => within(d) && !inBreak(gaps, d)).length;
     const inR = days ? rows.map(inDay).filter(within).length / days : 0;
     const calendarCut = gaps.reduce((a, g) => a + Math.max(0, Math.min(g.to, end) - Math.max(g.from, from + 1) + 1), 0);
@@ -159,9 +159,10 @@
 
   /* Накопительные ряды по дням from..to для burn-up и burn-down: всего
      поступило (inc), всего закрыто (out), открыто (open). Задача без Task
-     date — в бэклоге с начала; закрыта не раньше, чем поступила; «Готов» и ревью
-     без корректной End date закрыт сразу, как поступил. Даты позже to прижимаются к
-     to: на последний день открыты только задачи не «Готов» и не на ревью, как в rates().open. */
+     date — в бэклоге с начала; закрыта не раньше, чем поступила; «Готов», ревью и
+     ожидание комментария без корректной End date закрыты сразу, как поступили. Даты
+     позже to прижимаются к to: на последний день открыты только задачи не «Готов»,
+     не на ревью и не в ожидании комментария, как в rates().open. */
   function cumulative(rows, from, to) {
     const n = to - from + 1;
     if (n <= 0) return [];

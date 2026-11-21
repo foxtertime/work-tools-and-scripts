@@ -204,3 +204,16 @@ test('configurable break threshold preserves the existing default', () => {
   assert.equal(pace.breaks(days, D, D + 7, 6).length, 0);
   assert.equal(pace.breaks(days, D, D + 8, 6).length, 1);
 });
+
+test('personal and forecast speeds count awaiting comment only with a valid observed End date', () => {
+  const rows = [row('X', D, D + 1), row('X', D, D + 2, ' ОЖИДАЕТ  комментарий '),
+    row('X', D, null, 'Ожидает комментарий'), row('X', D, D + 4, 'Ожидает комментарий'),
+    row('X', D, D + 1, 'Ожидает комментарий', ['end']),
+    { ...row('X', D, null, 'Ожидает комментарий'), end: '2026-02-30' },
+    row('X', D, D + 2, 'В работе'), row('X', null, D + 3, 'Ожидает комментарий')];
+  const s = state(rows, D + 3);
+  assert.deepEqual(s.people.get('X').closedDays, [D + 1, D + 2, D + 3]);
+  assert.deepEqual(stat(s, 'X', D, D + 3), { closed: 3, work: 4, cut: 0, rate: 0.75 });
+  assert.deepEqual(activity.team(s, D, D + 3), { outR: 0.75, active: 1, total: 1 });
+  assert.equal(stat(s, 'X', D, D + 1).closed, 1);
+});
